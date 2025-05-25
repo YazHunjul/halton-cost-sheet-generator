@@ -1,0 +1,200 @@
+{
+  "client_name": "Formatting Test Customer",
+  "company": "Test Company Ltd",
+  "address": "123 Test Street, Test City",
+  "project_name": "Formatting Test Project",
+  "location": "Test Kitchen Location",
+  "project_number": "FORMAT-2024",
+  "estimator": "Test Estimator",
+  "estimator_rank": "Lead Estimator",
+  "estimator_initials": "TE",
+  "date": "25 May 2024",
+  "halton_ref": "FORMAT-2024/05/24",
+  "sales_contact_name": "Marc Byford",
+  "sales_contact_phone": "(07974 403322)",
+  "delivery_location": "Test Delivery Location",
+  "levels": [
+    {
+      "level_name": "Ground Floor",
+      "areas": [
+        {
+          "name": "Main Kitchen",
+          "level_area_name": "Ground Floor - Main Kitchen",
+          "canopies": [
+            {
+              "reference_number": "F001",
+              "model": "KVI",
+              "configuration": "Wall",
+              "length": "2000",
+              "width": "1200",
+              "height": "600",
+              "sections": "2",
+              "lighting_type": "LED STRIP",
+              "extract_volume": "1500",
+              "extract_static": "150",
+              "mua_volume": "-",
+              "supply_static": "-",
+              "cws_capacity": "-",
+              "hws_requirement": "-",
+              "hw_storage": "-",
+              "has_wash_capabilities": false,
+              "has_wall_cladding": false,
+              "wall_cladding": {
+                "type": "None",
+                "width": null,
+                "height": null,
+                "position": null
+              }
+            },
+            {
+              "reference_number": "F002",
+              "model": "KVIF",
+              "configuration": "Island",
+              "length": "1800",
+              "width": "1000",
+              "height": "550",
+              "sections": "1",
+              "lighting_type": "-",
+              "extract_volume": "1200",
+              "extract_static": "200",
+              "mua_volume": "1.8",
+              "supply_static": "80",
+              "cws_capacity": "-",
+              "hws_requirement": "-",
+              "hw_storage": "-",
+              "has_wash_capabilities": false,
+              "has_wall_cladding": false,
+              "wall_cladding": {
+                "type": "None",
+                "width": null,
+                "height": null,
+                "position": null
+              }
+            },
+            {
+              "reference_number": "F003",
+              "model": "CMWF",
+              "configuration": "Wall",
+              "length": "1500",
+              "width": "800",
+              "height": "500",
+              "sections": "1",
+              "lighting_type": "-",
+              "extract_volume": "1000",
+              "extract_static": "-",
+              "mua_volume": "3.5",
+              "supply_static": "90",
+              "cws_capacity": "-",
+              "hws_requirement": "-",
+              "hw_storage": "-",
+              "has_wash_capabilities": false,
+              "has_wall_cladding": false,
+              "wall_cladding": {
+                "type": "None",
+                "width": null,
+                "height": null,
+                "position": null
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "canopies": [
+    {
+      "level": "Ground Floor",
+      "area": "Main Kitchen",
+      "level_area_combined": "Ground Floor - Main Kitchen",
+      "location": "Ground Floor - Main Kitchen",
+      "reference_number": "F001",
+      "model": "KVI",
+      "configuration": "Wall",
+      "length": "2000",
+      "width": "1200",
+      "height": "600",
+      "sections": "2",
+      "lighting_type": "LED STRIP",
+      "extract_volume": "1500",
+      "extract_static": "150",
+      "mua_volume": "-",
+      "supply_static": "-",
+      "cws_capacity": "-",
+      "hws_requirement": "-",
+      "hw_storage": "-",
+      "has_wash_capabilities": false,
+      "has_wall_cladding": false,
+      "wall_cladding": {
+        "type": "None",
+        "width": null,
+        "height": null,
+        "position": null
+      }
+    },
+    {
+      "level": "Ground Floor",
+      "area": "Main Kitchen",
+      "level_area_combined": "Ground Floor - Main Kitchen",
+      "location": "Ground Floor - Main Kitchen",
+      "reference_number": "F002",
+      "model": "KVIF",
+      "configuration": "Island",
+      "length": "1800",
+      "width": "1000",
+      "height": "550",
+      "sections": "1",
+      "lighting_type": "-",
+      "extract_volume": "1200",
+      "extract_static": "200",
+      "mua_volume": "1.8",
+      "supply_static": "80",
+      "cws_capacity": "-",
+      "hws_requirement": "-",
+      "hw_storage": "-",
+      "has_wash_capabilities": false,
+      "has_wall_cladding": false,
+      "wall_cladding": {
+        "type": "None",
+        "width": null,
+        "height": null,
+        "position": null
+      }
+    },
+    {
+      "level": "Ground Floor",
+      "area": "Main Kitchen",
+      "level_area_combined": "Ground Floor - Main Kitchen",
+      "location": "Ground Floor - Main Kitchen",
+      "reference_number": "F003",
+      "model": "CMWF",
+      "configuration": "Wall",
+      "length": "1500",
+      "width": "800",
+      "height": "500",
+      "sections": "1",
+      "lighting_type": "-",
+      "extract_volume": "1000",
+      "extract_static": "-",
+      "mua_volume": "3.5",
+      "supply_static": "90",
+      "cws_capacity": "-",
+      "hws_requirement": "-",
+      "hw_storage": "-",
+      "has_wash_capabilities": false,
+      "has_wall_cladding": false,
+      "wall_cladding": {
+        "type": "None",
+        "width": null,
+        "height": null,
+        "position": null
+      }
+    }
+  ],
+  "total_canopies": 3,
+  "dear_line": "Formatting Test Customer,",
+  "subject_line": "Formatting Test Project, Test Kitchen Location",
+  "estimator_with_rank": "Test Estimator\nLead Estimator",
+  "current_date": "25 May 2025",
+  "current_year": 2025,
+  "wall_cladding_items": []
+}
