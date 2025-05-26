@@ -911,6 +911,22 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
             "3000-D"
         ]
         
+        # Access equipment options for E39 and E40
+        access_equipment_options = [
+            "",  # Empty option
+            "SL10 GENIE",
+            "EXTENSION FORKS",
+            "2.5M COMBI LADDER",
+            "1.5M PODIUM",
+            "3M TOWER",
+            "COMBI LADDER",
+            "PECO LIFT",
+            "3M YOUNGMAN BOARD",
+            "GS1930 SCISSOR LIFT",
+            "4-6 SHERASCOPIC",
+            "7-9 SHERASCOPIC"
+        ]
+        
         # Create data validations with proper escaping
         def create_validation(options):
             # Escape quotes and limit formula length
@@ -934,6 +950,7 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
         wall_cladding_position_dv = create_validation(wall_cladding_position_options)
         cmw_panel_type_dv = create_validation(cmw_panel_type_options)
         cmw_panel_size_dv = create_validation(cmw_panel_size_options)
+        access_equipment_dv = create_validation(access_equipment_options)
         
         # Add validations to sheet
         sheet.add_data_validation(lighting_dv)
@@ -943,6 +960,7 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
         sheet.add_data_validation(wall_cladding_position_dv)
         sheet.add_data_validation(cmw_panel_type_dv)
         sheet.add_data_validation(cmw_panel_size_dv)
+        sheet.add_data_validation(access_equipment_dv)
         
         # Write wall cladding headers in row 19 (first canopy's cladding row - 1)
         try:
@@ -1032,6 +1050,13 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
             except Exception as e:
                 print(f"Warning: Could not add config/model dropdown to canopy {canopy_index + 1}: {str(e)}")
                 continue
+        
+        # Add access equipment dropdowns to specific cells D184 and D185
+        try:
+            access_equipment_dv.add("D184")  # Access equipment dropdown in D184
+            access_equipment_dv.add("D185")  # Access equipment dropdown in D185
+        except Exception as e:
+            print(f"Warning: Could not add access equipment dropdowns to D184/D185: {str(e)}")
         
     except Exception as e:
         # Silently fail for dropdown addition to avoid breaking the main process
