@@ -197,17 +197,26 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
     if project_type == "Canopy Project" and area_name:
         st.divider()
         
-        # Number of canopies
+        # Number of canopies - store separately in session state to prevent reset
         canopies_key = f"num_canopies_{level_idx}_{area_idx}"
-        default_canopies = len(st.session_state[area_key].get("canopies", [])) if "canopies" in st.session_state[area_key] else 1
+        
+        # Initialize the canopy count if not already set
+        if canopies_key not in st.session_state:
+            # Use existing canopies count if available, otherwise default to 1
+            existing_canopies_count = len(st.session_state[area_key].get("canopies", [])) if "canopies" in st.session_state[area_key] else 1
+            st.session_state[canopies_key] = max(existing_canopies_count, 1)  # Ensure at least 1
         
         num_canopies = st.number_input(
             "Number of Canopies",
             min_value=0,
-            value=default_canopies,
-            key=canopies_key,
+            value=st.session_state[canopies_key],
+            key=f"{canopies_key}_input",
             help="Enter the number of canopies for this area"
         )
+        
+        # Update session state when the number changes
+        if num_canopies != st.session_state[canopies_key]:
+            st.session_state[canopies_key] = num_canopies
         
         # Store canopy data
         for i in range(num_canopies):

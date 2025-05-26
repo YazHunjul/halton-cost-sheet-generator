@@ -624,7 +624,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     sdu_data = collect_sdu_data(project_data, excel_file_path)
     
     # Analyze project for global flags
-    has_canopies, has_recoair, is_recoair_only = analyze_project_areas(project_data)
+    has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
     
     # Calculate pricing totals once
     pricing_totals = calculate_pricing_totals(project_data, excel_file_path)
@@ -713,6 +713,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'has_canopies': has_canopies,
         'has_recoair': has_recoair,
         'is_recoair_only': is_recoair_only,
+        'has_uv': has_uv,
         
         # Feature flags for conditional display of systems
         'show_kitchen_extract_system': is_feature_enabled('kitchen_extract_system'),
@@ -742,7 +743,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     
     return context
 
-def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool]:
+def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool]:
     """
     Analyze project areas to determine what types of systems are present.
     
@@ -750,10 +751,11 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool]:
         project_data (Dict): Project data with levels and areas
         
     Returns:
-        Tuple[bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only)
+        Tuple[bool, bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only, has_uv)
     """
     has_canopies = False
     has_recoair = False
+    has_uv = False
     
     for level in project_data.get('levels', []):
         for area in level.get('areas', []):
@@ -762,6 +764,12 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool]:
             if len(canopies) > 0:
                 has_canopies = True
             
+            # Check for UV canopy models (UVI, UVF, etc.) across all canopies in the project
+            for canopy in canopies:
+                model = canopy.get('model', '').upper().strip()
+                if model.startswith('UV'):  # UV models like UVI, UVF, etc.
+                    has_uv = True
+            
             # Check if area has RecoAir option
             if area.get('options', {}).get('recoair', False):
                 has_recoair = True
@@ -769,7 +777,7 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool]:
     # Determine if project is RecoAir-only
     is_recoair_only = has_recoair and not has_canopies
     
-    return has_canopies, has_recoair, is_recoair_only
+    return has_canopies, has_recoair, is_recoair_only, has_uv
 
 def generate_single_document(project_data: Dict, template_path: str, output_filename: str, excel_file_path: str = None) -> str:
     """
@@ -837,7 +845,7 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
     """
     try:
         # Analyze project to determine what documents to generate
-        has_canopies, has_recoair, is_recoair_only = analyze_project_areas(project_data)
+        has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
         
         project_number = project_data.get('project_number', 'unknown')
         date_str = format_date_for_filename(project_data.get('date', ''))
