@@ -1804,8 +1804,8 @@ def save_to_excel(project_data: Dict) -> str:
                                 
                                 # Write EBOX-specific metadata to EBOX sheet (D/H columns)
                                 write_ebox_metadata(ebox_sheet, project_data)
-                                # Set EBOX sheet title in B1
-                                ebox_sheet['B1'] = f"{level_name} - {area_name} - UV-C SYSTEM"
+                                # Set EBOX sheet title in C1
+                                ebox_sheet['C1'] = f"{level_name} - {area_name} - UV-C SYSTEM"
                             else:
                                 print(f"Warning: Not enough EBOX sheets in template for UV-C system in area {area_name}")
                         
@@ -2352,6 +2352,13 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                 break
         
         # Read area-level options from sheets
+        # Initialize all areas with default options first
+        for level_name, areas in levels_data.items():
+            for area in areas:
+                if 'options' not in area:
+                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False}
+        
+        # Check CANOPY sheets for area options written in rows 6-8
         for sheet_name in wb.sheetnames:
             if 'CANOPY - ' in sheet_name:
                 sheet = wb[sheet_name]
@@ -2363,29 +2370,26 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         level_name = level_area[0]
                         area_name = level_area[1]
                         
-                        # Initialize area options
-                        area_options = {'uvc': False, 'sdu': False, 'recoair': False}
-                        
                         # Check for area options in rows 6-8 (where write_area_options writes them)
                         for row in range(6, 9):
                             cell_value = sheet[f'B{row}'].value
                             if cell_value:
                                 cell_value_upper = str(cell_value).upper()
-                                if 'UV-C' in cell_value_upper:
-                                    area_options['uvc'] = True
-                                elif 'SDU' in cell_value_upper:
-                                    area_options['sdu'] = True
-                                elif 'RECOAIR' in cell_value_upper:
-                                    area_options['recoair'] = True
-                        
-                        # Find the area and add options data
-                        for level_areas in levels_data.get(level_name, []):
-                            if level_areas['name'] == area_name:
-                                level_areas['options'] = area_options
-                                break
-            
-            # Also check EBOX sheets for UV-C option
-            elif 'EBOX - ' in sheet_name:
+                                
+                                # Find the area and update options
+                                for level_areas in levels_data.get(level_name, []):
+                                    if level_areas['name'] == area_name:
+                                        if 'UV-C' in cell_value_upper:
+                                            level_areas['options']['uvc'] = True
+                                        elif 'SDU' in cell_value_upper:
+                                            level_areas['options']['sdu'] = True
+                                        elif 'RECOAIR' in cell_value_upper:
+                                            level_areas['options']['recoair'] = True
+                                        break
+        
+        # Check EBOX sheets for UV-C option (this will override CANOPY sheet if needed)
+        for sheet_name in wb.sheetnames:
+            if 'EBOX - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['C1'].value  # EBOX sheets have title in C1
                 
@@ -2399,13 +2403,12 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         # Find the area and set UV-C option to True
                         for level_areas in levels_data.get(level_name, []):
                             if level_areas['name'] == area_name:
-                                if 'options' not in level_areas:
-                                    level_areas['options'] = {'uvc': False, 'sdu': False, 'recoair': False}
                                 level_areas['options']['uvc'] = True
                                 break
-            
-            # Also check SDU sheets for SDU option
-            elif 'SDU - ' in sheet_name:
+        
+        # Check SDU sheets for SDU option
+        for sheet_name in wb.sheetnames:
+            if 'SDU - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value  # SDU sheets have title in B1
                 
@@ -2419,13 +2422,12 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         # Find the area and set SDU option to True
                         for level_areas in levels_data.get(level_name, []):
                             if level_areas['name'] == area_name:
-                                if 'options' not in level_areas:
-                                    level_areas['options'] = {'uvc': False, 'sdu': False, 'recoair': False}
                                 level_areas['options']['sdu'] = True
                                 break
-            
-            # Also check RECOAIR sheets for RecoAir option
-            elif 'RECOAIR - ' in sheet_name:
+        
+        # Check RECOAIR sheets for RecoAir option
+        for sheet_name in wb.sheetnames:
+            if 'RECOAIR - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['C1'].value  # RECOAIR sheets have title in C1
                 
@@ -2439,8 +2441,6 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         # Find the area and set RecoAir option to True
                         for level_areas in levels_data.get(level_name, []):
                             if level_areas['name'] == area_name:
-                                if 'options' not in level_areas:
-                                    level_areas['options'] = {'uvc': False, 'sdu': False, 'recoair': False}
                                 level_areas['options']['recoair'] = True
                                 break
         
