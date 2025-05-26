@@ -626,6 +626,9 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     # Analyze project for global flags
     has_canopies, has_recoair, is_recoair_only = analyze_project_areas(project_data)
     
+    # Calculate pricing totals once
+    pricing_totals = calculate_pricing_totals(project_data, excel_file_path)
+    
     # Prepare the context
     context = {
         # Basic project information
@@ -680,11 +683,22 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'scope_of_works': generate_scope_of_works(project_data),
         
         # Pricing data
-        'pricing_totals': calculate_pricing_totals(project_data, excel_file_path),
+        'pricing_totals': pricing_totals,
         'recoair_pricing_schedules': recoair_pricing_data['areas'],  # RecoAir area-by-area pricing schedules
         'recoair_job_totals': recoair_pricing_data['job_totals'],  # RecoAir job totals
         'format_currency': format_currency,  # Make currency formatter available in templates
         'format_current': format_currency,  # Alias for format_currency (for template compatibility)
+        
+        # Individual pricing totals for template compatibility
+        'total_canopy_price': pricing_totals.get('total_canopy_price', 0),
+        'total_fire_suppression_price': pricing_totals.get('total_fire_suppression_price', 0),
+        'total_cladding_price': pricing_totals.get('total_cladding_price', 0),
+        'total_delivery_installation': pricing_totals.get('total_delivery_installation', 0),
+        'total_commissioning': pricing_totals.get('total_commissioning', 0),
+        'total_uvc_price': pricing_totals.get('total_uvc_price', 0),
+        'total_sdu_price': pricing_totals.get('total_sdu_price', 0),
+        'total_recoair_price': pricing_totals.get('total_recoair_price', 0),
+        'project_total': pricing_totals.get('project_total', 0),
         
         # RecoAir-specific data (for RecoAir templates)
         'recoair_areas': [area for level in enhanced_levels for area in level.get('areas', []) if area.get('options', {}).get('recoair', False)],
