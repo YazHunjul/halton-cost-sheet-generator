@@ -196,13 +196,13 @@ def format_extract_static(value) -> str:
 
 def format_mua_volume(value) -> str:
     """
-    Format MUA volume by rounding to 1 decimal place.
+    Format MUA volume keeping the original value as-is without rounding.
     
     Args:
         value: MUA volume value to format
         
     Returns:
-        str: Formatted MUA volume rounded to 1 decimal place
+        str: Original MUA volume value or "-" if empty
     """
     if not value:
         return "-"
@@ -214,13 +214,8 @@ def format_mua_volume(value) -> str:
     if str_value == "" or str_value == "-":
         return "-"
     
-    try:
-        # Try to convert to float and round to 1 decimal place
-        float_value = float(str_value)
-        return f"{float_value:.1f}"
-    except (ValueError, TypeError):
-        # If conversion fails, return the original value
-        return str_value
+    # Return the original value as-is without any rounding
+    return str_value
 
 def get_combined_initials(sales_contact_name: str, estimator_name: str) -> str:
     """

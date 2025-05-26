@@ -31,7 +31,6 @@ def display_project_summary(project_data: dict):
         st.write("**Address:**", project_data.get("address"))
         st.write("**Sales Contact:**", project_data.get("sales_contact"))
         st.write("**Estimator:**", project_data.get("estimator"))
-        st.write("**Cost Sheet:**", project_data.get("cost_sheet") or "Not specified")
     
     # Project Structure
     if "levels" in project_data:

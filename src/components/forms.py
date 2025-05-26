@@ -24,6 +24,17 @@ def general_project_form() -> Dict[str, Any]:
     if "general_form_data" not in st.session_state:
         st.session_state.general_form_data = {}
     
+    # Company selection mode (outside form for immediate reactivity)
+    company_mode = st.radio(
+        "Company Selection *",
+        options=["Select from list", "Enter custom company"],
+        index=0 if st.session_state.general_form_data.get("company_mode", "Select from list") == "Select from list" else 1,
+        key="company_mode_input",
+        help="Choose whether to select from predefined companies or enter a custom company"
+    )
+    
+    st.markdown("---")  # Visual separator
+    
     with st.form("general_project_info", clear_on_submit=False):
         col1, col2 = st.columns(2)
         
@@ -56,13 +67,31 @@ def general_project_form() -> Dict[str, Any]:
                 help="Enter the customer name"
             )
             
-            company = st.selectbox(
-                "Company *",
-                options=list(COMPANY_ADDRESSES.keys()),
-                index=list(COMPANY_ADDRESSES.keys()).index(st.session_state.general_form_data.get("company", list(COMPANY_ADDRESSES.keys())[0])) if st.session_state.general_form_data.get("company") in COMPANY_ADDRESSES else 0,
-                key="company_input",
-                help="Select the company"
-            )
+            if company_mode == "Select from list":
+                company = st.selectbox(
+                    "Company *",
+                    options=list(COMPANY_ADDRESSES.keys()),
+                    index=list(COMPANY_ADDRESSES.keys()).index(st.session_state.general_form_data.get("company", list(COMPANY_ADDRESSES.keys())[0])) if st.session_state.general_form_data.get("company") in COMPANY_ADDRESSES else 0,
+                    key="company_select",
+                    help="Select the company from the predefined list"
+                )
+                custom_company_name = ""
+                custom_company_address = ""
+            else:
+                company = ""
+                custom_company_name = st.text_input(
+                    "Custom Company Name *",
+                    value=st.session_state.general_form_data.get("custom_company_name", ""),
+                    key="custom_company_name_input",
+                    help="Enter the custom company name"
+                )
+                custom_company_address = st.text_area(
+                    "Custom Company Address *",
+                    value=st.session_state.general_form_data.get("custom_company_address", ""),
+                    key="custom_company_address_input",
+                    help="Enter the full company address (use line breaks for multiple lines)",
+                    height=100
+                )
             
             project_location = st.text_input(
                 "Project Location *",
@@ -95,46 +124,66 @@ def general_project_form() -> Dict[str, Any]:
                 key="estimator_select",
                 help="Select the estimator for this project"
             )
-            
-            cost_sheet = st.text_input(
-                "Cost Sheet Reference",
-                value=st.session_state.general_form_data.get("cost_sheet", ""),
-                key="cost_sheet_input",
-                help="Enter the cost sheet reference number (optional)"
-            )
         
         submitted = st.form_submit_button("Save & Continue")
         
         if submitted:
-            required_fields = [
-                project_name,
-                project_number,
-                date,
-                customer,
-                company,
-                project_location,
-                delivery_location,
-                sales_contact,
-                estimator
-            ]
+            # Validate required fields based on company mode
+            if company_mode == "Select from list":
+                required_fields = [
+                    project_name,
+                    project_number,
+                    date,
+                    customer,
+                    company,
+                    project_location,
+                    delivery_location,
+                    sales_contact,
+                    estimator
+                ]
+            else:  # Custom company
+                required_fields = [
+                    project_name,
+                    project_number,
+                    date,
+                    customer,
+                    custom_company_name,
+                    custom_company_address,
+                    project_location,
+                    delivery_location,
+                    sales_contact,
+                    estimator
+                ]
             
             if not all(required_fields):
                 st.error("Please fill in all required fields marked with *")
                 return None
+            
+            # Determine company name and address based on mode
+            if company_mode == "Select from list":
+                final_company_name = company
+                final_company_address = COMPANY_ADDRESSES[company]
+            else:  # Custom company
+                final_company_name = custom_company_name
+                final_company_address = custom_company_address
             
             project_data = {
                 "project_name": project_name,
                 "project_number": project_number,
                 "date": date.strftime("%Y-%m-%d"),
                 "customer": customer,
-                "company": company,
+                "company": final_company_name,
                 "project_location": project_location,
                 "delivery_location": delivery_location,
                 "location": project_location,  # Keep 'location' for backward compatibility (maps to project_location)
-                "address": COMPANY_ADDRESSES[company],  # Store the full address
+                "address": final_company_address,  # Store the full address
                 "sales_contact": sales_contact,
                 "estimator": estimator,
-                "cost_sheet": cost_sheet
+                
+                # Store the selection mode and custom fields for form persistence
+                "company_mode": company_mode,
+                "custom_company_name": custom_company_name,
+                "custom_company_address": custom_company_address
             }
             
             # Store in session state for form persistence
