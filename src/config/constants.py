@@ -1,5 +1,5 @@
 """
-Constants and configuration values for the HVAC Project Management Tool.
+Constants and configuration values for the Halton Cost Sheet Generator.
 """
 from .business_data import (
     SALES_CONTACTS,

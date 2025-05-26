@@ -1,5 +1,5 @@
 """
-Form components for the HVAC Project Management Tool.
+Form components for the Halton Cost Sheet Generator.
 """
 import streamlit as st
 from typing import Dict, Any
@@ -64,11 +64,18 @@ def general_project_form() -> Dict[str, Any]:
                 help="Select the company"
             )
             
-            location = st.selectbox(
-                "Location *",
+            project_location = st.text_input(
+                "Project Location *",
+                value=st.session_state.general_form_data.get("project_location", ""),
+                key="project_location_input",
+                help="Enter the project location"
+            )
+            
+            delivery_location = st.selectbox(
+                "Delivery Location *",
                 options=DELIVERY_LOCATIONS,
-                index=DELIVERY_LOCATIONS.index(st.session_state.general_form_data.get("location", DELIVERY_LOCATIONS[0])) if st.session_state.general_form_data.get("location") in DELIVERY_LOCATIONS else 0,
-                key="location_input",
+                index=DELIVERY_LOCATIONS.index(st.session_state.general_form_data.get("delivery_location", DELIVERY_LOCATIONS[0])) if st.session_state.general_form_data.get("delivery_location") in DELIVERY_LOCATIONS else 0,
+                key="delivery_location_input",
                 help="Select the delivery location"
             )
         
@@ -105,7 +112,8 @@ def general_project_form() -> Dict[str, Any]:
                 date,
                 customer,
                 company,
-                location,
+                project_location,
+                delivery_location,
                 sales_contact,
                 estimator
             ]
@@ -120,7 +128,9 @@ def general_project_form() -> Dict[str, Any]:
                 "date": date.strftime("%Y-%m-%d"),
                 "customer": customer,
                 "company": company,
-                "location": location,
+                "project_location": project_location,
+                "delivery_location": delivery_location,
+                "location": project_location,  # Keep 'location' for backward compatibility (maps to project_location)
                 "address": COMPANY_ADDRESSES[company],  # Store the full address
                 "sales_contact": sales_contact,
                 "estimator": estimator,

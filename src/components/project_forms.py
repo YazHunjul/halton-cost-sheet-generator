@@ -1,5 +1,5 @@
 """
-Project-specific form components for the HVAC Project Management Tool.
+Project-specific form components for the Halton Cost Sheet Generator.
 """
 import streamlit as st
 from typing import Dict, Any, List
@@ -53,7 +53,7 @@ def canopy_form(level_idx: int, area_idx: int, canopy_idx: int) -> Dict[str, Any
         init_state_if_needed(config_key, "Wall")
         configuration = st.selectbox(
             "Configuration *",
-            options=["Wall", "Island", "Single", "Double"],
+            options=["Wall", "ISLAND"],
             key=config_key,
             help="Select the canopy configuration"
         )
@@ -102,41 +102,14 @@ def canopy_form(level_idx: int, area_idx: int, canopy_idx: int) -> Dict[str, Any
             )
     
     st.markdown("**Additional Options**")
-    col5, col6 = st.columns(2)
     
-    with col5:
-        fire_sup_key = get_state_key(level_idx, area_idx, canopy_idx, "fire_sup")
-        init_state_if_needed(fire_sup_key, False)
-        fire_suppression = st.toggle(
-            "Fire Suppression System",
-            key=fire_sup_key,
-            help="Toggle if fire suppression system is needed"
-        )
-        
-        uvc_key = get_state_key(level_idx, area_idx, canopy_idx, "uvc")
-        init_state_if_needed(uvc_key, False)
-        uvc = st.toggle(
-            "UV-C System",
-            key=uvc_key,
-            help="Toggle if UV-C system is needed"
-        )
-    
-    with col6:
-        sdu_key = get_state_key(level_idx, area_idx, canopy_idx, "sdu")
-        init_state_if_needed(sdu_key, False)
-        sdu = st.toggle(
-            "SDU",
-            key=sdu_key,
-            help="Toggle if SDU is needed"
-        )
-        
-        recoair_key = get_state_key(level_idx, area_idx, canopy_idx, "recoair")
-        init_state_if_needed(recoair_key, False)
-        recoair = st.toggle(
-            "RecoAir",
-            key=recoair_key,
-            help="Toggle if RecoAir is needed"
-        )
+    fire_sup_key = get_state_key(level_idx, area_idx, canopy_idx, "fire_sup")
+    init_state_if_needed(fire_sup_key, False)
+    fire_suppression = st.toggle(
+        "Fire Suppression System",
+        key=fire_sup_key,
+        help="Toggle if fire suppression system is needed"
+    )
     
     st.divider()
     
@@ -151,10 +124,7 @@ def canopy_form(level_idx: int, area_idx: int, canopy_idx: int) -> Dict[str, Any
             "position": description if cladding_enabled else None
         },
         "options": {
-            "fire_suppression": fire_suppression,
-            "uvc": uvc,
-            "sdu": sdu,
-            "recoair": recoair
+            "fire_suppression": fire_suppression
         }
     }
 
@@ -180,8 +150,47 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
         help="Enter the area name (e.g., Kitchen, Storage)"
     )
     
+    # Area-level options (UV-C, SDU, RecoAir)
+    if area_name:
+        st.markdown("**Area Options**")
+        opt_col1, opt_col2, opt_col3 = st.columns(3)
+        
+        existing_options = st.session_state[area_key].get("options", {})
+        
+        with opt_col1:
+            uvc_key = f"area_uvc_{level_idx}_{area_idx}"
+            uvc = st.toggle(
+                "UV-C System",
+                value=existing_options.get("uvc", False),
+                key=uvc_key,
+                help="Toggle if UV-C system is needed for this area"
+            )
+        
+        with opt_col2:
+            sdu_key = f"area_sdu_{level_idx}_{area_idx}"
+            sdu = st.toggle(
+                "SDU",
+                value=existing_options.get("sdu", False),
+                key=sdu_key,
+                help="Toggle if SDU is needed for this area"
+            )
+        
+        with opt_col3:
+            recoair_key = f"area_recoair_{level_idx}_{area_idx}"
+            recoair = st.toggle(
+                "RecoAir",
+                value=existing_options.get("recoair", False),
+                key=recoair_key,
+                help="Toggle if RecoAir is needed for this area"
+            )
+    
     area_data = {
         "name": area_name,
+        "options": {
+            "uvc": uvc if area_name else False,
+            "sdu": sdu if area_name else False,
+            "recoair": recoair if area_name else False
+        },
         "canopies": []
     }
     
@@ -294,42 +303,15 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
                         )
                 
                 st.markdown("**Additional Options**")
-                opt_col1, opt_col2 = st.columns(2)
                 
-                with opt_col1:
-                    existing_options = existing_canopy.get("options", {})
-                    fire_sup_key = f"fire_sup_{level_idx}_{area_idx}_{i}"
-                    fire_suppression = st.toggle(
-                        "Fire Suppression System",
-                        value=existing_options.get("fire_suppression", False),
-                        key=fire_sup_key,
-                        help="Toggle if fire suppression system is needed"
-                    )
-                    
-                    uvc_key = f"uvc_{level_idx}_{area_idx}_{i}"
-                    uvc = st.toggle(
-                        "UV-C System",
-                        value=existing_options.get("uvc", False),
-                        key=uvc_key,
-                        help="Toggle if UV-C system is needed"
-                    )
-                
-                with opt_col2:
-                    sdu_key = f"sdu_{level_idx}_{area_idx}_{i}"
-                    sdu = st.toggle(
-                        "SDU",
-                        value=existing_options.get("sdu", False),
-                        key=sdu_key,
-                        help="Toggle if SDU is needed"
-                    )
-                    
-                    recoair_key = f"recoair_{level_idx}_{area_idx}_{i}"
-                    recoair = st.toggle(
-                        "RecoAir",
-                        value=existing_options.get("recoair", False),
-                        key=recoair_key,
-                        help="Toggle if RecoAir is needed"
-                    )
+                existing_options = existing_canopy.get("options", {})
+                fire_sup_key = f"fire_sup_{level_idx}_{area_idx}_{i}"
+                fire_suppression = st.toggle(
+                    "Fire Suppression System",
+                    value=existing_options.get("fire_suppression", False),
+                    key=fire_sup_key,
+                    help="Toggle if fire suppression system is needed"
+                )
                 
                 # Only add canopy if it has a reference number
                 if ref_number:
@@ -344,10 +326,7 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
                             "position": description if cladding_enabled else None
                         },
                         "options": {
-                            "fire_suppression": fire_suppression,
-                            "uvc": uvc,
-                            "sdu": sdu,
-                            "recoair": recoair
+                            "fire_suppression": fire_suppression
                         }
                     }
                     area_data["canopies"].append(canopy_data)

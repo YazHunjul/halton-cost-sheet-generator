@@ -1,0 +1,183 @@
+{
+  "sample_project_data": {
+    "customer": "Demo Restaurant Group",
+    "project_name": "New Kitchen Installation",
+    "project_number": "DEMO-2024",
+    "date": "25/05/2024",
+    "location": "London, UK",
+    "levels": [
+      {
+        "level_name": "Ground Floor",
+        "delivery_installation_price": 500.0,
+        "commissioning_price": 300.0,
+        "areas": [
+          {
+            "name": "Main Kitchen",
+            "delivery_installation_price": 500.0,
+            "commissioning_price": 300.0,
+            "canopies": [
+              {
+                "reference_number": "MK001",
+                "model": "KVF",
+                "configuration": "Wall",
+                "canopy_price": 1200.0,
+                "fire_suppression_tank_quantity": 2,
+                "fire_suppression_price": 2090.0,
+                "lighting_type": "LED STRIP",
+                "cladding_price": 450.0,
+                "wall_cladding": {
+                  "type": "Custom",
+                  "width": 1000,
+                  "height": 2100,
+                  "position": [
+                    "rear",
+                    "left hand"
+                  ],
+                  "price": 450.0
+                }
+              },
+              {
+                "reference_number": "MK002",
+                "model": "KVIF",
+                "configuration": "Island",
+                "canopy_price": 1500.0,
+                "fire_suppression_tank_quantity": 1,
+                "fire_suppression_price": 1600.0,
+                "lighting_type": "LED SPOTS",
+                "cladding_price": 350.0,
+                "wall_cladding": {
+                  "type": "Custom",
+                  "width": 800,
+                  "height": 2100,
+                  "position": [
+                    "rear"
+                  ],
+                  "price": 350.0
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "level_name": "First Floor",
+        "delivery_installation_price": 300.0,
+        "commissioning_price": 200.0,
+        "areas": [
+          {
+            "name": "Prep Kitchen",
+            "delivery_installation_price": 300.0,
+            "commissioning_price": 200.0,
+            "canopies": [
+              {
+                "reference_number": "PK001",
+                "model": "UVI",
+                "configuration": "Wall",
+                "canopy_price": 800.0,
+                "fire_suppression_tank_quantity": 1,
+                "fire_suppression_price": 1300.0,
+                "lighting_type": "LED STRIP"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "pricing_totals": {
+    "total_canopies": 3,
+    "total_canopy_price": 3500.0,
+    "total_fire_suppression_price": 4990.0,
+    "total_cladding_price": 800.0,
+    "total_delivery_installation": 800.0,
+    "total_commissioning": 500.0,
+    "areas": [
+      {
+        "level_name": "Ground Floor",
+        "area_name": "Main Kitchen",
+        "level_area_combined": "Ground Floor - Main Kitchen",
+        "canopy_count": 2,
+        "canopy_total": 2700.0,
+        "fire_suppression_total": 3690.0,
+        "cladding_total": 800.0,
+        "delivery_installation_price": 500.0,
+        "commissioning_price": 300.0,
+        "canopy_schedule_subtotal": 3500.0,
+        "area_subtotal": 7990.0,
+        "canopies": [
+          {
+            "reference_number": "MK001",
+            "model": "KVF",
+            "canopy_price": 1200.0,
+            "fire_suppression_price": 2090.0,
+            "cladding_price": 450.0,
+            "fire_suppression_tank_quantity": 2,
+            "has_cladding": true
+          },
+          {
+            "reference_number": "MK002",
+            "model": "KVIF",
+            "canopy_price": 1500.0,
+            "fire_suppression_price": 1600.0,
+            "cladding_price": 350.0,
+            "fire_suppression_tank_quantity": 1,
+            "has_cladding": true
+          }
+        ]
+      },
+      {
+        "level_name": "First Floor",
+        "area_name": "Prep Kitchen",
+        "level_area_combined": "First Floor - Prep Kitchen",
+        "canopy_count": 1,
+        "canopy_total": 800.0,
+        "fire_suppression_total": 1300.0,
+        "cladding_total": 0,
+        "delivery_installation_price": 300.0,
+        "commissioning_price": 200.0,
+        "canopy_schedule_subtotal": 1300.0,
+        "area_subtotal": 2600.0,
+        "canopies": [
+          {
+            "reference_number": "PK001",
+            "model": "UVI",
+            "canopy_price": 800.0,
+            "fire_suppression_price": 1300.0,
+            "cladding_price": 0,
+            "fire_suppression_tank_quantity": 1,
+            "has_cladding": false
+          }
+        ]
+      }
+    ],
+    "project_total": 10590.0
+  },
+  "context_keys": [
+    "client_name",
+    "company",
+    "address",
+    "project_name",
+    "location",
+    "project_number",
+    "estimator",
+    "estimator_rank",
+    "estimator_initials",
+    "date",
+    "halton_ref",
+    "sales_contact_name",
+    "sales_contact_phone",
+    "delivery_location",
+    "levels",
+    "canopies",
+    "total_canopies",
+    "dear_line",
+    "subject_line",
+    "estimator_with_rank",
+    "current_date",
+    "current_year",
+    "wall_cladding_items",
+    "fire_suppression_items",
+    "pricing_totals",
+    "format_currency"
+  ]
+}

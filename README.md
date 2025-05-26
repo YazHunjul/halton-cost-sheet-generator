@@ -1,12 +1,26 @@
-# HVAC Project Management Tool
+# 🏢 Halton Cost Sheet Generator
 
-A comprehensive Streamlit application for managing HVAC canopy projects, generating Excel cost sheets, and creating Word quotation documents.
+A comprehensive Streamlit application for managing Halton canopy projects, generating Excel cost sheets, and creating Word quotation documents.
+
+## 🚀 Live Demo
+
+**Deployed on Streamlit Cloud**: [Your App URL will be here after deployment]
+
+## 🌟 Key Features Overview
+
+- ✅ **Complete Halton Project Management** - From initial setup to final quotation
+- ✅ **Professional Excel Generation** - Automated Halton cost sheets with business logic
+- ✅ **Word Document Creation** - Professional Halton quotations from Excel data
+- ✅ **Multi-level Projects** - Support for complex building structures
+- ✅ **Fire Suppression Integration** - Automatic detection and pricing
+- ✅ **RecoAir Support** - Specialized Halton air handling systems
+- ✅ **Template-based System** - Easily customizable Halton templates
 
 ## Features
 
-### 🏗️ Project Management
+### 🏗️ Halton Project Management
 
-- **Project Type Support**: Canopy Projects and RecoAir Projects
+- **Project Type Support**: Halton Canopy Projects and RecoAir Projects
 - **Multi-level Structure**: Support for multiple levels and areas
 - **Canopy Configuration**: Wall, Island, Single, Double, Corner configurations
 - **Options Management**: Fire suppression, UV-C systems, SDU, RecoAir
@@ -48,7 +62,17 @@ UKCS/
 └── debug_*.py             # Debug and test scripts
 ```
 
-## Installation
+## 🚀 Deployment on Streamlit Cloud
+
+### Quick Deploy (Recommended)
+
+1. **Push to GitHub** (see instructions below)
+2. **Visit** [share.streamlit.io](https://share.streamlit.io)
+3. **Connect your GitHub repository**
+4. **Set main file path**: `app.py`
+5. **Deploy!** 🎉
+
+### Local Installation
 
 1. **Clone the repository**:
 
@@ -60,13 +84,21 @@ UKCS/
 2. **Install dependencies**:
 
    ```bash
-   pip install streamlit openpyxl python-docx-template
+   pip install -r requirements.txt
    ```
 
 3. **Run the application**:
    ```bash
-   streamlit run src/app.py
+   streamlit run app.py
    ```
+
+### 📋 Deployment Checklist
+
+- ✅ `requirements.txt` - All dependencies listed
+- ✅ `app.py` - Main entry point in root directory
+- ✅ `.streamlit/config.toml` - Streamlit configuration
+- ✅ Proper imports - All modules accessible
+- ✅ File paths - Relative paths for cloud deployment
 
 ## Usage
 
@@ -122,6 +154,15 @@ UKCS/
 - **Lighting Types**: Standardized to "LED STRIP", "LED SPOTS", or "-"
 
 ## Recent Updates
+
+### File Naming Conventions (Latest)
+
+- ✅ **Excel Cost Sheets**: `Project Number Cost Sheet Date.xlsx`
+- ✅ **Main Quotations**: `Project Number Quotation Date.docx`
+- ✅ **RecoAir Quotations**: `Project Number RecoAir Quotation Date.docx`
+- ✅ **Multiple Documents**: `Project Number Quotations Date.zip`
+- ✅ Professional, consistent naming across all generated files
+- ✅ Date format: DDMMYYYY (e.g., 15012025 for 15/01/2025)
 
 ### Fire Suppression Enhancement
 

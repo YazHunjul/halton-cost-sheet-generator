@@ -1,5 +1,5 @@
 """
-Main Streamlit application for the HVAC Project Management Tool.
+Main Streamlit application for the Halton Cost Sheet Generator.
 """
 import streamlit as st
 from components.forms import general_project_form
@@ -7,6 +7,7 @@ from components.project_forms import project_structure_form
 from config.constants import SessionKeys, PROJECT_TYPES
 from utils.excel import read_excel_project_data
 from utils.word import generate_quotation_document
+from openpyxl import load_workbook
 import os
 
 def display_project_summary(project_data: dict):
@@ -25,7 +26,8 @@ def display_project_summary(project_data: dict):
         st.write("**Company:**", project_data.get("company"))
     
     with col2:
-        st.write("**Location:**", project_data.get("location"))
+        st.write("**Project Location:**", project_data.get("project_location") or project_data.get("location"))
+        st.write("**Delivery Location:**", project_data.get("delivery_location"))
         st.write("**Address:**", project_data.get("address"))
         st.write("**Sales Contact:**", project_data.get("sales_contact"))
         st.write("**Estimator:**", project_data.get("estimator"))
@@ -40,6 +42,18 @@ def display_project_summary(project_data: dict):
             with st.expander(f"Level {level['level_number']}", expanded=True):
                 for area in level["areas"]:
                     st.markdown(f"### 📍 Area: {area['name']}")
+                    
+                    # Area-level options
+                    if "options" in area:
+                        st.markdown("**Area Options:**")
+                        opt_col1, opt_col2, opt_col3 = st.columns(3)
+                        with opt_col1:
+                            st.write("✓ UV-C System" if area["options"]["uvc"] else "✗ UV-C System")
+                        with opt_col2:
+                            st.write("✓ SDU" if area["options"]["sdu"] else "✗ SDU")
+                        with opt_col3:
+                            st.write("✓ RecoAir" if area["options"]["recoair"] else "✗ RecoAir")
+                        st.markdown("---")
                     
                     if area["canopies"]:
                         for i, canopy in enumerate(area["canopies"], 1):
@@ -67,15 +81,9 @@ def display_project_summary(project_data: dict):
                                         position_str = position if position else "None"
                                     st.write("- Position:", position_str)
                             
-                            # Options
-                            st.markdown("**Options:**")
-                            opt_col1, opt_col2 = st.columns(2)
-                            with opt_col1:
-                                st.write("✓ Fire Suppression" if canopy["options"]["fire_suppression"] else "✗ Fire Suppression")
-                                st.write("✓ UV-C System" if canopy["options"]["uvc"] else "✗ UV-C System")
-                            with opt_col2:
-                                st.write("✓ SDU" if canopy["options"]["sdu"] else "✗ SDU")
-                                st.write("✓ RecoAir" if canopy["options"]["recoair"] else "✗ RecoAir")
+                            # Canopy Options (only fire suppression now)
+                            st.markdown("**Canopy Options:**")
+                            st.write("✓ Fire Suppression" if canopy["options"]["fire_suppression"] else "✗ Fire Suppression")
                             
                             st.markdown("---")
                     else:
@@ -104,9 +112,28 @@ def word_generation_page():
             # Read project data from Excel
             with st.spinner("Reading project data from Excel..."):
                 project_data = read_excel_project_data(temp_path)
+                
+                # Detect and set project type based on the data (required for Excel generation)
+                if not project_data.get("project_type"):
+                    # Default to "Commercial Kitchen" as it's the most common type
+                    project_data["project_type"] = "Commercial Kitchen"
             
             # Display summary of extracted data
             st.success("✅ Successfully extracted project data from Excel!")
+            
+            # Analyze project to show what type it is
+            from utils.word import analyze_project_areas
+            has_canopies, has_recoair, is_recoair_only = analyze_project_areas(project_data)
+            
+            # Show project type analysis
+            if is_recoair_only:
+                st.info("🔄 **Project Type:** RecoAir-only project detected")
+            elif has_canopies and has_recoair:
+                st.info("🔄 **Project Type:** Mixed project (Canopies + RecoAir) detected")
+            elif has_canopies:
+                st.info("🔄 **Project Type:** Canopy-only project detected")
+            else:
+                st.warning("⚠️ **Project Type:** No canopies or RecoAir systems detected")
             
             with st.expander("📋 Extracted Project Data", expanded=False):
                 col1, col2 = st.columns(2)
@@ -117,29 +144,271 @@ def word_generation_page():
                     st.write("**Date:**", project_data.get("date"))
                 
                 with col2:
-                    st.write("**Location:**", project_data.get("location"))
+                    st.write("**Project Location:**", project_data.get("project_location") or project_data.get("location"))
+                    st.write("**Delivery Location:**", project_data.get("delivery_location"))
                     st.write("**Estimator:**", project_data.get("estimator"))
+                    st.write("**Estimator Initials (from Excel):**", project_data.get("estimator_initials"))
+                    
+                    # Show combined initials calculation, reference variable, customer first name, and quote title
+                    from utils.word import get_sales_contact_info, get_combined_initials, generate_reference_variable, get_customer_first_name, generate_quote_title
+                    estimator_name = project_data.get("estimator", "")
+                    sales_contact = get_sales_contact_info(estimator_name)
+                    combined_initials = get_combined_initials(sales_contact['name'], estimator_name)
+                    reference_variable = generate_reference_variable(
+                        project_data.get('project_number', ''), 
+                        sales_contact['name'], 
+                        estimator_name
+                    )
+                    customer_first_name = get_customer_first_name(project_data.get('customer', ''))
+                    quote_title = generate_quote_title(project_data.get('revision', 'A'))
+                    st.write("**Combined Initials (Sales/Estimator):**", combined_initials)
+                    st.write("**Reference Variable:**", reference_variable)
+                    st.write("**Customer First Name:**", customer_first_name)
+                    st.write("**Quote Title:**", quote_title)
+                    st.write("**Revision:**", project_data.get('revision', 'A'))
+                    st.write("**Sales Contact:**", sales_contact['name'])
+                    
                     st.write("**Levels Found:**", len(project_data.get("levels", [])))
+                
+                # Show detailed analysis
+                st.markdown("---")
+                st.markdown("**📊 Project Analysis:**")
+                analysis_col1, analysis_col2, analysis_col3 = st.columns(3)
+                with analysis_col1:
+                    st.write("**Has Canopies:**", "✅ Yes" if has_canopies else "❌ No")
+                with analysis_col2:
+                    st.write("**Has RecoAir:**", "✅ Yes" if has_recoair else "❌ No")
+                with analysis_col3:
+                    st.write("**RecoAir Only:**", "✅ Yes" if is_recoair_only else "❌ No")
+                
+                # Show areas and their options
+                if project_data.get("levels"):
+                    st.markdown("**🏢 Areas Found:**")
+                    for level in project_data.get("levels", []):
+                        for area in level.get("areas", []):
+                            area_name = f"{level.get('level_name', '')} - {area.get('name', '')}"
+                            canopy_count = len(area.get('canopies', []))
+                            options = area.get('options', {})
+                            
+                            st.write(f"• **{area_name}**: {canopy_count} canopies")
+                            if options.get('uvc'):
+                                st.write("  - ✅ UV-C System")
+                            if options.get('sdu'):
+                                st.write("  - ✅ SDU")
+                            if options.get('recoair'):
+                                st.write("  - ✅ RecoAir System")
+            
+            # Show what documents will be generated
+            st.markdown("---")
+            st.markdown("**📄 Documents to Generate:**")
+            if is_recoair_only:
+                st.info("📋 **RecoAir Quotation** will be generated (single document)")
+                st.write("💡 Your Excel file now has dynamic pricing - totals update automatically!")
+            elif has_canopies and has_recoair:
+                st.info("📦 **ZIP Package** will be generated containing:")
+                st.write("• Main Quotation (for canopies)")
+                st.write("• RecoAir Quotation (for RecoAir systems)")
+                st.write("💡 Your Excel file now has dynamic pricing - totals update automatically!")
+            elif has_canopies:
+                st.info("📋 **Main Quotation** will be generated (single document)")
+                st.write("💡 Your Excel file now has dynamic pricing - totals update automatically!")
+            else:
+                st.warning("⚠️ No documents can be generated - no systems detected")
             
             # Generate Word document
             if st.button("📄 Generate Word Quotation", type="primary"):
                 try:
-                    with st.spinner("Generating Word quotation document..."):
-                        word_path = generate_quotation_document(project_data)
+                    with st.spinner("Generating Word quotation document(s)..."):
+                        # Generate Word documents only (Excel has dynamic pricing now)
+                        word_path = generate_quotation_document(project_data, temp_path)
                     
-                    st.success("✅ Word quotation document generated successfully!")
+                    st.success("✅ Word quotation document(s) generated successfully!")
                     
-                    # Provide download button
-                    with open(word_path, "rb") as file:
-                        st.download_button(
-                            label="📥 Download Word Quotation",
-                            data=file.read(),
-                            file_name=f"quotation_{project_data.get('project_number', 'unknown')}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        )
+                    # Determine file type and provide appropriate download button
+                    if word_path.endswith('.zip'):
+                        # Multiple documents in zip file
+                        with open(word_path, "rb") as file:
+                            # Extract filename from the generated path
+                            zip_filename = os.path.basename(word_path)
+                            st.download_button(
+                                label="📥 Download Quotation Documents (ZIP)",
+                                data=file.read(),
+                                file_name=zip_filename,
+                                mime="application/zip"
+                            )
+                        st.info("📦 Multiple quotation documents generated and packaged in ZIP file.")
+                    else:
+                        # Single document
+                        with open(word_path, "rb") as file:
+                            # Extract filename from the generated path
+                            doc_filename = os.path.basename(word_path)
+                            
+                            # Determine appropriate label based on document type
+                            if is_recoair_only:
+                                label = "📥 Download RecoAir Quotation"
+                            else:
+                                label = "📥 Download Quotation"
+                            
+                            st.download_button(
+                                label=label,
+                                data=file.read(),
+                                file_name=doc_filename,
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            )
+                        st.info("📄 Quotation document generated successfully.")
+                    
+                    # Add note about dynamic pricing
+                    st.success("✨ **Your Excel file now has dynamic pricing!** The JOB TOTAL sheet will automatically update when you edit any individual sheet prices.")
                 
                 except Exception as e:
                     st.error(f"❌ Error generating Word document: {str(e)}")
+            
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                
+        except Exception as e:
+            st.error(f"❌ Error reading Excel file: {str(e)}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+def revision_page():
+    """Page for creating new revisions from existing Excel files."""
+    st.header("📝 Create New Revision")
+    st.markdown("Upload an existing Excel cost sheet to create a new revision with the same data.")
+    
+    uploaded_file = st.file_uploader(
+        "Choose Excel file to revise",
+        type=['xlsx', 'xls'],
+        help="Upload an existing cost sheet Excel file to create a new revision"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Save uploaded file temporarily
+            temp_path = f"temp_revision_{uploaded_file.name}"
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            # Read project data from Excel
+            with st.spinner("Reading project data from Excel..."):
+                project_data = read_excel_project_data(temp_path)
+                
+                # Ensure project type is set (required for Excel generation)
+                if not project_data.get("project_type"):
+                    # Default to "Commercial Kitchen" as it's the most common type
+                    project_data["project_type"] = "Commercial Kitchen"
+            
+            st.success("✅ Successfully extracted project data from Excel!")
+            
+            # Show current revision info
+            current_revision = project_data.get('revision', 'A')
+            st.info(f"📋 **Current Revision:** {current_revision}")
+            
+            # Display project summary
+            with st.expander("📋 Project Information", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Project Name:**", project_data.get("project_name"))
+                    st.write("**Project Number:**", project_data.get("project_number"))
+                    st.write("**Customer:**", project_data.get("customer"))
+                    st.write("**Date:**", project_data.get("date"))
+                
+                with col2:
+                    st.write("**Project Location:**", project_data.get("project_location") or project_data.get("location"))
+                    st.write("**Delivery Location:**", project_data.get("delivery_location"))
+                    st.write("**Estimator:**", project_data.get("estimator"))
+                    st.write("**Current Revision:**", current_revision)
+                    
+                    # Show project analysis
+                    from utils.word import analyze_project_areas
+                    has_canopies, has_recoair, is_recoair_only = analyze_project_areas(project_data)
+                    st.write("**Has Canopies:**", "✅ Yes" if has_canopies else "❌ No")
+                    st.write("**Has RecoAir:**", "✅ Yes" if has_recoair else "❌ No")
+                    st.write("**Levels Found:**", len(project_data.get("levels", [])))
+            
+            # Revision options
+            st.markdown("---")
+            st.subheader("🔄 Revision Options")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Auto-increment revision
+                next_revision = chr(ord(current_revision) + 1) if current_revision and len(current_revision) == 1 and current_revision < 'Z' else 'B'
+                st.write(f"**Suggested Next Revision:** {next_revision}")
+                
+                revision_choice = st.radio(
+                    "Choose revision method:",
+                    ["Auto-increment (recommended)", "Custom revision letter"],
+                    help="Auto-increment will automatically suggest the next revision letter"
+                )
+            
+            with col2:
+                if revision_choice == "Custom revision letter":
+                    new_revision = st.text_input(
+                        "Enter new revision letter:",
+                        value=next_revision,
+                        max_chars=3,
+                        help="Enter a revision letter (e.g., B, C, D, etc.)"
+                    ).upper()
+                else:
+                    new_revision = next_revision
+                    st.write(f"**New Revision will be:** {new_revision}")
+            
+            # Optional: Update date
+            update_date = st.checkbox("Update date to today", value=True)
+            
+            if update_date:
+                from datetime import datetime
+                new_date = datetime.now().strftime("%d/%m/%Y")
+                st.write(f"**New Date:** {new_date}")
+            else:
+                new_date = project_data.get("date", "")
+                st.write(f"**Date will remain:** {new_date}")
+            
+            # Generate new revision
+            if st.button("🔄 Create New Revision", type="primary"):
+                try:
+                    with st.spinner(f"Generating revision {new_revision}..."):
+                        from utils.excel import create_revision_from_existing
+                        
+                        # Create new revision from existing file (preserves all data)
+                        output_path = create_revision_from_existing(
+                            temp_path, 
+                            new_revision, 
+                            new_date if update_date else None
+                        )
+                        
+                        # Read the file for download
+                        with open(output_path, "rb") as file:
+                            excel_data = file.read()
+                    
+                    st.success(f"✅ Revision {new_revision} created successfully!")
+                    
+                    # Create download filename: "Project Number Cost Sheet Date"
+                    project_number = project_data.get('project_number', 'unknown')
+                    date_str = new_date.replace('/', '') if new_date else ''
+                    download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
+                    
+                    st.download_button(
+                        label=f"📥 Download Revision {new_revision}",
+                        data=excel_data,
+                        file_name=download_filename,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    
+                    # Show what changed
+                    st.info(f"📋 **Changes Made:**")
+                    st.write(f"• Revision updated: {current_revision} → {new_revision}")
+                    if update_date:
+                        st.write(f"• Date updated: {project_data.get('date', 'N/A')} → {new_date}")
+                    st.write("• ✅ All existing data preserved (canopies, pricing, formulas)")
+                    st.write("• ✅ Dynamic pricing formulas maintained")
+                    st.write("• ✅ All manual entries and calculations preserved")
+                    
+                except Exception as e:
+                    st.error(f"❌ Error creating revision: {str(e)}")
             
             # Clean up temp file
             if os.path.exists(temp_path):
@@ -174,7 +443,7 @@ def navigation_buttons():
 def main():
     # Set page config
     st.set_page_config(
-        page_title="HVAC Project Management Tool",
+        page_title="Halton Cost Sheet Generator",
         page_icon="🏢",
         layout="wide"
     )
@@ -185,7 +454,7 @@ def main():
     # Sidebar for navigation
     with st.sidebar:
         st.title("Navigation")
-        page = st.radio("Choose a page:", ["Create New Project", "Generate Word Document"])
+        page = st.radio("Choose a page:", ["Create New Project", "Generate Word Document", "Create New Revision"])
         
         st.markdown("---")
         st.subheader("Debug Info")
@@ -200,11 +469,14 @@ def main():
             st.rerun()
     
     # Header
-    st.title("HVAC Project Management Tool")
+    st.title("Halton Cost Sheet Generator")
     st.markdown("---")
     
     if page == "Generate Word Document":
         word_generation_page()
+        return
+    elif page == "Create New Revision":
+        revision_page()
         return
     
     # Project Type Selection

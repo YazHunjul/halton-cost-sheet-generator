@@ -1,5 +1,5 @@
 """
-Business-specific constants and data for the HVAC Project Management Tool.
+Business-specific constants and data for the Halton Cost Sheet Generator.
 """
 
 # Sales contacts with phone numbers
