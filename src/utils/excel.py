@@ -11,6 +11,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill
 from config.business_data import VALID_CANOPY_MODELS
+from config.constants import is_feature_enabled
 
 # Constants for Excel operations
 TEMPLATE_PATH = "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
@@ -377,6 +378,29 @@ def extract_recoair_volume(volume_str) -> float:
     except (ValueError, AttributeError):
         return 0.0
 
+def _read_mua_volume(sheet: Worksheet, base_row: int, model: str) -> str:
+    """
+    Read MUA volume from the correct location based on canopy model.
+    
+    Args:
+        sheet: The worksheet to read from
+        base_row: Base row for the canopy (14, 31, 48, etc.)
+        model: Canopy model string
+        
+    Returns:
+        str: MUA volume value or empty string
+    """
+    if not model:
+        return ""
+    
+    # If canopy has 'F' (fresh air), read from column I at row base_row + 8 (I22, I39, I56, etc.)
+    if 'F' in model.upper():
+        mua_volume_row = base_row + 8  # I22, I39, I56, etc.
+        return sheet[f'I{mua_volume_row}'].value or ""
+    else:
+        # For non-fresh air canopies, read from the old location (column K) for backward compatibility
+        return sheet[f'K{base_row}'].value or ""
+
 def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
     """
     Read RecoAir unit data from a RECOAIR sheet.
@@ -636,6 +660,24 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
                         sheet[f"C{initial_value_row}"] = 0
                     except Exception as e:
                         print(f"Warning: Could not initialize C{initial_value_row} to 0 for CMWF/CMWI canopy: {str(e)}")
+                
+                # If canopy has 'F' (fresh air), store MUA volume in column I starting from row 22
+                if 'F' in model.upper():
+                    mua_volume_row = row_index + 8  # I22, I39, I56, etc. (row_index 14 + 8 = 22)
+                    mua_volume = canopy.get("mua_volume", "")
+                    if mua_volume:
+                        try:
+                            # Convert to float if it's a numeric value, otherwise store as string
+                            if isinstance(mua_volume, str) and mua_volume.strip():
+                                try:
+                                    mua_volume_float = float(mua_volume.strip())
+                                    sheet[f"I{mua_volume_row}"] = mua_volume_float
+                                except ValueError:
+                                    sheet[f"I{mua_volume_row}"] = mua_volume.strip()
+                            elif isinstance(mua_volume, (int, float)):
+                                sheet[f"I{mua_volume_row}"] = mua_volume
+                        except Exception as e:
+                            print(f"Warning: Could not write MUA volume to I{mua_volume_row}: {str(e)}")
                         
             except Exception as e:
                 print(f"Warning: Could not write model to D{row_index}: {str(e)}")
@@ -2114,7 +2156,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     # Volume and static data (if available in your template)
                                     'extract_volume': sheet[f'I{base_row}'].value or "",
                                     'extract_static': sheet[f'F{base_row + 8}'].value or "",  # F22, F39, F56, etc.
-                                    'mua_volume': sheet[f'K{base_row}'].value or "",
+                                    'mua_volume': _read_mua_volume(sheet, base_row, model),
                                     'supply_static': sheet[f'L{base_row}'].value or "",
                                     
                                     # Pricing data - individual canopy price
@@ -2724,24 +2766,56 @@ def update_job_total_sheet(wb: Workbook) -> None:
         job_total_sheet['T17'] = f"=PRICING_SUMMARY!B{summary_row + 2}"  # Fire Suppression Total (Price)
         job_total_sheet['T18'] = f"=PRICING_SUMMARY!B{summary_row + 4}"  # SDU Total (SDU category - Price)
         job_total_sheet['T19'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Vent Clg Total (OTHER category - Price)
-        job_total_sheet['T20'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # MARVEL Total (OTHER category - Price)
+        # Conditionally add MARVEL system if enabled
+        if is_feature_enabled('marvel_system'):
+            job_total_sheet['T20'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # MARVEL Total (OTHER category - Price)
+        else:
+            job_total_sheet['T20'] = 0  # Hide MARVEL if not enabled
+            
         job_total_sheet['T21'] = f"=PRICING_SUMMARY!B{summary_row + 3}"  # Edge Total (EBOX/UV-C - Price)
         job_total_sheet['T22'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Aerolys Total (OTHER category - Price)
-        job_total_sheet['T23'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Pollustop Total (OTHER category - Price)
+        
+        # Conditionally add Pollustop system if enabled
+        if is_feature_enabled('pollustop_unit'):
+            job_total_sheet['T23'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Pollustop Total (OTHER category - Price)
+        else:
+            job_total_sheet['T23'] = 0  # Hide Pollustop if not enabled
+            
         job_total_sheet['T24'] = f"=PRICING_SUMMARY!B{summary_row + 5}"  # Reco Total (RecoAir - Price)
-        job_total_sheet['T25'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Reactaway Total (OTHER category - Price)
+        
+        # Conditionally add Reactaway system if enabled
+        if is_feature_enabled('reactaway_unit'):
+            job_total_sheet['T25'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Reactaway Total (OTHER category - Price)
+        else:
+            job_total_sheet['T25'] = 0  # Hide Reactaway if not enabled
         
         # Write COST totals to column S:
         job_total_sheet['S16'] = f"=PRICING_SUMMARY!C{summary_row + 1}"  # Canopy Total (Cost)
         job_total_sheet['S17'] = f"=PRICING_SUMMARY!C{summary_row + 2}"  # Fire Suppression Total (Cost)
         job_total_sheet['S18'] = f"=PRICING_SUMMARY!C{summary_row + 4}"  # SDU Total (SDU category - Cost)
         job_total_sheet['S19'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Vent Clg Total (OTHER category - Cost)
-        job_total_sheet['S20'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # MARVEL Total (OTHER category - Cost)
+        # Conditionally add MARVEL system if enabled
+        if is_feature_enabled('marvel_system'):
+            job_total_sheet['S20'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # MARVEL Total (OTHER category - Cost)
+        else:
+            job_total_sheet['S20'] = 0  # Hide MARVEL if not enabled
+            
         job_total_sheet['S21'] = f"=PRICING_SUMMARY!C{summary_row + 3}"  # Edge Total (EBOX/UV-C - Cost)
         job_total_sheet['S22'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Aerolys Total (OTHER category - Cost)
-        job_total_sheet['S23'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Pollustop Total (OTHER category - Cost)
+        
+        # Conditionally add Pollustop system if enabled
+        if is_feature_enabled('pollustop_unit'):
+            job_total_sheet['S23'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Pollustop Total (OTHER category - Cost)
+        else:
+            job_total_sheet['S23'] = 0  # Hide Pollustop if not enabled
+            
         job_total_sheet['S24'] = f"=PRICING_SUMMARY!C{summary_row + 5}"  # Reco Total (RecoAir - Cost)
-        job_total_sheet['S25'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Reactaway Total (OTHER category - Cost)
+        
+        # Conditionally add Reactaway system if enabled
+        if is_feature_enabled('reactaway_unit'):
+            job_total_sheet['S25'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Reactaway Total (OTHER category - Cost)
+        else:
+            job_total_sheet['S25'] = 0  # Hide Reactaway if not enabled
         
         print("Updated JOB TOTAL sheet with dynamic pricing formulas")
         

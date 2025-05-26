@@ -9,6 +9,40 @@ from .business_data import (
     DELIVERY_LOCATIONS
 )
 
+# Feature flags for systems not yet implemented
+# Set to True when ready to display to users
+FEATURE_FLAGS = {
+    # Kitchen systems
+    "kitchen_extract_system": False,
+    "kitchen_makeup_air_system": False,
+    
+    # Advanced control systems
+    "marvel_system": False,  # M.A.R.V.E.L. System (DCKV)
+    
+    # Ceiling systems
+    "cyclocell_cassette_ceiling": False,
+    
+    # Additional equipment
+    "reactaway_unit": False,
+    
+    # Future systems (placeholders)
+    "dishwasher_extract": False,
+    "gas_interlocking": False,
+    "pollustop_unit": False,
+}
+
+def is_feature_enabled(feature_name: str) -> bool:
+    """
+    Check if a feature is enabled.
+    
+    Args:
+        feature_name: Name of the feature to check
+        
+    Returns:
+        bool: True if feature is enabled, False otherwise
+    """
+    return FEATURE_FLAGS.get(feature_name, False)
+
 # Project types
 PROJECT_TYPES = [
     "Canopy Project",

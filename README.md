@@ -153,6 +153,32 @@ UKCS/
 - **MUA Volume**: Rounded to 1 decimal place (e.g., "2.345" → "2.3")
 - **Lighting Types**: Standardized to "LED STRIP", "LED SPOTS", or "-"
 
+## 🎛️ Feature Flags System
+
+The application uses feature flags to control which systems are displayed to users. This allows keeping systems in documentation while hiding them until ready for production.
+
+### Currently Enabled Systems
+
+- ✅ Canopy Systems
+- ✅ RecoAir Systems
+- ✅ Fire Suppression
+- ✅ UV-C Systems
+- ✅ SDU (Supply Diffusion Units)
+- ✅ Wall Cladding
+
+### Systems in Development (Hidden)
+
+- 🚧 Kitchen Extract System
+- 🚧 Kitchen Make-Up Air System
+- 🚧 M.A.R.V.E.L. System (DCKV)
+- 🚧 Cyclocell Cassette Ceiling
+- 🚧 Reactaway Unit
+- 🚧 Dishwasher Extract
+- 🚧 Gas Interlocking
+- 🚧 Pollustop Unit
+
+**For developers**: See `FEATURE_FLAGS.md` for detailed documentation on managing feature flags.
+
 ## Recent Updates
 
 ### File Naming Conventions (Latest)

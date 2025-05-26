@@ -8,6 +8,7 @@ import zipfile
 from datetime import datetime
 from docxtpl import DocxTemplate
 from config.business_data import SALES_CONTACTS, ESTIMATORS
+from config.constants import is_feature_enabled
 import streamlit as st
 # Template path for Word documents
 WORD_TEMPLATE_PATH = "templates/word/Halton Quote Feb 2024.docx"
@@ -703,6 +704,16 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'has_canopies': has_canopies,
         'has_recoair': has_recoair,
         'is_recoair_only': is_recoair_only,
+        
+        # Feature flags for conditional display of systems
+        'show_kitchen_extract_system': is_feature_enabled('kitchen_extract_system'),
+        'show_kitchen_makeup_air_system': is_feature_enabled('kitchen_makeup_air_system'),
+        'show_marvel_system': is_feature_enabled('marvel_system'),
+        'show_cyclocell_cassette_ceiling': is_feature_enabled('cyclocell_cassette_ceiling'),
+        'show_reactaway_unit': is_feature_enabled('reactaway_unit'),
+        'show_dishwasher_extract': is_feature_enabled('dishwasher_extract'),
+        'show_gas_interlocking': is_feature_enabled('gas_interlocking'),
+        'show_pollustop_unit': is_feature_enabled('pollustop_unit'),
         
         # Fallback variables for template compatibility
         'level': enhanced_levels[0] if enhanced_levels else {'level_name': '', 'areas': []},  # First level as fallback
