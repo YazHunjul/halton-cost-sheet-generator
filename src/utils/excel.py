@@ -393,10 +393,10 @@ def _read_mua_volume(sheet: Worksheet, base_row: int, model: str) -> str:
     if not model:
         return ""
     
-    # If canopy has 'F' (fresh air), read from column I at row base_row + 8 (I22, I39, I56, etc.)
+    # If canopy has 'F' (fresh air), read from column H at row base_row + 8 (H22, H39, H56, etc.)
     if 'F' in model.upper():
-        mua_volume_row = base_row + 8  # I22, I39, I56, etc.
-        return sheet[f'I{mua_volume_row}'].value or ""
+        mua_volume_row = base_row + 8  # H22, H39, H56, etc.
+        return sheet[f'H{mua_volume_row}'].value or ""
     else:
         # For non-fresh air canopies, read from the old location (column K) for backward compatibility
         return sheet[f'K{base_row}'].value or ""
@@ -661,9 +661,9 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
                     except Exception as e:
                         print(f"Warning: Could not initialize C{initial_value_row} to 0 for CMWF/CMWI canopy: {str(e)}")
                 
-                # If canopy has 'F' (fresh air), store MUA volume in column I starting from row 22
+                # If canopy has 'F' (fresh air), store MUA volume in column H starting from row 22
                 if 'F' in model.upper():
-                    mua_volume_row = row_index + 8  # I22, I39, I56, etc. (row_index 14 + 8 = 22)
+                    mua_volume_row = row_index + 8  # H22, H39, H56, etc. (row_index 14 + 8 = 22)
                     mua_volume = canopy.get("mua_volume", "")
                     if mua_volume:
                         try:
@@ -671,13 +671,13 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
                             if isinstance(mua_volume, str) and mua_volume.strip():
                                 try:
                                     mua_volume_float = float(mua_volume.strip())
-                                    sheet[f"I{mua_volume_row}"] = mua_volume_float
+                                    sheet[f"H{mua_volume_row}"] = mua_volume_float
                                 except ValueError:
-                                    sheet[f"I{mua_volume_row}"] = mua_volume.strip()
+                                    sheet[f"H{mua_volume_row}"] = mua_volume.strip()
                             elif isinstance(mua_volume, (int, float)):
-                                sheet[f"I{mua_volume_row}"] = mua_volume
+                                sheet[f"H{mua_volume_row}"] = mua_volume
                         except Exception as e:
-                            print(f"Warning: Could not write MUA volume to I{mua_volume_row}: {str(e)}")
+                            print(f"Warning: Could not write MUA volume to H{mua_volume_row}: {str(e)}")
                         
             except Exception as e:
                 print(f"Warning: Could not write model to D{row_index}: {str(e)}")
