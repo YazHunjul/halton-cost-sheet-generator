@@ -477,9 +477,9 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
             selection_value = sheet[f'E{row}'].value
             
             if selection_value and str(selection_value).strip() != "":
-                # Validate selection quantity
+                # Validate selection quantity (use 'integer' for quantities)
                 selection_valid, selection_num, selection_error = validate_cell_data(
-                    sheet_name, f'E{row}', selection_value, 'number', f'RecoAir Unit Quantity (Row {row})'
+                    sheet_name, f'E{row}', selection_value, 'integer', f'RecoAir Unit Quantity (Row {row})'
                 )
                 
                 if not selection_valid:
@@ -492,23 +492,23 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
                     model = sheet[f'C{row}'].value or ""
                     extract_volume_str = sheet[f'D{row}'].value or ""
                     
-                    # Validate dimensions
+                    # Validate dimensions (use 'integer' for dimensions to avoid .0 display)
                     width_valid, width, width_error = validate_cell_data(
-                        sheet_name, f'F{row}', sheet[f'F{row}'].value, 'number', f'RecoAir Unit Width (Row {row})'
+                        sheet_name, f'F{row}', sheet[f'F{row}'].value, 'integer', f'RecoAir Unit Width (Row {row})'
                     )
                     if not width_valid:
                         add_validation_error(width_error)
                         width = 0
                     
                     length_valid, length, length_error = validate_cell_data(
-                        sheet_name, f'G{row}', sheet[f'G{row}'].value, 'number', f'RecoAir Unit Length (Row {row})'
+                        sheet_name, f'G{row}', sheet[f'G{row}'].value, 'integer', f'RecoAir Unit Length (Row {row})'
                     )
                     if not length_valid:
                         add_validation_error(length_error)
                         length = 0
                     
                     height_valid, height, height_error = validate_cell_data(
-                        sheet_name, f'H{row}', sheet[f'H{row}'].value, 'number', f'RecoAir Unit Height (Row {row})'
+                        sheet_name, f'H{row}', sheet[f'H{row}'].value, 'integer', f'RecoAir Unit Height (Row {row})'
                     )
                     if not height_valid:
                         add_validation_error(height_error)
@@ -2247,11 +2247,11 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     'configuration': sheet[f'C{base_row}'].value or "",
                                     'model': model,
                                     
-                                    # Additional specification data
-                                    'length': sheet[f'F{base_row}'].value or "",
-                                    'width': sheet[f'E{base_row}'].value or "",
-                                    'height': sheet[f'G{base_row}'].value or "",
-                                    'sections': sheet[f'H{base_row}'].value or "",
+                                                                    # Additional specification data (convert dimensions to integers to avoid .0 display)
+                                'length': int(float(sheet[f'F{base_row}'].value)) if sheet[f'F{base_row}'].value and str(sheet[f'F{base_row}'].value).strip() not in ['', '-'] else "",
+                                'width': int(float(sheet[f'E{base_row}'].value)) if sheet[f'E{base_row}'].value and str(sheet[f'E{base_row}'].value).strip() not in ['', '-'] else "",
+                                'height': int(float(sheet[f'G{base_row}'].value)) if sheet[f'G{base_row}'].value and str(sheet[f'G{base_row}'].value).strip() not in ['', '-'] else "",
+                                'sections': int(float(sheet[f'H{base_row}'].value)) if sheet[f'H{base_row}'].value and str(sheet[f'H{base_row}'].value).strip() not in ['', '-'] else "",
                                     'lighting_type': sheet[f'C{base_row + 1}'].value or "",  # C15 (base_row + 1)
                                     
                                     # Volume and static data (if available in your template)
@@ -3137,15 +3137,15 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
             'ring_main_inc_2no_sso': 0
         }
         
-        # Check distribution board value at C35 with validation
+        # Check distribution board value at C35 with validation (use 'integer' for quantities)
         distribution_valid, distribution_value, distribution_error = validate_cell_data(
-            sheet_name, 'C35', sheet['C35'].value, 'number', 'Distribution Board Quantity'
+            sheet_name, 'C35', sheet['C35'].value, 'integer', 'Distribution Board Quantity'
         )
         if not distribution_valid:
             add_validation_error(distribution_error)
             electrical_services['distribution_board'] = 0
         else:
-            electrical_services['distribution_board'] = int(distribution_value) if distribution_value > 0 else 0
+            electrical_services['distribution_board'] = distribution_value if distribution_value > 0 else 0
         
         # If distribution board has a value, check C40-C47 for single phase switched spur
         if electrical_services['distribution_board'] > 0:
@@ -3419,19 +3419,23 @@ def validate_cell_data(sheet_name: str, cell_ref: str, value, expected_type: str
         sheet_name (str): Name of the Excel sheet
         cell_ref (str): Cell reference (e.g., 'C35', 'N29')
         value: The value from the Excel cell
-        expected_type (str): Expected data type ('number', 'text', 'boolean')
+        expected_type (str): Expected data type ('number', 'integer', 'text', 'boolean')
         context (str): Additional context about what this value is used for
         
     Returns:
         tuple: (is_valid: bool, converted_value, error_message: str)
     """
     if value is None or str(value).strip() == "":
-        return True, 0 if expected_type == 'number' else "", ""
+        return True, 0 if expected_type in ['number', 'integer'] else "", ""
     
     try:
         if expected_type == 'number':
             # Try to convert to float first
             converted = float(str(value).strip())
+            return True, converted, ""
+        elif expected_type == 'integer':
+            # Try to convert to integer (for dimensions, quantities, etc.)
+            converted = int(float(str(value).strip()))  # Convert via float first to handle "1815.0" -> 1815
             return True, converted, ""
         elif expected_type == 'text':
             return True, str(value).strip(), ""
