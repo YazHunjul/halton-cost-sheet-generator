@@ -954,6 +954,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
             
             # Collect RecoAir unit items for this area
             recoair_items = []
+            recoair_units_full = []  # Full unit specifications
             area_units_total = 0
             total_delivery_price = 0
             
@@ -964,6 +965,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                 delivery_price = unit.get('delivery_installation_price', 0) or 0
                 
                 if reference_number and model:  # Only include units with reference and model
+                    # Basic pricing item (for backward compatibility)
                     recoair_item = {
                         'reference_number': reference_number,
                         'model': model,
@@ -971,6 +973,31 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                         'delivery_price': delivery_price
                     }
                     recoair_items.append(recoair_item)
+                    
+                    # Full unit specification (includes all technical details)
+                    recoair_unit_full = {
+                        'reference_number': reference_number,
+                        'model': model,
+                        'price': unit_price,
+                        'delivery_price': delivery_price,
+                        # Technical specifications
+                        'length': unit.get('length', 0),
+                        'width': unit.get('width', 0),
+                        'height': unit.get('height', 0),
+                        'extract_volume': unit.get('extract_volume', 0),
+                        'p_drop': unit.get('p_drop', 0),
+                        'motor': unit.get('motor', 0),
+                        'weight': unit.get('weight', 0),
+                        'location': unit.get('location', 'INTERNAL'),
+                        # Additional data
+                        'quantity': unit.get('quantity', 1),
+                        'model_original': unit.get('model_original', model),
+                        'extract_volume_raw': unit.get('extract_volume_raw', ''),
+                        'base_unit_price': unit.get('base_unit_price', unit_price),
+                        'n29_addition': unit.get('n29_addition', 0)
+                    }
+                    recoair_units_full.append(recoair_unit_full)
+                    
                     area_units_total += unit_price
                     total_delivery_price += delivery_price
             
@@ -992,7 +1019,8 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                     'level_name': level_name,
                     'area_name': area_name,
                     'level_area_combined': level_area_combined,
-                    'recoair_items': recoair_items,
+                    'recoair_items': recoair_items,  # Basic pricing items (for backward compatibility)
+                    'units': recoair_units_full,  # Full unit specifications with technical details
                     'units_total': area_units_total,
                     'delivery_installation_price': total_delivery_price,
                     'commissioning_price': commissioning_price,
