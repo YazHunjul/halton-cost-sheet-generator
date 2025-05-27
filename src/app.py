@@ -134,6 +134,164 @@ def word_generation_page():
             else:
                 st.warning("⚠️ **Project Type:** No canopies or RecoAir systems detected")
             
+            # Automatically generate and show preview of existing document
+            st.markdown("---")
+            st.subheader("📄 Current Document Preview")
+            
+            try:
+                with st.spinner("Generating preview of current document..."):
+                    # Generate Word documents to get the current state
+                    word_path = generate_quotation_document(project_data, temp_path)
+                
+                # Show preview for documents
+                if not word_path.endswith('.zip'):
+                    # Single document preview
+                    from utils.word_preview import check_preview_requirements, preview_word_document
+                    capabilities = check_preview_requirements()
+                    
+                    col1, col2 = st.columns([3, 1])
+                    with col2:
+                        use_advanced = st.checkbox(
+                            "Enhanced Preview", 
+                            value=capabilities['advanced_preview'],
+                            disabled=not capabilities['advanced_preview'],
+                            help="Uses pypandoc for better formatting (if available)",
+                            key="upload_preview_advanced"
+                        )
+                        
+                        if not capabilities['advanced_preview']:
+                            st.info("💡 Install pypandoc for enhanced preview")
+                        elif capabilities['pandoc_version']:
+                            st.caption(f"Pandoc version: {capabilities['pandoc_version']}")
+                    
+                    with col1:
+                        st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
+                        if capabilities['table_preservation']:
+                            st.write("✅ Table preservation enabled")
+                    
+                    # Generate and display preview
+                    try:
+                        with st.spinner("Rendering preview..."):
+                            preview_html = preview_word_document(word_path, use_advanced)
+                        
+                        # Display preview
+                        st.components.v1.html(preview_html, height=650, scrolling=True)
+                        
+                        # Preview stats
+                        try:
+                            from docx import Document
+                            doc = Document(word_path)
+                            table_count = len(doc.tables)
+                            paragraph_count = len([p for p in doc.paragraphs if p.text.strip()])
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("📄 Paragraphs", paragraph_count)
+                            with col2:
+                                st.metric("📊 Tables", table_count)
+                            with col3:
+                                file_size = os.path.getsize(word_path)
+                                st.metric("💾 File Size", f"{file_size/1024:.1f} KB")
+                                
+                        except Exception as e:
+                            st.write(f"Preview stats unavailable: {str(e)}")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error generating preview: {str(e)}")
+                        st.write("Preview failed, but you can still generate the document below.")
+                else:
+                    # Multiple documents - show previews for both
+                    st.info("📦 Multiple documents detected - showing previews for both documents:")
+                    
+                    # Extract and preview individual documents from the ZIP
+                    import zipfile
+                    import tempfile
+                    from utils.word_preview import check_preview_requirements, preview_word_document
+                    
+                    capabilities = check_preview_requirements()
+                    
+                    # Preview options (shared for both documents)
+                    col1, col2 = st.columns([3, 1])
+                    with col2:
+                        use_advanced = st.checkbox(
+                            "Enhanced Preview", 
+                            value=capabilities['advanced_preview'],
+                            disabled=not capabilities['advanced_preview'],
+                            help="Uses pypandoc for better formatting (if available)",
+                            key="upload_preview_advanced_multi"
+                        )
+                        
+                        if not capabilities['advanced_preview']:
+                            st.info("💡 Install pypandoc for enhanced preview")
+                        elif capabilities['pandoc_version']:
+                            st.caption(f"Pandoc version: {capabilities['pandoc_version']}")
+                    
+                    with col1:
+                        st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
+                        if capabilities['table_preservation']:
+                            st.write("✅ Table preservation enabled")
+                    
+                    try:
+                        with zipfile.ZipFile(word_path, 'r') as zip_ref:
+                            file_list = zip_ref.namelist()
+                            
+                            for i, filename in enumerate(file_list):
+                                if filename.endswith('.docx'):
+                                    st.markdown(f"### 📄 Document {i+1}: {filename}")
+                                    
+                                    # Extract to temporary file
+                                    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_file:
+                                        tmp_file.write(zip_ref.read(filename))
+                                        tmp_path = tmp_file.name
+                                    
+                                    try:
+                                        # Generate and display preview
+                                        with st.spinner(f"Rendering preview for {filename}..."):
+                                            preview_html = preview_word_document(tmp_path, use_advanced)
+                                        
+                                        # Display preview
+                                        st.components.v1.html(preview_html, height=500, scrolling=True)
+                                        
+                                        # Preview stats
+                                        try:
+                                            from docx import Document
+                                            doc = Document(tmp_path)
+                                            table_count = len(doc.tables)
+                                            paragraph_count = len([p for p in doc.paragraphs if p.text.strip()])
+                                            
+                                            col1, col2, col3 = st.columns(3)
+                                            with col1:
+                                                st.metric("📄 Paragraphs", paragraph_count)
+                                            with col2:
+                                                st.metric("📊 Tables", table_count)
+                                            with col3:
+                                                file_size = os.path.getsize(tmp_path)
+                                                st.metric("💾 File Size", f"{file_size/1024:.1f} KB")
+                                                
+                                        except Exception as e:
+                                            st.write(f"Preview stats unavailable: {str(e)}")
+                                    
+                                    except Exception as e:
+                                        st.error(f"❌ Error generating preview for {filename}: {str(e)}")
+                                    
+                                    finally:
+                                        # Clean up temp file
+                                        if os.path.exists(tmp_path):
+                                            os.unlink(tmp_path)
+                                    
+                                    if i < len(file_list) - 1:  # Add separator between documents
+                                        st.markdown("---")
+                    
+                    except Exception as e:
+                        st.error(f"❌ Error extracting documents from ZIP: {str(e)}")
+                        st.write("Preview failed, but you can still generate the documents below.")
+                    
+            except Exception as e:
+                st.error(f"❌ Error generating preview: {str(e)}")
+                st.write("Preview failed, but you can still generate the document below.")
+            
+            st.markdown("---")
+            
             with st.expander("📋 Extracted Project Data", expanded=False):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -237,11 +395,17 @@ def word_generation_page():
                             )
                         st.info("📦 Multiple quotation documents generated and packaged in ZIP file.")
                     else:
-                        # Single document
+                        # Single document - automatically show preview with download option
+                        doc_filename = os.path.basename(word_path)
+                        
+                        # Determine appropriate success message based on document type
+                        if is_recoair_only:
+                            st.info("📄 RecoAir quotation document generated successfully.")
+                        else:
+                            st.info("📄 Quotation document generated successfully.")
+                        
+                        # Show download button first
                         with open(word_path, "rb") as file:
-                            # Extract filename from the generated path
-                            doc_filename = os.path.basename(word_path)
-                            
                             # Determine appropriate label based on document type
                             if is_recoair_only:
                                 label = "📥 Download RecoAir Quotation"
@@ -254,7 +418,68 @@ def word_generation_page():
                                 file_name=doc_filename,
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             )
-                        st.info("📄 Quotation document generated successfully.")
+                        
+                        # Automatically show preview below
+                        st.markdown("---")
+                        from utils.word_preview import preview_with_download
+                        
+                        # Show preview with a more compact interface
+                        st.subheader("📄 Document Preview")
+                        
+                        # Check capabilities and show preview options
+                        from utils.word_preview import check_preview_requirements
+                        capabilities = check_preview_requirements()
+                        
+                        col1, col2 = st.columns([3, 1])
+                        with col2:
+                            use_advanced = st.checkbox(
+                                "Enhanced Preview", 
+                                value=capabilities['advanced_preview'],
+                                disabled=not capabilities['advanced_preview'],
+                                help="Uses pypandoc for better formatting (if available)"
+                            )
+                            
+                            if not capabilities['advanced_preview']:
+                                st.info("💡 Install pypandoc for enhanced preview")
+                            elif capabilities['pandoc_version']:
+                                st.caption(f"Pandoc version: {capabilities['pandoc_version']}")
+                        
+                        with col1:
+                            st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
+                            if capabilities['table_preservation']:
+                                st.write("✅ Table preservation enabled")
+                        
+                        # Generate and display preview
+                        try:
+                            from utils.word_preview import preview_word_document
+                            with st.spinner("Generating preview..."):
+                                preview_html = preview_word_document(word_path, use_advanced)
+                            
+                            # Display preview
+                            st.components.v1.html(preview_html, height=650, scrolling=True)
+                            
+                            # Preview stats
+                            try:
+                                from docx import Document
+                                doc = Document(word_path)
+                                table_count = len(doc.tables)
+                                paragraph_count = len([p for p in doc.paragraphs if p.text.strip()])
+                                
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("📄 Paragraphs", paragraph_count)
+                                with col2:
+                                    st.metric("📊 Tables", table_count)
+                                with col3:
+                                    file_size = os.path.getsize(word_path)
+                                    st.metric("💾 File Size", f"{file_size/1024:.1f} KB")
+                                    
+                            except Exception as e:
+                                st.write(f"Preview stats unavailable: {str(e)}")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Error generating preview: {str(e)}")
+                            st.write("The document was generated successfully but preview failed. You can still download it above.")
                     
                     # Add note about dynamic pricing
                     st.success("✨ **Your Excel file now has dynamic pricing!** The JOB TOTAL sheet will automatically update when you edit any individual sheet prices.")
