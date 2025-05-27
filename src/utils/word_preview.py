@@ -37,17 +37,18 @@ def check_preview_requirements() -> Dict[str, bool]:
     
     try:
         import pypandoc
-        capabilities['advanced_preview'] = True
-        
-        # Try to get pandoc version
+        # Test if pypandoc actually works by trying to get version
         try:
             version_info = pypandoc.get_pandoc_version()
+            capabilities['advanced_preview'] = True
             capabilities['pandoc_version'] = version_info
-        except:
-            capabilities['pandoc_version'] = "Unknown"
+        except Exception:
+            # pypandoc is installed but pandoc binary is not available
+            capabilities['advanced_preview'] = False
+            capabilities['pandoc_version'] = "Pandoc binary not found"
             
     except ImportError:
-        pass
+        capabilities['pandoc_version'] = "pypandoc not installed"
     
     return capabilities
 

@@ -134,9 +134,58 @@ def word_generation_page():
             else:
                 st.warning("⚠️ **Project Type:** No canopies or RecoAir systems detected")
             
+            # Show download button first for quick access
+            st.markdown("---")
+            st.subheader("📥 Quick Download")
+            
+            try:
+                with st.spinner("Preparing download..."):
+                    # Generate Word documents for download
+                    download_word_path = generate_quotation_document(project_data, temp_path)
+                
+                # Provide download button
+                if download_word_path.endswith('.zip'):
+                    # Multiple documents in zip file
+                    with open(download_word_path, "rb") as file:
+                        zip_filename = os.path.basename(download_word_path)
+                        st.download_button(
+                            label="📥 Download All Documents (ZIP)",
+                            data=file.read(),
+                            file_name=zip_filename,
+                            mime="application/zip",
+                            type="primary"
+                        )
+                    st.info("📦 ZIP file contains both Main Quotation and RecoAir Quotation documents.")
+                else:
+                    # Single document
+                    doc_filename = os.path.basename(download_word_path)
+                    with open(download_word_path, "rb") as file:
+                        # Determine appropriate label based on document type
+                        if is_recoair_only:
+                            label = "📥 Download RecoAir Quotation"
+                        else:
+                            label = "📥 Download Quotation"
+                        
+                        st.download_button(
+                            label=label,
+                            data=file.read(),
+                            file_name=doc_filename,
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            type="primary"
+                        )
+                    
+                    # Show appropriate success message
+                    if is_recoair_only:
+                        st.info("📄 RecoAir quotation document ready for download.")
+                    else:
+                        st.info("📄 Quotation document ready for download.")
+                        
+            except Exception as e:
+                st.error(f"❌ Error preparing download: {str(e)}")
+            
             # Automatically generate and show preview of existing document
             st.markdown("---")
-            st.subheader("📄 Current Document Preview")
+            st.subheader("📄 Document Preview")
             
             try:
                 with st.spinner("Generating preview of current document..."):
@@ -160,9 +209,12 @@ def word_generation_page():
                         )
                         
                         if not capabilities['advanced_preview']:
-                            st.info("💡 Install pypandoc for enhanced preview")
+                            if "not installed" in str(capabilities.get('pandoc_version', '')):
+                                st.info("💡 Install pypandoc for enhanced preview")
+                            else:
+                                st.warning(f"⚠️ {capabilities.get('pandoc_version', 'Pandoc issue')}")
                         elif capabilities['pandoc_version']:
-                            st.caption(f"Pandoc version: {capabilities['pandoc_version']}")
+                            st.success(f"✅ Pandoc v{capabilities['pandoc_version']}")
                     
                     with col1:
                         st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
@@ -222,9 +274,12 @@ def word_generation_page():
                         )
                         
                         if not capabilities['advanced_preview']:
-                            st.info("💡 Install pypandoc for enhanced preview")
+                            if "not installed" in str(capabilities.get('pandoc_version', '')):
+                                st.info("💡 Install pypandoc for enhanced preview")
+                            else:
+                                st.warning(f"⚠️ {capabilities.get('pandoc_version', 'Pandoc issue')}")
                         elif capabilities['pandoc_version']:
-                            st.caption(f"Pandoc version: {capabilities['pandoc_version']}")
+                            st.success(f"✅ Pandoc v{capabilities['pandoc_version']}")
                     
                     with col1:
                         st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
