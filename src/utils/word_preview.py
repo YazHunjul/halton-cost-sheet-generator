@@ -8,6 +8,8 @@ from docx import Document
 import tempfile
 import os
 import sys
+import subprocess
+import shutil
 from typing import Optional, Dict, Any
 import base64
 
@@ -20,6 +22,33 @@ def clear_preview_cache():
     for module in modules_to_clear:
         if module in sys.modules:
             del sys.modules[module]
+
+def setup_pandoc_path():
+    """
+    Try to find and set up pandoc path for pypandoc.
+    This helps when pandoc is installed but not in the expected PATH.
+    """
+    try:
+        # First, try to find pandoc using which/where
+        pandoc_path = shutil.which('pandoc')
+        if pandoc_path:
+            return pandoc_path
+        
+        # Try common installation paths
+        common_paths = [
+            '/usr/local/bin/pandoc',
+            '/opt/homebrew/bin/pandoc',
+            '/usr/bin/pandoc',
+            '/usr/local/pandoc/bin/pandoc'
+        ]
+        
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+        
+        return None
+    except Exception:
+        return None
 
 def check_preview_requirements() -> Dict[str, bool]:
     """
@@ -37,15 +66,41 @@ def check_preview_requirements() -> Dict[str, bool]:
     
     try:
         import pypandoc
+        
+        # Try to set up pandoc path if needed
+        pandoc_path = setup_pandoc_path()
+        if pandoc_path:
+            os.environ['PYPANDOC_PANDOC'] = pandoc_path
+        
         # Test if pypandoc actually works by trying to get version
         try:
             version_info = pypandoc.get_pandoc_version()
             capabilities['advanced_preview'] = True
-            capabilities['pandoc_version'] = version_info
-        except Exception:
-            # pypandoc is installed but pandoc binary is not available
-            capabilities['advanced_preview'] = False
-            capabilities['pandoc_version'] = "Pandoc binary not found"
+            capabilities['pandoc_version'] = str(version_info)
+        except Exception as e:
+            # Try alternative methods to detect pandoc
+            try:
+                # Try to run a simple conversion test
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as tmp:
+                    tmp.write("# Test")
+                    tmp_path = tmp.name
+                
+                # Try a simple conversion
+                pypandoc.convert_file(tmp_path, 'html')
+                
+                # If we get here, pypandoc works but version detection failed
+                capabilities['advanced_preview'] = True
+                capabilities['pandoc_version'] = "Available (version detection failed)"
+                
+                # Clean up
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                    
+            except Exception as e2:
+                # pypandoc is installed but pandoc binary is not available
+                capabilities['advanced_preview'] = False
+                capabilities['pandoc_version'] = "Pandoc binary not found"
             
     except ImportError:
         capabilities['pandoc_version'] = "pypandoc not installed"
