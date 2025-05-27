@@ -547,7 +547,33 @@ def word_generation_page():
                 os.remove(temp_path)
                 
         except Exception as e:
-            st.error(f"❌ Error reading Excel file: {str(e)}")
+            error_message = str(e)
+            
+            # Check if this is a validation error with detailed information
+            if "Data validation errors found:" in error_message:
+                st.error("❌ **Excel File Validation Errors**")
+                st.markdown("The following data validation errors were found in your Excel file:")
+                
+                # Split the error message to extract the validation details
+                parts = error_message.split("Data validation errors found:")
+                if len(parts) > 1:
+                    validation_details = parts[1].strip()
+                    # Display each validation error in an expandable section
+                    with st.expander("📋 **Detailed Error Information**", expanded=True):
+                        st.markdown(validation_details)
+                
+                st.markdown("---")
+                st.markdown("### 🔧 **How to Fix:**")
+                st.markdown("1. Open your Excel file")
+                st.markdown("2. Navigate to the specific cells mentioned above")
+                st.markdown("3. Ensure all numeric fields contain valid numbers (not letters or text)")
+                st.markdown("4. Save the file and try uploading again")
+                
+                st.info("💡 **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
+                
+            else:
+                st.error(f"❌ Error reading Excel file: {error_message}")
+            
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
@@ -695,7 +721,33 @@ def revision_page():
                 os.remove(temp_path)
                 
         except Exception as e:
-            st.error(f"❌ Error reading Excel file: {str(e)}")
+            error_message = str(e)
+            
+            # Check if this is a validation error with detailed information
+            if "Data validation errors found:" in error_message:
+                st.error("❌ **Excel File Validation Errors**")
+                st.markdown("The following data validation errors were found in your Excel file:")
+                
+                # Split the error message to extract the validation details
+                parts = error_message.split("Data validation errors found:")
+                if len(parts) > 1:
+                    validation_details = parts[1].strip()
+                    # Display each validation error in an expandable section
+                    with st.expander("📋 **Detailed Error Information**", expanded=True):
+                        st.markdown(validation_details)
+                
+                st.markdown("---")
+                st.markdown("### 🔧 **How to Fix:**")
+                st.markdown("1. Open your Excel file")
+                st.markdown("2. Navigate to the specific cells mentioned above")
+                st.markdown("3. Ensure all numeric fields contain valid numbers (not letters or text)")
+                st.markdown("4. Save the file and try uploading again")
+                
+                st.info("💡 **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
+                
+            else:
+                st.error(f"❌ Error reading Excel file: {error_message}")
+            
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 

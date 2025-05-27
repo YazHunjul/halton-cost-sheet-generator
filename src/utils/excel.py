@@ -222,6 +222,32 @@ def read_wall_cladding_from_canopy(sheet: Worksheet, base_row: int) -> Dict:
             'position': None
         }
 
+def safe_float_conversion(value) -> float:
+    """
+    Safely convert a value to float, handling various Excel data types.
+    
+    Args:
+        value: Value from Excel cell (could be int, float, string, or None)
+        
+    Returns:
+        float: Converted value, or 0.0 if conversion fails
+    """
+    if value is None:
+        return 0.0
+    
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        # Try to extract number from string
+        if isinstance(value, str):
+            # Remove common non-numeric characters and try again
+            cleaned = value.strip().replace(',', '').replace('£', '').replace('$', '')
+            try:
+                return float(cleaned)
+            except ValueError:
+                pass
+        return 0.0
+
 def extract_tank_quantity(tank_value) -> int:
     """
     Extract tank quantity number from tank value strings like "1 TANK", "2 TANK", etc.
@@ -412,20 +438,38 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
         List[Dict]: List of RecoAir units found in the sheet
     """
     recoair_units = []
+    sheet_name = sheet.title
     
     try:
         # Get item reference from C12 (e.g., "1.01", "2.01")
         item_reference = sheet['C12'].value or ""
         
-        # Get delivery and installation price from P36
-        delivery_installation_price = sheet['P36'].value or 0
+        # Get delivery and installation price from P36 with validation
+        delivery_price_valid, delivery_installation_price, delivery_error = validate_cell_data(
+            sheet_name, 'P36', sheet['P36'].value, 'number', 'Delivery and Installation Price'
+        )
+        if not delivery_price_valid:
+            add_validation_error(delivery_error)
+            delivery_installation_price = 0
         
-        # Get N29 value (default addition to RecoAir unit price)
-        n29_value = sheet['N29'].value or 0
+        # Get N29 value (default addition to RecoAir unit price) with validation
+        n29_valid, n29_value, n29_error = validate_cell_data(
+            sheet_name, 'N29', sheet['N29'].value, 'number', 'Testing and Commissioning Price Addition'
+        )
+        if not n29_valid:
+            add_validation_error(n29_error)
+            n29_value = 0
         
         # Get flat pack data from D40 and N40
         flat_pack_description = sheet['D40'].value or ""
-        flat_pack_price = sheet['N40'].value or 0
+        
+        # Validate flat pack price
+        flat_pack_valid, flat_pack_price, flat_pack_error = validate_cell_data(
+            sheet_name, 'N40', sheet['N40'].value, 'number', 'Flat Pack Price'
+        )
+        if not flat_pack_valid:
+            add_validation_error(flat_pack_error)
+            flat_pack_price = 0
         
         # Check rows 14 to 28 for RecoAir unit selections
         for row in range(14, 29):  # 14 to 28 inclusive
@@ -433,74 +477,103 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
             selection_value = sheet[f'E{row}'].value
             
             if selection_value and str(selection_value).strip() != "":
-                try:
-                    # Try to convert to number
-                    selection_num = float(str(selection_value).strip())
-                    if selection_num >= 1:
-                        # This row has a selected RecoAir unit
-                        # Collect data from this row
-                        model = sheet[f'C{row}'].value or ""
-                        extract_volume_str = sheet[f'D{row}'].value or ""
-                        width = sheet[f'F{row}'].value or 0
-                        length = sheet[f'G{row}'].value or 0
-                        height = sheet[f'H{row}'].value or 0
-                        location_raw = sheet[f'I{row}'].value or "INTERNAL"  # Default to INTERNAL
-                        unit_price = sheet[f'N{row}'].value or 0
-                        
-                        # Clean up location value - handle placeholder text
-                        if location_raw:
-                            location_str = str(location_raw).strip().upper()
-                            # If location is a placeholder like "SELECT..." or empty, default to INTERNAL
-                            if location_str in ["SELECT...", "SELECT", "", "-"] or "SELECT" in location_str:
-                                location = "INTERNAL"
-                            else:
-                                location = location_str
-                        else:
-                            location = "INTERNAL"
-                        
-                        # Extract volume number from extract volume string
-                        extract_volume = extract_recoair_volume(extract_volume_str)
-                        
-                        # Transform the model name according to business rules
-                        original_model = str(model).strip() if model else ""
-                        transformed_model = transform_recoair_model(original_model)
-                        
-                        # Get technical specifications for this model
-                        specs = get_recoair_specifications(transformed_model)
-                        
-                        # Calculate final unit price (base price + N29 value)
-                        base_unit_price = unit_price if isinstance(unit_price, (int, float)) else 0
-                        n29_addition = n29_value if isinstance(n29_value, (int, float)) else 0
-                        final_unit_price = base_unit_price + n29_addition
-                        
-                        # Create RecoAir unit data
-                        recoair_unit = {
-                            'item_reference': str(item_reference).strip() if item_reference else "",
-                            'model': transformed_model,
-                            'model_original': original_model,  # Keep original for reference
-                            'extract_volume': extract_volume,
-                            'extract_volume_raw': str(extract_volume_str).strip() if extract_volume_str else "",
-                            'width': width if isinstance(width, (int, float)) else 0,
-                            'length': length if isinstance(length, (int, float)) else 0,
-                            'height': height if isinstance(height, (int, float)) else 0,
-                            'location': location,
-                            'unit_price': final_unit_price,  # Use final price (base + N29)
-                            'base_unit_price': base_unit_price,  # Keep original base price for reference
-                            'n29_addition': n29_addition,  # Keep N29 addition for reference
-                            'quantity': selection_num,
-                            'row': row,  # Keep track of which row this came from
-                            
-                            # Technical specifications
-                            'p_drop': specs['p_drop'],  # Pressure drop (Pa)
-                            'motor': specs['motor'],    # Motor power (kW/PH)
-                            'weight': specs['weight']   # Weight (kg)
-                        }
-                        
-                        recoair_units.append(recoair_unit)
-                        
-                except (ValueError, TypeError):
-                    # Skip if selection value can't be converted to number
+                # Validate selection quantity
+                selection_valid, selection_num, selection_error = validate_cell_data(
+                    sheet_name, f'E{row}', selection_value, 'number', f'RecoAir Unit Quantity (Row {row})'
+                )
+                
+                if not selection_valid:
+                    add_validation_error(selection_error)
                     continue
+                    
+                if selection_num >= 1:
+                    # This row has a selected RecoAir unit
+                    # Collect data from this row
+                    model = sheet[f'C{row}'].value or ""
+                    extract_volume_str = sheet[f'D{row}'].value or ""
+                    
+                    # Validate dimensions
+                    width_valid, width, width_error = validate_cell_data(
+                        sheet_name, f'F{row}', sheet[f'F{row}'].value, 'number', f'RecoAir Unit Width (Row {row})'
+                    )
+                    if not width_valid:
+                        add_validation_error(width_error)
+                        width = 0
+                    
+                    length_valid, length, length_error = validate_cell_data(
+                        sheet_name, f'G{row}', sheet[f'G{row}'].value, 'number', f'RecoAir Unit Length (Row {row})'
+                    )
+                    if not length_valid:
+                        add_validation_error(length_error)
+                        length = 0
+                    
+                    height_valid, height, height_error = validate_cell_data(
+                        sheet_name, f'H{row}', sheet[f'H{row}'].value, 'number', f'RecoAir Unit Height (Row {row})'
+                    )
+                    if not height_valid:
+                        add_validation_error(height_error)
+                        height = 0
+                    
+                    location_raw = sheet[f'I{row}'].value or "INTERNAL"  # Default to INTERNAL
+                    
+                    # Validate unit price
+                    price_valid, unit_price, price_error = validate_cell_data(
+                        sheet_name, f'N{row}', sheet[f'N{row}'].value, 'number', f'RecoAir Unit Price (Row {row})'
+                    )
+                    if not price_valid:
+                        add_validation_error(price_error)
+                        unit_price = 0
+                    
+                    # Clean up location value - handle placeholder text
+                    if location_raw:
+                        location_str = str(location_raw).strip().upper()
+                        # If location is a placeholder like "SELECT..." or empty, default to INTERNAL
+                        if location_str in ["SELECT...", "SELECT", "", "-"] or "SELECT" in location_str:
+                            location = "INTERNAL"
+                        else:
+                            location = location_str
+                    else:
+                        location = "INTERNAL"
+                    
+                    # Extract volume number from extract volume string
+                    extract_volume = extract_recoair_volume(extract_volume_str)
+                    
+                    # Transform the model name according to business rules
+                    original_model = str(model).strip() if model else ""
+                    transformed_model = transform_recoair_model(original_model)
+                    
+                    # Get technical specifications for this model
+                    specs = get_recoair_specifications(transformed_model)
+                    
+                    # Calculate final unit price (base price + N29 value)
+                    base_unit_price = unit_price  # Already validated above
+                    n29_addition = n29_value      # Already validated above
+                    final_unit_price = base_unit_price + n29_addition
+                    
+                    # Create RecoAir unit data
+                    recoair_unit = {
+                        'item_reference': str(item_reference).strip() if item_reference else "",
+                        'model': transformed_model,
+                        'model_original': original_model,  # Keep original for reference
+                        'extract_volume': extract_volume,
+                        'extract_volume_raw': str(extract_volume_str).strip() if extract_volume_str else "",
+                        'width': width,    # Already validated above
+                        'length': length,  # Already validated above
+                        'height': height,  # Already validated above
+                        'location': location,
+                        'unit_price': final_unit_price,  # Use final price (base + N29)
+                        'base_unit_price': base_unit_price,  # Keep original base price for reference
+                        'n29_addition': n29_addition,  # Keep N29 addition for reference
+                        'quantity': selection_num,
+                        'row': row,  # Keep track of which row this came from
+                        
+                        # Technical specifications
+                        'p_drop': specs['p_drop'],  # Pressure drop (Pa)
+                        'motor': specs['motor'],    # Motor power (kW/PH)
+                        'weight': specs['weight']   # Weight (kg)
+                    }
+                    
+                    recoair_units.append(recoair_unit)
         
         # Add delivery price to each unit (split equally if multiple units)
         if recoair_units and delivery_installation_price > 0:
@@ -517,7 +590,7 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
             'flat_pack': {
                 'item_reference': str(item_reference).strip() if item_reference else "",  # Add item reference to flat pack
                 'description': flat_pack_description,
-                'price': flat_pack_price if isinstance(flat_pack_price, (int, float)) else 0,
+                'price': safe_float_conversion(flat_pack_price),
                 'has_flat_pack': bool(flat_pack_description and str(flat_pack_description).strip())
             }
         }
@@ -2033,6 +2106,9 @@ def read_excel_project_data(excel_path: str) -> Dict:
     Returns:
         Dict: Project data extracted from the Excel file
     """
+    # Clear any previous validation errors
+    clear_validation_errors()
+    
     try:
         wb = load_workbook(excel_path, data_only=True)
         
@@ -2530,10 +2606,27 @@ def read_excel_project_data(excel_path: str) -> Dict:
         
 
         
+        # Check for validation errors and include them in the result
+        validation_errors = collect_validation_errors()
+        if validation_errors:
+            # Create a detailed error message with all validation issues
+            error_details = "\n\n".join(validation_errors)
+            raise Exception(f"Failed to read Excel project data: Data validation errors found:\n\n{error_details}")
+        
         return project_data
         
     except Exception as e:
-        raise Exception(f"Failed to read Excel project data: {str(e)}")
+        # Check if this is a validation error (already formatted)
+        if "Data validation errors found:" in str(e):
+            raise e
+        else:
+            # For other errors, check if we have validation errors to include
+            validation_errors = collect_validation_errors()
+            if validation_errors:
+                error_details = "\n\n".join(validation_errors)
+                raise Exception(f"Failed to read Excel project data: {str(e)}\n\nAdditional validation errors:\n\n{error_details}")
+            else:
+                raise Exception(f"Failed to read Excel project data: {str(e)}")
 
 def collect_wall_cladding_data(project_data: Dict) -> List[Dict]:
     """
@@ -3032,6 +3125,8 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
     Returns:
         Dict: Electrical and gas services data with mapped values
     """
+    sheet_name = sheet.title
+    
     try:
         electrical_services = {
             'distribution_board': 0,
@@ -3042,13 +3137,15 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
             'ring_main_inc_2no_sso': 0
         }
         
-        # Check distribution board value at C35
-        distribution_board_value = sheet['C35'].value
-        if distribution_board_value and str(distribution_board_value).strip() not in ['', '0', '-']:
-            try:
-                electrical_services['distribution_board'] = int(float(str(distribution_board_value).strip()))
-            except (ValueError, TypeError):
-                electrical_services['distribution_board'] = 0
+        # Check distribution board value at C35 with validation
+        distribution_valid, distribution_value, distribution_error = validate_cell_data(
+            sheet_name, 'C35', sheet['C35'].value, 'number', 'Distribution Board Quantity'
+        )
+        if not distribution_valid:
+            add_validation_error(distribution_error)
+            electrical_services['distribution_board'] = 0
+        else:
+            electrical_services['distribution_board'] = int(distribution_value) if distribution_value > 0 else 0
         
         # If distribution board has a value, check C40-C47 for single phase switched spur
         if electrical_services['distribution_board'] > 0:
@@ -3313,3 +3410,73 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
                 'has_live_test': False
             }
         }
+
+def validate_cell_data(sheet_name: str, cell_ref: str, value, expected_type: str, context: str = "") -> tuple:
+    """
+    Validate cell data and return validation result with detailed error information.
+    
+    Args:
+        sheet_name (str): Name of the Excel sheet
+        cell_ref (str): Cell reference (e.g., 'C35', 'N29')
+        value: The value from the Excel cell
+        expected_type (str): Expected data type ('number', 'text', 'boolean')
+        context (str): Additional context about what this value is used for
+        
+    Returns:
+        tuple: (is_valid: bool, converted_value, error_message: str)
+    """
+    if value is None or str(value).strip() == "":
+        return True, 0 if expected_type == 'number' else "", ""
+    
+    try:
+        if expected_type == 'number':
+            # Try to convert to float first
+            converted = float(str(value).strip())
+            return True, converted, ""
+        elif expected_type == 'text':
+            return True, str(value).strip(), ""
+        elif expected_type == 'boolean':
+            if isinstance(value, bool):
+                return True, value, ""
+            # Try to interpret as boolean
+            str_val = str(value).strip().lower()
+            if str_val in ['true', '1', 'yes', 'y']:
+                return True, True, ""
+            elif str_val in ['false', '0', 'no', 'n']:
+                return True, False, ""
+            else:
+                return False, False, f"Cannot convert '{value}' to boolean"
+        else:
+            return True, value, ""
+            
+    except (ValueError, TypeError) as e:
+        error_msg = f"❌ **Data Type Error in {sheet_name}**\n"
+        error_msg += f"   📍 **Location:** Cell {cell_ref}\n"
+        error_msg += f"   📊 **Found Value:** '{value}' (type: {type(value).__name__})\n"
+        error_msg += f"   🎯 **Expected:** {expected_type}\n"
+        if context:
+            error_msg += f"   📝 **Used For:** {context}\n"
+        error_msg += f"   🔧 **Fix:** Please enter a valid {expected_type} value in cell {cell_ref}"
+        
+        return False, None, error_msg
+
+def collect_validation_errors() -> list:
+    """
+    Global list to collect validation errors during Excel reading.
+    """
+    if not hasattr(collect_validation_errors, 'errors'):
+        collect_validation_errors.errors = []
+    return collect_validation_errors.errors
+
+def clear_validation_errors():
+    """
+    Clear the global validation errors list.
+    """
+    collect_validation_errors.errors = []
+
+def add_validation_error(error_message: str):
+    """
+    Add a validation error to the global list.
+    """
+    errors = collect_validation_errors()
+    errors.append(error_message)
