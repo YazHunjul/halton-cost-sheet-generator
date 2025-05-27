@@ -2306,13 +2306,28 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         commissioning_price = sheet['N193'].value or 0
                         
                         # Find the area and add pricing data
-                        for level_areas in levels_data.get(level_name, []):
-                            if level_areas['name'] == area_name:
-                                level_areas.update({
-                                    'delivery_installation_price': delivery_installation_price,
-                                    'commissioning_price': commissioning_price
-                                })
-                                break
+                        area_found = False
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area.update({
+                                        'delivery_installation_price': delivery_installation_price,
+                                        'commissioning_price': commissioning_price
+                                    })
+                                    area_found = True
+                                    break
+                        
+                        # If area wasn't found, create it (this shouldn't happen if first pass worked correctly)
+                        if not area_found:
+                            if level_name not in levels_data:
+                                levels_data[level_name] = []
+                            
+                            levels_data[level_name].append({
+                                'name': area_name,
+                                'canopies': [],
+                                'delivery_installation_price': delivery_installation_price,
+                                'commissioning_price': commissioning_price
+                            })
         
         # Read UV-C pricing from EBOX sheets
         for sheet_name in wb.sheetnames:
@@ -2331,12 +2346,26 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         uvc_price = sheet['N9'].value or 0
                         
                         # Find the area and add UV-C pricing data
-                        for level_areas in levels_data.get(level_name, []):
-                            if level_areas['name'] == area_name:
-                                level_areas.update({
-                                    'uvc_price': uvc_price
-                                })
-                                break
+                        area_found = False
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area.update({
+                                        'uvc_price': uvc_price
+                                    })
+                                    area_found = True
+                                    break
+                        
+                        # If area wasn't found, create it (this shouldn't happen if first pass worked correctly)
+                        if not area_found:
+                            if level_name not in levels_data:
+                                levels_data[level_name] = []
+                            
+                            levels_data[level_name].append({
+                                'name': area_name,
+                                'canopies': [],
+                                'uvc_price': uvc_price
+                            })
         
         # Read RecoAir data from RECOAIR sheets
         for sheet_name in wb.sheetnames:
@@ -2366,15 +2395,32 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         recoair_price = total_unit_price + total_delivery_price + recoair_commissioning_price + flat_pack_price
                         
                         # Find the area and add RecoAir data
-                        for level_areas in levels_data.get(level_name, []):
-                            if level_areas['name'] == area_name:
-                                level_areas.update({
-                                    'recoair_price': recoair_price,
-                                    'recoair_commissioning_price': recoair_commissioning_price,  # Add commissioning price separately
-                                    'recoair_units': recoair_units,  # Add detailed unit data
-                                    'recoair_flat_pack': flat_pack_data  # Add flat pack data
-                                })
-                                break
+                        area_found = False
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area.update({
+                                        'recoair_price': recoair_price,
+                                        'recoair_commissioning_price': recoair_commissioning_price,  # Add commissioning price separately
+                                        'recoair_units': recoair_units,  # Add detailed unit data
+                                        'recoair_flat_pack': flat_pack_data  # Add flat pack data
+                                    })
+                                    area_found = True
+                                    break
+                        
+                        # If area wasn't found, create it (this shouldn't happen if first pass worked correctly)
+                        if not area_found:
+                            if level_name not in levels_data:
+                                levels_data[level_name] = []
+                            
+                            levels_data[level_name].append({
+                                'name': area_name,
+                                'canopies': [],
+                                'recoair_price': recoair_price,
+                                'recoair_commissioning_price': recoair_commissioning_price,
+                                'recoair_units': recoair_units,
+                                'recoair_flat_pack': flat_pack_data
+                            })
         
         # Read area-level options from sheets
         # Initialize all areas with default options first
@@ -2402,15 +2448,16 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                 cell_value_upper = str(cell_value).upper()
                                 
                                 # Find the area and update options
-                                for level_areas in levels_data.get(level_name, []):
-                                    if level_areas['name'] == area_name:
-                                        if 'UV-C' in cell_value_upper:
-                                            level_areas['options']['uvc'] = True
-                                        elif 'SDU' in cell_value_upper:
-                                            level_areas['options']['sdu'] = True
-                                        elif 'RECOAIR' in cell_value_upper:
-                                            level_areas['options']['recoair'] = True
-                                        break
+                                if level_name in levels_data:
+                                    for area in levels_data[level_name]:
+                                        if area['name'] == area_name:
+                                            if 'UV-C' in cell_value_upper:
+                                                area['options']['uvc'] = True
+                                            elif 'SDU' in cell_value_upper:
+                                                area['options']['sdu'] = True
+                                            elif 'RECOAIR' in cell_value_upper:
+                                                area['options']['recoair'] = True
+                                            break
         
         # Check EBOX sheets for UV-C option (this will override CANOPY sheet if needed)
         for sheet_name in wb.sheetnames:
@@ -2426,10 +2473,11 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         area_name = title_parts[1]
                         
                         # Find the area and set UV-C option to True
-                        for level_areas in levels_data.get(level_name, []):
-                            if level_areas['name'] == area_name:
-                                level_areas['options']['uvc'] = True
-                                break
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['uvc'] = True
+                                    break
         
         # Check SDU sheets for SDU option
         for sheet_name in wb.sheetnames:
@@ -2445,10 +2493,11 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         area_name = title_parts[1]
                         
                         # Find the area and set SDU option to True
-                        for level_areas in levels_data.get(level_name, []):
-                            if level_areas['name'] == area_name:
-                                level_areas['options']['sdu'] = True
-                                break
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['sdu'] = True
+                                    break
         
         # Check RECOAIR sheets for RecoAir option
         for sheet_name in wb.sheetnames:
@@ -2464,10 +2513,11 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         area_name = title_parts[1]
                         
                         # Find the area and set RecoAir option to True
-                        for level_areas in levels_data.get(level_name, []):
-                            if level_areas['name'] == area_name:
-                                level_areas['options']['recoair'] = True
-                                break
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['recoair'] = True
+                                    break
         
         # Convert levels_data to the format expected by the system
         project_data['levels'] = []
