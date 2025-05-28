@@ -12,6 +12,7 @@ from config.constants import (
     DELIVERY_LOCATIONS,
     SessionKeys
 )
+from utils.date_utils import format_date_for_display, convert_date_object_to_display, get_current_date
 
 def general_project_form() -> Dict[str, Any]:
     """
@@ -53,9 +54,22 @@ def general_project_form() -> Dict[str, Any]:
                 help="Enter the unique project number"
             )
             
+            # Get the current date value and convert it to a date object for the input
+            current_date_str = st.session_state.general_form_data.get("date", get_current_date())
+            current_date_formatted = format_date_for_display(current_date_str)
+            
+            # Convert DD/MM/YYYY to date object for the date input widget
+            try:
+                if current_date_formatted:
+                    date_obj = datetime.strptime(current_date_formatted, "%d/%m/%Y").date()
+                else:
+                    date_obj = datetime.now().date()
+            except ValueError:
+                date_obj = datetime.now().date()
+            
             date = st.date_input(
                 "Date *",
-                value=datetime.strptime(st.session_state.general_form_data.get("date", datetime.now().strftime("%Y-%m-%d")), "%Y-%m-%d").date(),
+                value=date_obj,
                 key="date_input",
                 help="Select the project date"
             )
@@ -170,7 +184,7 @@ def general_project_form() -> Dict[str, Any]:
             project_data = {
                 "project_name": project_name,
                 "project_number": project_number,
-                "date": date.strftime("%Y-%m-%d"),
+                "date": convert_date_object_to_display(date),  # Store in DD/MM/YYYY format
                 "customer": customer,
                 "company": final_company_name,
                 "project_location": project_location,

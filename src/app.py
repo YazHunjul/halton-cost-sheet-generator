@@ -5,10 +5,11 @@ import streamlit as st
 from components.forms import general_project_form
 from components.project_forms import project_structure_form
 from config.constants import SessionKeys, PROJECT_TYPES
-from utils.excel import read_excel_project_data
+from utils.excel import read_excel_project_data, save_to_excel
 from utils.word import generate_quotation_document
 from openpyxl import load_workbook
 import os
+from utils.date_utils import format_date_for_display, get_current_date
 
 def display_project_summary(project_data: dict):
     """Display a formatted summary of the project data."""
@@ -21,7 +22,7 @@ def display_project_summary(project_data: dict):
     with col1:
         st.write("**Project Name:**", project_data.get("project_name"))
         st.write("**Project Number:**", project_data.get("project_number"))
-        st.write("**Date:**", project_data.get("date"))
+        st.write("**Date:**", format_date_for_display(project_data.get("date")))
         st.write("**Customer:**", project_data.get("customer"))
         st.write("**Company:**", project_data.get("company"))
     
@@ -31,6 +32,7 @@ def display_project_summary(project_data: dict):
         st.write("**Address:**", project_data.get("address"))
         st.write("**Sales Contact:**", project_data.get("sales_contact"))
         st.write("**Estimator:**", project_data.get("estimator"))
+        st.write("**Project Type:**", project_data.get("project_type"))
     
     # Project Structure
     if "levels" in project_data:
@@ -353,7 +355,7 @@ def word_generation_page():
                     st.write("**Project Name:**", project_data.get("project_name"))
                     st.write("**Project Number:**", project_data.get("project_number"))
                     st.write("**Customer:**", project_data.get("customer"))
-                    st.write("**Date:**", project_data.get("date"))
+                    st.write("**Date:**", format_date_for_display(project_data.get("date")))
                 
                 with col2:
                     st.write("**Project Location:**", project_data.get("project_location") or project_data.get("location"))
@@ -616,8 +618,9 @@ def revision_page():
                 with col1:
                     st.write("**Project Name:**", project_data.get("project_name"))
                     st.write("**Project Number:**", project_data.get("project_number"))
+                    st.write("**Date:**", format_date_for_display(project_data.get("date")))
                     st.write("**Customer:**", project_data.get("customer"))
-                    st.write("**Date:**", project_data.get("date"))
+                    st.write("**Company:**", project_data.get("company"))
                 
                 with col2:
                     st.write("**Project Location:**", project_data.get("project_location") or project_data.get("location"))
@@ -666,12 +669,11 @@ def revision_page():
             update_date = st.checkbox("Update date to today", value=True)
             
             if update_date:
-                from datetime import datetime
-                new_date = datetime.now().strftime("%d/%m/%Y")
+                new_date = get_current_date()
                 st.write(f"**New Date:** {new_date}")
             else:
                 new_date = project_data.get("date", "")
-                st.write(f"**Date will remain:** {new_date}")
+                st.write(f"**Date will remain:** {format_date_for_display(new_date)}")
             
             # Generate new revision
             if st.button("🔄 Create New Revision", type="primary"):
@@ -708,7 +710,7 @@ def revision_page():
                     st.info(f"📋 **Changes Made:**")
                     st.write(f"• Revision updated: {current_revision} → {new_revision}")
                     if update_date:
-                        st.write(f"• Date updated: {project_data.get('date', 'N/A')} → {new_date}")
+                        st.write(f"• Date updated: {format_date_for_display(project_data.get('date', 'N/A'))} → {new_date}")
                     st.write("• ✅ All existing data preserved (canopies, pricing, formulas)")
                     st.write("• ✅ Dynamic pricing formulas maintained")
                     st.write("• ✅ All manual entries and calculations preserved")

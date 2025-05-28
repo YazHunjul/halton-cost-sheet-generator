@@ -2,7 +2,7 @@
 Excel generation utilities for Halton quotation system.
 Handles creation and manipulation of Excel workbooks based on templates.
 """
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Union, Optional, Any
 import os
 from datetime import datetime
 from openpyxl import load_workbook, Workbook
@@ -12,6 +12,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill
 from config.business_data import VALID_CANOPY_MODELS
 from config.constants import is_feature_enabled
+from utils.date_utils import format_date_for_display, get_current_date
 
 # Constants for Excel operations
 TEMPLATE_PATH = "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
@@ -29,7 +30,7 @@ OUTPUT_SHEET_NAMES = {
 # Cell mappings for different data points (CANOPY, FIRE SUPP, JOB TOTAL, etc.)
 CELL_MAPPINGS = {
     "project_number": "C3",  # Job No
-    "customer": "C5",        # Customer
+    "company": "C5",         # Company (changed from customer)
     "estimator": "C7",       # Sales Manager / Estimator Initials
     "project_name": "G3",    # Project Name
     "project_location": "G5",        # Project Location (was "location")
@@ -649,7 +650,7 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict):
                     value = str(value).title()
                 # Date handling
                 elif field == "date" and not value:
-                    value = datetime.now().strftime("%d/%m/%Y")
+                    value = get_current_date()
                 
                 sheet[cell] = value
         except Exception as e:
@@ -687,7 +688,7 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict):
                     elif field != "date":
                         value = str(value).title()
                     elif field == "date" and not value:
-                        value = datetime.now().strftime("%d/%m/%Y")
+                        value = get_current_date()
                     sheet[cell] = value
             except Exception as e2:
                 print(f"Warning: Still could not write {field} to cell {cell} after unmerging: {str(e2)}")
@@ -1160,7 +1161,7 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
         # EBOX-specific cell mappings
         ebox_cell_mappings = {
             "project_number": "D3",    # Job No
-            "customer": "D5",          # Customer
+            "company": "D5",           # Company (changed from customer)
             "estimator": "D7",         # Sales Manager / Estimator Initials
             "project_name": "H3",      # Project Name
             "project_location": "H5",          # Project Location (was "location")
@@ -1211,7 +1212,7 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
                         value = str(value).title()
                     # Date handling
                     elif field == "date" and not value:
-                        value = datetime.now().strftime("%d/%m/%Y")
+                        value = get_current_date()
                     
                     sheet[cell] = value
             except Exception as e:
@@ -1249,7 +1250,7 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
                         elif field != "date":
                             value = str(value).title()
                         elif field == "date" and not value:
-                            value = datetime.now().strftime("%d/%m/%Y")
+                            value = get_current_date()
                         sheet[cell] = value
                 except Exception as e2:
                     print(f"Warning: Still could not write {field} to EBOX cell {cell} after unmerging: {str(e2)}")
@@ -1271,7 +1272,7 @@ def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: st
         # RECOAIR-specific cell mappings (same as EBOX - D/H columns)
         recoair_cell_mappings = {
             "project_number": "D3",  # Job No
-            "customer": "D5",        # Customer
+            "company": "D5",         # Company (changed from customer)
             "estimator": "D7",       # Sales Manager / Estimator Initials
             "project_name": "H3",    # Project Name
             "project_location": "H5",        # Project Location (was "location")
@@ -1395,8 +1396,8 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict):
             # Job No at C4
             write_to_cell_safe(sheet, 'C4', project_data.get('project_number', ''))
             
-            # Customer at C6
-            write_to_cell_safe(sheet, 'C6', project_data.get('customer', ''))
+            # Company at C6 (changed from customer)
+            write_to_cell_safe(sheet, 'C6', project_data.get('company', ''))
             
             # Sales Manager/Estimator Initials at C8
             estimator_name = project_data.get('estimator', '')
@@ -2085,7 +2086,7 @@ def save_to_excel(project_data: Dict) -> str:
             formatted_date = date_str.replace('/', '').replace('-', '')
         else:
             # Use current date if no date provided
-            formatted_date = datetime.now().strftime("%d%m%Y")
+            formatted_date = get_current_date().replace('/', '')
         
         output_path = f"output/{project_number} Cost Sheet {formatted_date}.xlsx"
         os.makedirs("output", exist_ok=True)
@@ -2131,12 +2132,24 @@ def read_excel_project_data(excel_path: str) -> Dict:
         
         # Read basic project info
         project_data['project_number'] = data_sheet['C3'].value or ""
-        project_data['customer'] = data_sheet['C5'].value or ""
+        project_data['company'] = data_sheet['C5'].value or ""
         project_data['estimator_initials'] = data_sheet['C7'].value or ""  # This is the initials version
         project_data['project_name'] = data_sheet['G3'].value or ""
         project_data['project_location'] = data_sheet['G5'].value or ""  # Project location from G5
         project_data['location'] = data_sheet['G5'].value or ""  # Keep for backward compatibility
-        project_data['date'] = data_sheet['G7'].value or ""
+        
+        # Read and format date consistently
+        date_value = data_sheet['G7'].value or ""
+        if date_value:
+            # If it's a datetime object from Excel, convert to string
+            if hasattr(date_value, 'strftime'):
+                project_data['date'] = date_value.strftime("%d/%m/%Y")
+            else:
+                # If it's already a string, ensure it's in the right format
+                project_data['date'] = format_date_for_display(str(date_value))
+        else:
+            project_data['date'] = ""
+            
         project_data['revision'] = data_sheet['O7'].value or "A"  # Revision from O7, default to "A"
         
         # Read company and estimator data from hidden ProjectData sheet
@@ -3093,9 +3106,9 @@ def create_revision_from_existing(excel_path: str, new_revision: str, new_date: 
                 if existing_date:
                     formatted_date = str(existing_date).replace('/', '')
                 else:
-                    formatted_date = datetime.now().strftime("%d%m%Y")
+                    formatted_date = get_current_date().replace('/', '')
             except:
-                formatted_date = datetime.now().strftime("%d%m%Y")
+                formatted_date = get_current_date().replace('/', '')
         
         # Create output filename: "Project Number Cost Sheet Date"
         output_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
