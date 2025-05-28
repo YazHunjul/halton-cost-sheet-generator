@@ -772,7 +772,7 @@ def navigation_buttons():
         if st.session_state[SessionKeys.CURRENT_STEP] > 1:
             if st.button("⬅️ Go Back", use_container_width=True):
                 st.session_state[SessionKeys.CURRENT_STEP] -= 1
-                # Don't rerun here, let the main flow handle it
+                st.rerun()  # Force page refresh to show the previous step
 
 def main():
     # Set page config
