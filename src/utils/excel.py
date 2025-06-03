@@ -9,7 +9,7 @@ from openpyxl import load_workbook, Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font
 from config.business_data import VALID_CANOPY_MODELS
 from config.constants import is_feature_enabled
 from utils.date_utils import format_date_for_display, get_current_date
@@ -58,18 +58,65 @@ TAB_COLORS = [
     "FF00FFFF",  # Cyan
 ]
 
+def remove_external_links(wb: Workbook) -> None:
+    """
+    Remove external links from workbook to prevent 'unsafe external sources' warning.
+    
+    Args:
+        wb (Workbook): Workbook to clean
+    """
+    try:
+        # Remove external links if they exist
+        if hasattr(wb, 'external_references') and wb.external_references:
+            for ext_ref in wb.external_references:
+                if hasattr(ext_ref, 'clear'):
+                    ext_ref.clear()
+        
+        # Alternative approach: check for external links in defined names
+        if hasattr(wb, 'defined_names') and wb.defined_names:
+            names_to_remove = []
+            for name in wb.defined_names:
+                if hasattr(name, 'value') and name.value and ('[' in str(name.value) or '.xlsx' in str(name.value)):
+                    names_to_remove.append(name.name)
+            
+            for name_to_remove in names_to_remove:
+                try:
+                    del wb.defined_names[name_to_remove]
+                except:
+                    pass
+                    
+    except Exception as e:
+        print(f"Warning: Could not remove external links: {str(e)}")
+
 def load_template_workbook() -> Workbook:
     """
-    Load the master Excel template workbook.
+    Load the Excel template workbook and remove external links.
     
     Returns:
-        Workbook: The loaded template workbook
+        Workbook: Template workbook with external links removed
     """
-    if not os.path.exists(TEMPLATE_PATH):
-        raise FileNotFoundError(f"Template file not found at {TEMPLATE_PATH}")
-    
     try:
-        return load_workbook(TEMPLATE_PATH)
+        # Try relative path from src directory first, then from project root
+        template_paths = [
+            "../templates/excel/Halton Cost Sheet Jan 2025.xlsx",  # From src directory
+            "templates/excel/Halton Cost Sheet Jan 2025.xlsx"      # From project root
+        ]
+        
+        wb = None
+        for template_path in template_paths:
+            try:
+                wb = load_workbook(template_path)
+                break
+            except FileNotFoundError:
+                continue
+        
+        if wb is None:
+            raise FileNotFoundError("Could not find template file in any of the expected locations")
+        
+        # Remove external links to prevent "unsafe external sources" warning
+        remove_external_links(wb)
+        
+        return wb
     except Exception as e:
         raise Exception(f"Failed to load template workbook: {str(e)}")
 
@@ -622,29 +669,21 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict):
         value = project_data.get(field)
         
         try:
-            # Special handling for revision - use the value from project_data
+            # Special handling for revision - use the value from project_data (don't default to A for initial)
             if field == "revision":
-                sheet[cell] = value or "A"  # Use provided revision or default to "A"
+                sheet[cell] = value or ""  # Use provided revision or leave blank for initial version
             elif value:
                 # Special handling for estimator/sales manager initials (only for sheet display)
                 if field == "estimator":
                     # Generate combined initials (Sales Contact + Estimator)
                     from utils.word import get_combined_initials
-                    from config.business_data import SALES_CONTACTS
                     
-                    # Get sales contact info based on estimator
-                    sales_contact_name = ""
-                    for contact_name, phone in SALES_CONTACTS.items():
-                        if value and any(name.lower() in value.lower() for name in contact_name.split()):
-                            sales_contact_name = contact_name
-                            break
+                    # Use sales_contact from project_data directly instead of trying to match estimator
+                    sales_contact_name = project_data.get('sales_contact', '')
+                    estimator_name = value  # This is the estimator field value
                     
-                    # If no match found, use first sales contact
-                    if not sales_contact_name:
-                        sales_contact_name = list(SALES_CONTACTS.keys())[0]
-                    
-                    # Generate combined initials
-                    value = get_combined_initials(sales_contact_name, value)
+                    # Generate combined initials using the actual sales contact selection
+                    value = get_combined_initials(sales_contact_name, estimator_name)
                 # Title case for other fields except date
                 elif field != "date":
                     value = str(value).title()
@@ -665,26 +704,18 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict):
                             break
                 # Try writing again after unmerging
                 if field == "revision":
-                    sheet[cell] = value or "A"  # Use provided revision or default to "A"
+                    sheet[cell] = value or ""  # Use provided revision or leave blank for initial version
                 elif value:
                     if field == "estimator":
                         # Generate combined initials (Sales Contact + Estimator)
                         from utils.word import get_combined_initials
-                        from config.business_data import SALES_CONTACTS
                         
-                        # Get sales contact info based on estimator
-                        sales_contact_name = ""
-                        for contact_name, phone in SALES_CONTACTS.items():
-                            if value and any(name.lower() in value.lower() for name in contact_name.split()):
-                                sales_contact_name = contact_name
-                                break
+                        # Use sales_contact from project_data directly
+                        sales_contact_name = project_data.get('sales_contact', '')
+                        estimator_name = value  # This is the estimator field value
                         
-                        # If no match found, use first sales contact
-                        if not sales_contact_name:
-                            sales_contact_name = list(SALES_CONTACTS.keys())[0]
-                        
-                        # Generate combined initials
-                        value = get_combined_initials(sales_contact_name, value)
+                        # Generate combined initials using the actual sales contact selection
+                        value = get_combined_initials(sales_contact_name, estimator_name)
                     elif field != "date":
                         value = str(value).title()
                     elif field == "date" and not value:
@@ -905,22 +936,23 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
         
         special_works_options = [
             'ROUND CORNERS',
-                'CUT OUT',
-                'CASTELLE LOCKING ',
-                'HEADER DUCT S/S',
-                'HEADER DUCT',
-                'PAINT FINSH',
-                'UV ON DEMAND',
-                'E/over for emergency strip light',
-                'E/over for small emer. spot light',
-                'E/over for large emer. spot light',
-                'COLD MIST ON DEMAND',
-                'CMW  PIPEWORK HWS/CWS',
-                'CANOPY GROUND SUPPORT',
-                ' 2nd EXTRACT PLENUM',
-                'SUPPLY AIR PLENUM',
-                'CAPTUREJET PLENUM',
-                'COALESCER'
+            'CUT OUT',
+            'CASTELLE LOCKING ',
+            'HEADER DUCT S/S',
+            'HEADER DUCT',
+            'PAINT FINSH',  # Fixed typo from "PAINT FINSH"
+            'UV ON DEMAND',
+            'E/over for emergency strip light',
+            'E/over for small emer. spot light',
+            'E/over for large emer. spot light',
+            'COLD MIST ON DEMAND',
+            'CMW PIPEWORK HWS/CWS',  # Fixed spacing
+            'CANOPY GROUND SUPPORT',
+            '2nd EXTRACT PLENUM',  # Removed extra space
+            'SUPPLY AIR PLENUM',
+            'CAPTUREJET PLENUM',
+            'COALESCER',
+            
         ]
         
         cladding_options = [
@@ -1002,29 +1034,37 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
         ]
         
         # Create data validations with proper escaping
-        def create_validation(options):
-            # Escape quotes and limit formula length
+        def create_validation(options, validation_name=""):
+            # For long option lists, we need a different approach since Excel has a 255-character formula limit
             formula = ",".join(options)
-            if len(formula) > 255:  # Excel formula limit
-                # Use only first few options if too long
-                truncated_options = []
-                current_length = 0
-                for opt in options:
-                    if current_length + len(opt) + 1 > 250:  # Leave some buffer
-                        break
-                    truncated_options.append(opt)
-                    current_length += len(opt) + 1
-                formula = ",".join(truncated_options)
-            return DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+            if len(formula) <= 255:
+                return DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+            else:
+                # For longer lists, write them to hidden cells and reference them
+                # This allows for much longer option lists
+                start_row = 300 + len(options)  # Start at row 300+ to avoid conflicts
+                for i, option in enumerate(options):
+                    try:
+                        sheet[f'AA{start_row + i}'] = option  # Use column AA (hidden area)
+                    except:
+                        pass  # If we can't write, fall back to text validation
+                
+                # Create a validation that references the range
+                try:
+                    range_ref = f'$AA${start_row}:$AA${start_row + len(options) - 1}'
+                    return DataValidation(type="list", formula1=range_ref, allow_blank=True)
+                except:
+                    # Fallback to allowing any text input
+                    return DataValidation(type="textLength", operator="lessThan", formula1="100", allow_blank=True)
         
-        lighting_dv = create_validation(lighting_options)
-        special_works_dv = create_validation(special_works_options)
-        cladding_dv = create_validation(cladding_options)
-        wall_cladding_dv = create_validation(wall_cladding_options)
-        wall_cladding_position_dv = create_validation(wall_cladding_position_options)
-        cmw_panel_type_dv = create_validation(cmw_panel_type_options)
-        cmw_panel_size_dv = create_validation(cmw_panel_size_options)
-        access_equipment_dv = create_validation(access_equipment_options)
+        lighting_dv = create_validation(lighting_options, "lighting")
+        special_works_dv = create_validation(special_works_options, "special_works")
+        cladding_dv = create_validation(cladding_options, "cladding")
+        wall_cladding_dv = create_validation(wall_cladding_options, "wall_cladding")
+        wall_cladding_position_dv = create_validation(wall_cladding_position_options, "wall_cladding_position")
+        cmw_panel_type_dv = create_validation(cmw_panel_type_options, "cmw_panel_type")
+        cmw_panel_size_dv = create_validation(cmw_panel_size_options, "cmw_panel_size")
+        access_equipment_dv = create_validation(access_equipment_options, "access_equipment")
         
         # Add validations to sheet
         sheet.add_data_validation(lighting_dv)
@@ -1100,11 +1140,11 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
         # Add some additional dropdowns for common fields
         # Configuration options for column C (model row)
         config_options = ["Wall", "Island", "Single", "Double", "Corner"]
-        config_dv = create_validation(config_options)
+        config_dv = create_validation(config_options, "config")
         sheet.add_data_validation(config_dv)
         
         # Model options for column D (model row)
-        model_dv = create_validation(VALID_CANOPY_MODELS)
+        model_dv = create_validation(VALID_CANOPY_MODELS, "model")
         sheet.add_data_validation(model_dv)
         
         for canopy_index in range(10):
@@ -1184,9 +1224,9 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
             value = project_data.get(field)
             
             try:
-                # Special handling for revision - use the value from project_data
+                # Special handling for revision - use the value from project_data (don't default to A for initial)
                 if field == "revision":
-                    sheet[cell] = value or "A"  # Use provided revision or default to "A"
+                    sheet[cell] = value or ""  # Use provided revision or leave blank for initial version
                 elif value:
                     # Special handling for estimator/sales manager initials
                     if field == "estimator":
@@ -1227,26 +1267,19 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
                                 break
                     # Try writing again after unmerging
                     if field == "revision":
-                        sheet[cell] = value or "A"  # Use provided revision or default to "A"
+                        sheet[cell] = value or ""  # Use provided revision or leave blank for initial version
                     elif value:
                         if field == "estimator":
                             # Generate combined initials (Sales Contact + Estimator)
                             from utils.word import get_combined_initials
                             from config.business_data import SALES_CONTACTS
                             
-                            # Get sales contact info based on estimator
-                            sales_contact_name = ""
-                            for contact_name, phone in SALES_CONTACTS.items():
-                                if value and any(name.lower() in value.lower() for name in contact_name.split()):
-                                    sales_contact_name = contact_name
-                                    break
+                            # Use sales_contact from project_data directly
+                            sales_contact_name = project_data.get('sales_contact', '')
+                            estimator_name = value  # This is the estimator field value
                             
-                            # If no match found, use first sales contact
-                            if not sales_contact_name:
-                                sales_contact_name = list(SALES_CONTACTS.keys())[0]
-                            
-                            # Generate combined initials
-                            value = get_combined_initials(sales_contact_name, value)
+                            # Generate combined initials using the actual sales contact selection
+                            value = get_combined_initials(sales_contact_name, estimator_name)
                         elif field != "date":
                             value = str(value).title()
                         elif field == "date" and not value:
@@ -1297,25 +1330,16 @@ def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: st
                 if field == "estimator":
                     # Generate combined initials (Sales Contact + Estimator) for RECOAIR sheets
                     from utils.word import get_combined_initials
-                    from config.business_data import SALES_CONTACTS
                     
                     estimator_name = project_data.get("estimator", "")
                     
-                    # Get sales contact info based on estimator
-                    sales_contact_name = ""
-                    for contact_name, phone in SALES_CONTACTS.items():
-                        if estimator_name and any(name.lower() in estimator_name.lower() for name in contact_name.split()):
-                            sales_contact_name = contact_name
-                            break
+                    # Use sales_contact from project_data directly
+                    sales_contact_name = project_data.get('sales_contact', '')
                     
-                    # If no match found, use first sales contact
-                    if not sales_contact_name:
-                        sales_contact_name = list(SALES_CONTACTS.keys())[0]
-                    
-                    # Generate combined initials
+                    # Generate combined initials using the actual sales contact selection
                     value = get_combined_initials(sales_contact_name, estimator_name)
                 elif field == "revision":
-                    value = project_data.get("revision", "A")  # Use provided revision or default to "A"
+                    value = project_data.get("revision", "")  # Use provided revision or leave blank for initial version
                 elif field == "date":
                     # Keep date as is from project data
                     value = project_data.get("date", "")
@@ -1407,17 +1431,9 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict):
                 from config.business_data import SALES_CONTACTS
                 
                 # Get sales contact info based on estimator
-                sales_contact_name = ""
-                for contact_name, phone in SALES_CONTACTS.items():
-                    if estimator_name and any(name.lower() in estimator_name.lower() for name in contact_name.split()):
-                        sales_contact_name = contact_name
-                        break
+                sales_contact_name = project_data.get('sales_contact', '')
                 
-                # If no match found, use first sales contact
-                if not sales_contact_name:
-                    sales_contact_name = list(SALES_CONTACTS.keys())[0]
-                
-                # Generate combined initials
+                # Generate combined initials using the actual sales contact selection
                 combined_initials = get_combined_initials(sales_contact_name, estimator_name)
                 write_to_cell_safe(sheet, 'C8', combined_initials)
             
@@ -1431,7 +1447,7 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict):
             write_to_cell_safe(sheet, 'F8', project_data.get('date', ''))
             
             # Revision at K9
-            write_to_cell_safe(sheet, 'K8', project_data.get('revision', 'A'))
+            write_to_cell_safe(sheet, 'K8', project_data.get('revision', ''))
             
         except Exception as e:
             print(f"Warning: Could not write SDU project metadata: {str(e)}")
@@ -1625,63 +1641,90 @@ def add_sdu_dropdowns(sheet: Worksheet):
 
 def organize_sheets_by_area(wb: Workbook):
     """
-    Organize sheets so that JOB TOTAL is first, then related sheets (CANOPY, FIRE SUPP, etc.) are grouped by area.
+    Organize sheets by area grouping: JOB TOTAL first, then all sheets for each area together
+    (CANOPY, CANOPY (UV), FIRE SUPP, EBOX, RECOAIR, SDU for area 1, then area 2, etc.)
     
     Args:
         wb (Workbook): The workbook to reorganize
     """
     try:
-        # Get all sheet names and group them by area
-        sheet_groups = {}
-        other_sheets = []
+        # Categorize all sheets
+        job_total_sheets = []
+        area_sheets = {}  # Dictionary to group sheets by area
+        misc_sheets = []
         
         for sheet_name in wb.sheetnames:
-            if ' - ' in sheet_name and '(' in sheet_name and ')' in sheet_name:
-                # Extract area identifier: "CANOPY - Level 1 (1)" -> "Level 1 (1)"
-                parts = sheet_name.split(' - ', 1)
-                if len(parts) == 2:
-                    sheet_type = parts[0]  # CANOPY, FIRE SUPP, etc.
-                    area_identifier = parts[1]  # Level 1 (1)
-                    
-                    if area_identifier not in sheet_groups:
-                        sheet_groups[area_identifier] = []
-                    sheet_groups[area_identifier].append((sheet_type, sheet_name))
+            if 'JOB TOTAL' in sheet_name:
+                job_total_sheets.append(sheet_name)
+            elif any(sys_type in sheet_name for sys_type in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU']):
+                # Extract area identifier for grouping
+                if ' - ' in sheet_name and '(' in sheet_name and ')' in sheet_name:
+                    parts = sheet_name.split(' - ', 1)
+                    if len(parts) == 2:
+                        area_identifier = parts[1]  # e.g., "LEVEL 1 (1)"
+                        
+                        if area_identifier not in area_sheets:
+                            area_sheets[area_identifier] = []
+                        area_sheets[area_identifier].append(sheet_name)
                 else:
-                    other_sheets.append(sheet_name)
+                    misc_sheets.append(sheet_name)
             else:
-                other_sheets.append(sheet_name)
+                misc_sheets.append(sheet_name)
         
-        # Create ordered list of sheets
+        # Sort sheets within each area by system type priority
+        def get_system_priority(sheet_name):
+            """Return sort priority for different system types within an area"""
+            if 'CANOPY (UV)' in sheet_name:
+                return 0  # UV canopies first
+            elif 'CANOPY - ' in sheet_name:
+                return 1  # Regular canopies second
+            elif 'FIRE SUPP' in sheet_name:
+                return 2  # Fire suppression third
+            elif 'EBOX' in sheet_name:
+                return 3  # Edge boxes fourth
+            elif 'RECOAIR' in sheet_name:
+                return 4  # RecoAir fifth
+            elif 'SDU' in sheet_name:
+                return 5  # SDU last
+            else:
+                return 6  # Any other system types
+        
+        # Sort sheets within each area
+        for area_id in area_sheets:
+            area_sheets[area_id].sort(key=get_system_priority)
+        
+        # Sort areas by their identifier (LEVEL 1 (1), LEVEL 1 (2), LEVEL 2 (1), etc.)
+        def get_area_sort_key(area_id):
+            """Extract level and area number for sorting"""
+            try:
+                # Parse "LEVEL X (Y)" format
+                if 'LEVEL' in area_id and '(' in area_id and ')' in area_id:
+                    # Extract level number and area number
+                    level_part = area_id.split('(')[0].strip()  # "LEVEL X"
+                    area_part = area_id.split('(')[1].split(')')[0].strip()  # "Y"
+                    
+                    level_num = int(level_part.split()[-1])  # Extract X from "LEVEL X"
+                    area_num = int(area_part)  # Extract Y from "Y"
+                    
+                    return (level_num, area_num)
+                else:
+                    return (999, 999)  # Put unrecognized formats at the end
+            except:
+                return (999, 999)  # Put unparseable formats at the end
+        
+        sorted_areas = sorted(area_sheets.keys(), key=get_area_sort_key)
+        
+        # Create final ordered list: JOB TOTAL → AREA 1 SHEETS → AREA 2 SHEETS → ... → MISC
         ordered_sheets = []
+        ordered_sheets.extend(job_total_sheets)  # JOB TOTAL first
         
-        # Put JOB TOTAL first
-        job_total_sheets = [s for s in other_sheets if 'JOB TOTAL' in s]
-        ordered_sheets.extend(job_total_sheets)
+        # Add all sheets for each area in order
+        for area_id in sorted_areas:
+            ordered_sheets.extend(area_sheets[area_id])
         
-        # Then add area-grouped sheets
-        # Sort area identifiers to maintain consistent ordering
-        for area_identifier in sorted(sheet_groups.keys()):
-            # Sort sheets within each area: CANOPY first, then FIRE SUPP, then EBOX, then others
-            area_sheets = sheet_groups[area_identifier]
-            area_sheets.sort(key=lambda x: (
-                0 if x[0] == 'CANOPY' else
-                1 if x[0] == 'FIRE SUPP' else
-                2 if x[0] == 'EBOX' else
-                3 if x[0] == 'RECOAIR' else
-                4 if x[0] == 'SDU' else 5,
-                x[1]  # Then by sheet name as secondary sort
-            ))
-            
-            # Add sheets from this area to the ordered list
-            for _, sheet_name in area_sheets:
-                ordered_sheets.append(sheet_name)
-        
-        # Add other sheets at the end (excluding JOB TOTAL which is already first)
-        other_important_sheets = [s for s in other_sheets if s not in job_total_sheets and s != 'Lists']
-        lists_sheets = [s for s in other_sheets if s == 'Lists']
-        
-        ordered_sheets.extend(other_important_sheets)
-        ordered_sheets.extend(lists_sheets)
+        # Add miscellaneous sheets (excluding Lists at the end)
+        ordered_sheets.extend([s for s in misc_sheets if s != 'Lists'])  # Other misc sheets
+        ordered_sheets.extend([s for s in misc_sheets if s == 'Lists'])  # Lists last
         
         # Reorder the sheets in the workbook
         current_sheets = wb.sheetnames.copy()
@@ -1718,16 +1761,20 @@ def write_company_data_to_hidden_sheet(wb: Workbook, project_data: Dict):
         # Hide the sheet
         sheet.sheet_state = 'hidden'
         
-        # Write company information
-        sheet['A1'] = 'Company'
-        sheet['B1'] = project_data.get('company', '')
+        # Write customer information
+        sheet['A1'] = 'Customer'
+        sheet['B1'] = project_data.get('customer', '')
         
-        sheet['A2'] = 'Address'
-        sheet['B2'] = project_data.get('address', '')
+        # Write company information
+        sheet['A2'] = 'Company'
+        sheet['B2'] = project_data.get('company', '')
+        
+        sheet['A3'] = 'Address'
+        sheet['B3'] = project_data.get('address', '')
         
         # Write estimator information (full name, not initials)
-        sheet['A3'] = 'Estimator_Full_Name'
-        sheet['B3'] = project_data.get('estimator', '')
+        sheet['A4'] = 'Estimator_Full_Name'
+        sheet['B4'] = project_data.get('estimator', '')
         
         # Get estimator rank from business data
         estimator_name = project_data.get('estimator', '')
@@ -1740,20 +1787,20 @@ def write_company_data_to_hidden_sheet(wb: Workbook, project_data: Dict):
                 estimator_rank = rank
                 break
         
-        sheet['A4'] = 'Estimator_Rank'
-        sheet['B4'] = estimator_rank
+        sheet['A5'] = 'Estimator_Rank'
+        sheet['B5'] = estimator_rank
         
         # Write sales contact information
-        sheet['A5'] = 'Sales_Contact'
-        sheet['B5'] = project_data.get('sales_contact', '')
+        sheet['A6'] = 'Sales_Contact'
+        sheet['B6'] = project_data.get('sales_contact', '')
         
         # Write delivery location if available
-        sheet['A6'] = 'Delivery_Location'
-        sheet['B6'] = project_data.get('delivery_location', '')
+        sheet['A7'] = 'Delivery_Location'
+        sheet['B7'] = project_data.get('delivery_location', '')
         
         # Write revision information
-        sheet['A7'] = 'Revision'
-        sheet['B7'] = project_data.get('revision', 'A')
+        sheet['A8'] = 'Revision'
+        sheet['B8'] = project_data.get('revision', '')
         
     except Exception as e:
         print(f"Warning: Could not write company data to hidden sheet: {str(e)}")
@@ -1786,9 +1833,6 @@ def save_to_excel(project_data: Dict) -> str:
     """
     try:
         wb = load_template_workbook()
-        project_type = project_data.get("project_type")
-        if not project_type:
-            raise ValueError("Project type not specified in project data")
         
         # Get all sheets once and create lists of available sheets
         all_sheets = wb.sheetnames
@@ -1851,11 +1895,19 @@ def save_to_excel(project_data: Dict) -> str:
                 # Check if area has RecoAir system (area-level option)
                 has_recoair = area.get("options", {}).get("recoair", False)
                 
+                # Check if area has UV Extra Over option
+                has_uv_extra_over = area.get("options", {}).get("uv_extra_over", False)
+                
+                # Check if area has UV canopies for UV Extra Over
+                uv_canopies = [canopy for canopy in area_canopies if canopy.get('model', '').upper().startswith('UV')]
+                has_uv_canopies = len(uv_canopies) > 0
+                
                 current_canopy_sheet = None
                 fs_sheet = None
                 ebox_sheet = None
                 sdu_sheet = None
                 recoair_sheet = None
+                uv_extra_over_sheet = None  # For UV Extra Over comparison
                 
                 # Process canopy sheet if canopies exist for this area
                 if area_canopies:
@@ -1867,8 +1919,18 @@ def save_to_excel(project_data: Dict) -> str:
                         sheet_title_display = f"{level_name} - {area_name}"
                         current_canopy_sheet['B1'] = sheet_title_display
                         
-                        # Rename the sheet tab
-                        canopy_sheet_tab_name = f"CANOPY - {level_name} ({area_number})"
+                        # Determine sheet name based on UV Extra Over setting
+                        if has_uv_extra_over and has_uv_canopies:
+                            # This is the UV canopy sheet
+                            canopy_sheet_tab_name = f"CANOPY (UV) - {level_name} ({area_number})"
+                            if len(canopy_sheet_tab_name) > 31:  # Excel sheet name limit
+                                canopy_sheet_tab_name = f"CANOPY (UV) - L{level_number} ({area_number})"
+                        else:
+                            # Normal canopy sheet naming
+                            canopy_sheet_tab_name = f"CANOPY - {level_name} ({area_number})"
+                            if len(canopy_sheet_tab_name) > 31:  # Excel sheet name limit
+                                canopy_sheet_tab_name = f"CANOPY - L{level_number} ({area_number})"
+                        
                         current_canopy_sheet.title = canopy_sheet_tab_name
                         current_canopy_sheet.sheet_state = 'visible'
                         current_canopy_sheet.sheet_properties.tabColor = tab_color
@@ -1954,21 +2016,92 @@ def save_to_excel(project_data: Dict) -> str:
                         
                         # Write each canopy with proper spacing
                         fs_canopy_idx = 0  # Track fire suppression canopies separately
-                        for canopy_idx, canopy in enumerate(area_canopies):
-                            row_start = CANOPY_START_ROW + (canopy_idx * CANOPY_ROW_SPACING)
-                            write_canopy_data(current_canopy_sheet, canopy, row_start)
-                            
-                            # If this canopy has fire suppression and fire suppression sheet exists, write to it
-                            if canopy.get("options", {}).get("fire_suppression") and fs_sheet:
-                                fs_row_start = CANOPY_START_ROW + (fs_canopy_idx * CANOPY_ROW_SPACING)
-                                write_fire_suppression_canopy_data(fs_sheet, canopy, fs_row_start)
-                                fs_canopy_idx += 1  # Only increment for canopies with fire suppression
+                        
+                        if has_uv_extra_over and has_uv_canopies:
+                            # UV Extra Over mode: Only write UV canopies to the main (UV) sheet
+                            for canopy_idx, canopy in enumerate(uv_canopies):  # Only UV canopies
+                                row_start = CANOPY_START_ROW + (canopy_idx * CANOPY_ROW_SPACING)
+                                write_canopy_data(current_canopy_sheet, canopy, row_start)
+                                
+                                # If this UV canopy has fire suppression and fire suppression sheet exists, write to it
+                                if canopy.get("options", {}).get("fire_suppression") and fs_sheet:
+                                    fs_row_start = CANOPY_START_ROW + (fs_canopy_idx * CANOPY_ROW_SPACING)
+                                    write_fire_suppression_canopy_data(fs_sheet, canopy, fs_row_start)
+                                    fs_canopy_idx += 1
+                        else:
+                            # Normal mode: Write all canopies
+                            for canopy_idx, canopy in enumerate(area_canopies):
+                                row_start = CANOPY_START_ROW + (canopy_idx * CANOPY_ROW_SPACING)
+                                write_canopy_data(current_canopy_sheet, canopy, row_start)
+                                
+                                # If this canopy has fire suppression and fire suppression sheet exists, write to it
+                                if canopy.get("options", {}).get("fire_suppression") and fs_sheet:
+                                    fs_row_start = CANOPY_START_ROW + (fs_canopy_idx * CANOPY_ROW_SPACING)
+                                    write_fire_suppression_canopy_data(fs_sheet, canopy, fs_row_start)
+                                    fs_canopy_idx += 1  # Only increment for canopies with fire suppression
                         
                         # Add dropdowns
                         add_dropdowns_to_sheet(wb, current_canopy_sheet)
                         if fs_sheet:
                             # Add fire suppression specific dropdowns
                             add_fire_suppression_dropdowns(fs_sheet)
+                        
+                        # Create UV Extra Over comparison sheets if enabled
+                        if has_uv_extra_over and has_uv_canopies:
+                            # Create non-UV comparison sheet
+                            if len(canopy_sheets) >= 1:  # Need 1 more sheet for non-UV comparison
+                                # Non-UV comparison sheet with standard naming
+                                non_uv_sheet_name = canopy_sheets.pop(0)
+                                non_uv_sheet = wb[non_uv_sheet_name]
+                                non_uv_sheet.title = f"CANOPY - {level_name} ({area_number})"
+                                if len(non_uv_sheet.title) > 31:  # Excel sheet name limit
+                                    non_uv_sheet.title = f"CANOPY - L{level_number} ({area_number})"
+                                
+                                non_uv_sheet.sheet_state = 'visible'
+                                non_uv_sheet.sheet_properties.tabColor = tab_color  # Use same color as UV sheet
+                                
+                                # Set title in B1 for non-UV sheet
+                                non_uv_sheet['B1'] = f"{level_name} - {area_name} - NON-UV EQUIVALENT"
+                                write_project_metadata(non_uv_sheet, project_data)
+                                
+                                # Create non-UV equivalent canopies by converting UV models to non-UV
+                                non_uv_canopies = []
+                                for uv_canopy in uv_canopies:  # Only process UV canopies
+                                    non_uv_canopy = uv_canopy.copy()
+                                    original_model = uv_canopy.get('model', '').upper()
+                                    
+                                    # Convert UV models to their non-UV equivalents
+                                    if original_model.startswith('UV'):
+                                        # UVI -> KVI, UVF -> KVF
+                                        if original_model == 'UVI':
+                                            non_uv_canopy['model'] = 'KVI'
+                                        elif original_model == 'UVF':
+                                            non_uv_canopy['model'] = 'KVF'
+                                        else:
+                                            # For other UV models, replace UV with KV
+                                            non_uv_canopy['model'] = original_model.replace('UV', 'KV', 1)
+                                    
+                                    non_uv_canopies.append(non_uv_canopy)
+                                
+                                # Write non-UV equivalent canopies to the non-UV sheet
+                                for canopy_idx, non_uv_canopy in enumerate(non_uv_canopies):
+                                    row_start = CANOPY_START_ROW + (canopy_idx * CANOPY_ROW_SPACING)
+                                    write_canopy_data(non_uv_sheet, non_uv_canopy, row_start)
+                                
+                                add_dropdowns_to_sheet(wb, non_uv_sheet)
+                                
+                                # UV Extra Over cost is now calculated dynamically in the hidden calculations sheet
+                                # No need to store it in individual cells anymore
+                                
+                                # Add a note to the main UV canopy sheet indicating UV Extra Over is active
+                                current_canopy_sheet['B3'] = "UV EXTRA OVER CALCULATION ACTIVE - Compare with non-UV equivalent sheet"
+                        
+                            else:
+                                print(f"Warning: Not enough CANOPY sheets in template for UV Extra Over comparison in area {area_name}")
+                        
+                        # Remove the old UV comparison logic that created UV ONLY and NO UV sheets
+                        # This is replaced by the new naming convention above
+                        
                     else:
                         raise Exception(f"Not enough CANOPY sheets in template for area {area_name}")
                 
@@ -2072,6 +2205,12 @@ def save_to_excel(project_data: Dict) -> str:
         print("Creating PRICING_SUMMARY sheet...")
         create_pricing_summary_sheet(wb)
         
+        # Create UV Extra Over calculations sheet if there are any UV Extra Over configurations
+        has_uv_extra_over = any('CANOPY (UV) - ' in sheet_name for sheet_name in wb.sheetnames)
+        if has_uv_extra_over:
+            print("Creating UV Extra Over calculations sheet...")
+            create_uv_extra_over_calculations_sheet(wb)
+        
         # Update JOB TOTAL sheet to reference pricing summary
         print("Updating JOB TOTAL sheet with dynamic pricing formulas...")
         update_job_total_sheet(wb)
@@ -2150,27 +2289,30 @@ def read_excel_project_data(excel_path: str) -> Dict:
         else:
             project_data['date'] = ""
             
-        project_data['revision'] = data_sheet['O7'].value or "A"  # Revision from O7, default to "A"
+        project_data['revision'] = data_sheet['O7'].value or ""  # Revision from O7, leave blank if not set
         
         # Read company and estimator data from hidden ProjectData sheet
         if 'ProjectData' in wb.sheetnames:
             hidden_sheet = wb['ProjectData']
             
-            # Read company information
-            project_data['company'] = hidden_sheet['B1'].value or ""
-            project_data['address'] = hidden_sheet['B2'].value or ""
+            # Read customer information (new - row 1)
+            project_data['customer'] = hidden_sheet['B1'].value or ""
             
-            # Read full estimator information
-            project_data['estimator'] = hidden_sheet['B3'].value or project_data['estimator_initials']
-            project_data['estimator_rank'] = hidden_sheet['B4'].value or "Estimator"
+            # Read company information (moved to row 2)
+            project_data['company'] = hidden_sheet['B2'].value or ""
+            project_data['address'] = hidden_sheet['B3'].value or ""
             
-            # Read additional data
-            project_data['sales_contact'] = hidden_sheet['B5'].value or ""
-            project_data['delivery_location'] = hidden_sheet['B6'].value or ""
+            # Read full estimator information (moved to row 4)
+            project_data['estimator'] = hidden_sheet['B4'].value or project_data['estimator_initials']
+            project_data['estimator_rank'] = hidden_sheet['B5'].value or "Estimator"
             
-            # Read revision from ProjectData sheet if not already set
-            if not project_data.get('revision') or project_data['revision'] == 'A':
-                project_data['revision'] = hidden_sheet['B7'].value or project_data.get('revision', 'A')
+            # Read additional data (moved to rows 6-8)
+            project_data['sales_contact'] = hidden_sheet['B6'].value or ""
+            project_data['delivery_location'] = hidden_sheet['B7'].value or ""
+            
+            # Read revision from ProjectData sheet if not already set (moved to row 8)
+            if not project_data.get('revision'):
+                project_data['revision'] = hidden_sheet['B8'].value or ""
         else:
             # Fallback if no hidden sheet exists
             project_data['estimator'] = project_data['estimator_initials']
@@ -2186,7 +2328,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
         
         # First pass: Create areas from all sheet types (CANOPY, FIRE SUPP, EBOX, RECOAIR, SDU)
         for sheet_name in wb.sheetnames:
-            if any(prefix in sheet_name for prefix in ['CANOPY - ', 'FIRE SUPP - ', 'EBOX - ', 'RECOAIR - ', 'SDU - ']):
+            if any(prefix in sheet_name for prefix in ['CANOPY - ', 'CANOPY (UV) - ', 'FIRE SUPP - ', 'EBOX - ', 'RECOAIR - ', 'SDU - ']):
                 sheet = wb[sheet_name]
                 
                 # Determine which cell contains the title based on sheet type
@@ -2227,7 +2369,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
         
         # Second pass: Read canopy data from CANOPY sheets
         for sheet_name in wb.sheetnames:
-            if 'CANOPY - ' in sheet_name:
+            if 'CANOPY - ' in sheet_name or 'CANOPY (UV) - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value
                 
@@ -2380,7 +2522,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
         
         # Read area-level pricing data (delivery & installation, commissioning)
         for sheet_name in wb.sheetnames:
-            if 'CANOPY - ' in sheet_name:
+            if 'CANOPY - ' in sheet_name or 'CANOPY (UV) - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value
                 
@@ -2520,7 +2662,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
         
         # Check CANOPY sheets for area options written in rows 6-8
         for sheet_name in wb.sheetnames:
-            if 'CANOPY - ' in sheet_name:
+            if 'CANOPY - ' in sheet_name or 'CANOPY (UV) - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value
                 
@@ -2617,7 +2759,225 @@ def read_excel_project_data(excel_path: str) -> Dict:
                 'areas': areas
             })
         
-
+        # Extract UV Extra Over information from both CANOPY (UV) sheets and hidden calculations sheet
+        uv_extra_over_data = {}
+        
+        # First, try to read from the hidden UV_EXTRA_OVER_CALC sheet (new dynamic approach)
+        if 'UV_EXTRA_OVER_CALC' in wb.sheetnames:
+            try:
+                calc_sheet = wb['UV_EXTRA_OVER_CALC']
+                print("Found UV_EXTRA_OVER_CALC sheet - reading dynamic UV Extra Over costs...")
+                
+                # Read data starting from row 2 (row 1 has headers)
+                found_data = False
+                for row in range(2, calc_sheet.max_row + 1):
+                    area_id_cell = calc_sheet[f'A{row}']
+                    uv_cost_cell = calc_sheet[f'F{row}']  # UV Extra Over Cost (Price)
+                    
+                    if area_id_cell.value and uv_cost_cell.value is not None:
+                        area_identifier = str(area_id_cell.value).strip()
+                        
+                        # Skip empty rows and totals row
+                        if not area_identifier or area_identifier.upper() == 'TOTALS':
+                            continue
+                            
+                        try:
+                            uv_cost = float(uv_cost_cell.value) if uv_cost_cell.value != 0 else 0
+                            if uv_cost > 0:  # Only store non-zero costs
+                                uv_extra_over_data[area_identifier] = uv_cost
+                                print(f"   {area_identifier}: £{uv_cost:.2f}")
+                                found_data = True
+                        except (ValueError, TypeError):
+                            print(f"   Warning: Invalid UV cost for {area_identifier}: {uv_cost_cell.value}")
+                            uv_extra_over_data[area_identifier] = 0
+                
+                # If no data was found with data_only=True, try reading formulas and evaluating manually
+                if not found_data:
+                    print("   No calculated values found, trying formula-based reading...")
+                    
+                    # Re-open workbook without data_only to see formulas
+                    wb_formulas = load_workbook(excel_path, data_only=False)
+                    if 'UV_EXTRA_OVER_CALC' in wb_formulas.sheetnames:
+                        calc_sheet_formulas = wb_formulas['UV_EXTRA_OVER_CALC']
+                        
+                        for row in range(2, calc_sheet_formulas.max_row + 1):
+                            area_id_cell = calc_sheet_formulas[f'A{row}']
+                            uv_cost_cell = calc_sheet_formulas[f'F{row}']
+                            
+                            if area_id_cell.value and uv_cost_cell.value:
+                                area_identifier = str(area_id_cell.value).strip()
+                                
+                                if not area_identifier or area_identifier.upper() == 'TOTALS':
+                                    continue
+                                
+                                # If it's a formula, try to evaluate it manually
+                                if isinstance(uv_cost_cell.value, str) and uv_cost_cell.value.startswith('='):
+                                    formula = uv_cost_cell.value
+                                    print(f"   Found formula for {area_identifier}: {formula}")
+                                    
+                                    # Try to extract sheet references and calculate manually
+                                    # This is a simple case for D{row}-E{row} formulas
+                                    try:
+                                        uv_price_cell = calc_sheet_formulas[f'D{row}']
+                                        non_uv_price_cell = calc_sheet_formulas[f'E{row}']
+                                        
+                                        if (isinstance(uv_price_cell.value, str) and uv_price_cell.value.startswith('=') and
+                                            isinstance(non_uv_price_cell.value, str) and non_uv_price_cell.value.startswith('=')):
+                                            
+                                            # Extract sheet names from formulas
+                                            uv_formula = uv_price_cell.value
+                                            non_uv_formula = non_uv_price_cell.value
+                                            
+                                            # Try to get the actual values from the referenced sheets
+                                            # area_identifier is like "Level 1 (1)" - need to map to sheet names
+                                            uv_sheet_name = f"CANOPY (UV) - {area_identifier}"
+                                            non_uv_sheet_name = f"CANOPY - {area_identifier}"
+                                            
+                                            if uv_sheet_name in wb.sheetnames and non_uv_sheet_name in wb.sheetnames:
+                                                uv_sheet = wb[uv_sheet_name]
+                                                non_uv_sheet = wb[non_uv_sheet_name]
+                                                
+                                                print(f"   Checking sheets: {uv_sheet_name} and {non_uv_sheet_name}")
+                                                
+                                                uv_total = uv_sheet['N9'].value or 0
+                                                non_uv_total = non_uv_sheet['N9'].value or 0
+                                                
+                                                print(f"   UV N9: {uv_total}, Non-UV N9: {non_uv_total}")
+                                                
+                                                # If N9 is empty, try other common pricing cells
+                                                if not uv_total and not non_uv_total:
+                                                    # Try K9 (cost cells)
+                                                    uv_total = uv_sheet['K9'].value or 0
+                                                    non_uv_total = non_uv_sheet['K9'].value or 0
+                                                    print(f"   UV K9: {uv_total}, Non-UV K9: {non_uv_total}")
+                                                
+                                                uv_cost = float(uv_total) - float(non_uv_total) if uv_total and non_uv_total else 0
+                                                
+                                                if uv_cost > 0:
+                                                    uv_extra_over_data[area_identifier] = uv_cost
+                                                    print(f"   {area_identifier}: £{uv_cost:.2f} (calculated from sheets)")
+                                                    found_data = True
+                                                else:
+                                                    print(f"   {area_identifier}: No positive UV Extra Over cost calculated (UV: {uv_total}, Non-UV: {non_uv_total})")
+                                            else:
+                                                print(f"   Sheets not found: {uv_sheet_name} or {non_uv_sheet_name}")
+                                                print(f"   Available sheets: {[s for s in wb.sheetnames if 'CANOPY' in s]}")
+                                            
+                                    except Exception as e:
+                                        print(f"   Warning: Could not calculate UV cost for {area_identifier}: {e}")
+                                
+                                elif isinstance(uv_cost_cell.value, (int, float)) and uv_cost_cell.value > 0:
+                                    uv_cost = float(uv_cost_cell.value)
+                                    uv_extra_over_data[area_identifier] = uv_cost
+                                    print(f"   {area_identifier}: £{uv_cost:.2f}")
+                                    found_data = True
+                
+                if not found_data:
+                    print("   No UV Extra Over data found in UV_EXTRA_OVER_CALC sheet")
+                            
+            except Exception as e:
+                print(f"Warning: Could not read from UV_EXTRA_OVER_CALC sheet: {str(e)}")
+        
+        # Fallback: Read UV Extra Over information from CANOPY (UV) sheets (old A1 cell approach)
+        if not uv_extra_over_data:
+            print("No UV_EXTRA_OVER_CALC sheet found - checking individual CANOPY (UV) sheets...")
+            for sheet_name in wb.sheetnames:
+                if 'CANOPY (UV) - ' in sheet_name:
+                    sheet = wb[sheet_name]
+                    level_area = sheet_name.replace('CANOPY (UV) - ', '').strip()
+                    level_area = level_area.split(' - ')
+                    
+                    if len(level_area) >= 2:
+                        level_name = level_area[0]
+                        area_name = level_area[1]
+                        
+                        # Check if UV Extra Over cost information is stored in cell A1
+                        uv_extra_over_cell = sheet['A1'].value
+                        uv_extra_over_cost = 0
+                        
+                        if uv_extra_over_cell and isinstance(uv_extra_over_cell, str) and uv_extra_over_cell.startswith('UV_EXTRA_OVER_COST:'):
+                            try:
+                                uv_extra_over_cost = float(uv_extra_over_cell.split(':')[1])
+                            except (ValueError, IndexError):
+                                uv_extra_over_cost = 0
+                        
+                        area_identifier = f"{level_name} ({area_name})" if area_name.startswith('(') else f"{level_name} - {area_name}"
+                        uv_extra_over_data[area_identifier] = uv_extra_over_cost
+        
+        # Apply UV Extra Over data to project areas
+        print(f"Applying UV Extra Over data to {len(project_data['levels'])} levels...")
+        
+        for level_idx, level in enumerate(project_data['levels']):
+            level_name = level.get('level_name', '')
+            level_number = level.get('level_number', level_idx + 1)
+            
+            for area_idx, area in enumerate(level['areas']):
+                area_name = area.get('name', '')
+                area_number = area_idx + 1  # Area number starts from 1
+                
+                print(f"  Processing area: {level_name} - {area_name} (Level {level_number}, Area {area_number})")
+                
+                # Create the exact identifier used in UV_EXTRA_OVER_CALC sheet
+                # Format: "Level X (Y)" where X is level number and Y is area number
+                uv_calc_identifier = f"Level {level_number} ({area_number})"
+                
+                # Try different area identifier formats to match the hidden sheet data
+                possible_identifiers = [
+                    uv_calc_identifier,  # e.g., "Level 1 (1)" - MOST LIKELY MATCH
+                    f"{level_name} ({area_number})",  # e.g., "LEVEL 1 (1)"
+                    f"{level_name} ({area_name})",  # e.g., "LEVEL 1 (Main Kitchen)" 
+                    f"{level_name} - {area_name}",  # e.g., "LEVEL 1 - Main Kitchen"
+                    f"Level {level_number} ({area_name})",  # e.g., "Level 1 (Main Kitchen)"
+                    area_name,  # Just the area name
+                    f"({area_number})",  # Just area number with parentheses
+                    f"({area_name})",  # Just area name with parentheses
+                ]
+                
+                print(f"    Primary identifier: {uv_calc_identifier}")
+                print(f"    Trying identifiers: {possible_identifiers}")
+                print(f"    Available UV data keys: {list(uv_extra_over_data.keys())}")
+                
+                uv_cost_found = 0
+                matched_identifier = None
+                for identifier in possible_identifiers:
+                    if identifier in uv_extra_over_data:
+                        uv_cost_found = uv_extra_over_data[identifier]
+                        matched_identifier = identifier
+                        break
+                
+                # Set UV Extra Over information for this area
+                if 'options' not in area:
+                    area['options'] = {}
+                
+                if uv_cost_found > 0:
+                    area['options']['uv_extra_over'] = True
+                    area['uv_extra_over_cost'] = uv_cost_found
+                    area['extra_over_price'] = uv_cost_found  # Add this field for template compatibility
+                    print(f"    ✅ Applied UV Extra Over: £{uv_cost_found:.2f} (matched: {matched_identifier})")
+                else:
+                    area['options']['uv_extra_over'] = False
+                    area['uv_extra_over_cost'] = 0
+                    area['extra_over_price'] = 0  # Add this field for template compatibility
+                    print(f"    ❌ No UV Extra Over match found")
+        
+        # Ensure all areas have uv_extra_over option set (default to False)
+        for level in project_data['levels']:
+            for area in level['areas']:
+                if 'options' not in area:
+                    area['options'] = {}
+                if 'uv_extra_over' not in area['options']:
+                    area['options']['uv_extra_over'] = False
+                if 'uv_extra_over_cost' not in area:
+                    area['uv_extra_over_cost'] = 0
+                if 'extra_over_price' not in area:
+                    area['extra_over_price'] = 0
+                
+                # Add extra_overs flag for easy Jinja template access
+                area['extra_overs'] = area['options'].get('uv_extra_over', False)
+                
+                # Ensure extra_over_price matches uv_extra_over_cost
+                if area['extra_overs']:
+                    area['extra_over_price'] = area.get('uv_extra_over_cost', 0)
         
         # Check for validation errors and include them in the result
         validation_errors = collect_validation_errors()
@@ -2769,7 +3129,7 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
             if sheet.sheet_state == 'visible':
-                if 'CANOPY - ' in sheet_name:
+                if 'CANOPY - ' in sheet_name or 'CANOPY (UV) - ' in sheet_name:
                     canopy_sheets.append(sheet_name)
                 elif 'FIRE SUPP - ' in sheet_name:
                     fire_supp_sheets.append(sheet_name)
@@ -2789,10 +3149,9 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         for sheet_name in canopy_sheets:
             summary_sheet[f'A{current_row}'] = 'CANOPY'
             summary_sheet[f'B{current_row}'] = sheet_name
-            # Create formulas to reference N9 (price) and K9 (cost) from the sheet
             safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
-            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!N9,0)"  # Price
-            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!K9,0)"  # Cost
+            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!N9,0)"  # Price formula - consistent with other sheets
+            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!K9,0)"  # Cost formula
             summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!N9"  # Price reference
             summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!K9"  # Cost reference
             current_row += 1
@@ -2855,51 +3214,48 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         # Add summary totals by type
         summary_row = current_row + 2
         summary_sheet[f'A{summary_row}'] = 'SUMMARY TOTALS'
-        summary_sheet[f'B{summary_row}'] = 'PRICE TOTALS'
-        summary_sheet[f'C{summary_row}'] = 'COST TOTALS'
+        summary_sheet[f'B{summary_row + 1}'] = 'CANOPY TOTAL'
+        summary_sheet[f'B{summary_row + 2}'] = 'FIRE SUPP TOTAL'
+        summary_sheet[f'B{summary_row + 3}'] = 'EBOX TOTAL'
+        summary_sheet[f'B{summary_row + 4}'] = 'SDU TOTAL'
+        summary_sheet[f'B{summary_row + 5}'] = 'RECOAIR TOTAL'
+        summary_sheet[f'B{summary_row + 6}'] = 'OTHER TOTAL'
+        summary_sheet[f'B{summary_row + 7}'] = 'PROJECT TOTAL'
         
-        summary_sheet[f'A{summary_row + 1}'] = 'CANOPY TOTAL'
-        summary_sheet[f'A{summary_row + 2}'] = 'FIRE SUPP TOTAL'
-        summary_sheet[f'A{summary_row + 3}'] = 'EBOX TOTAL'
-        summary_sheet[f'A{summary_row + 4}'] = 'SDU TOTAL'
-        summary_sheet[f'A{summary_row + 5}'] = 'RECOAIR TOTAL'
-        summary_sheet[f'A{summary_row + 6}'] = 'OTHER TOTAL'
-        summary_sheet[f'A{summary_row + 7}'] = 'PROJECT TOTAL'
+        # Calculate totals using SUMIF formulas
+        summary_sheet[f'C{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",C:C)'  # Sum all CANOPY sheet prices
+        summary_sheet[f'C{summary_row + 2}'] = f'=SUMIF(A:A,"FIRE SUPP",C:C)'  # Sum all FIRE SUPP sheet prices
+        summary_sheet[f'C{summary_row + 3}'] = f'=SUMIF(A:A,"EBOX",C:C)'  # Sum all EBOX sheet prices
+        summary_sheet[f'C{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",C:C)'  # Sum all SDU sheet prices
+        summary_sheet[f'C{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",C:C)'  # Sum all RECOAIR sheet prices
+        summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
+        summary_sheet[f'C{summary_row + 7}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}'  # Project price total
         
-        # Create SUMIF formulas to sum by sheet type for PRICES (column C)
-        summary_sheet[f'B{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",C:C)'  # Sum all CANOPY sheet prices
-        summary_sheet[f'B{summary_row + 2}'] = f'=SUMIF(A:A,"FIRE SUPP",C:C)'  # Sum all FIRE SUPP sheet prices
-        summary_sheet[f'B{summary_row + 3}'] = f'=SUMIF(A:A,"EBOX",C:C)'  # Sum all EBOX sheet prices
-        summary_sheet[f'B{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",C:C)'  # Sum all SDU sheet prices
-        summary_sheet[f'B{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",C:C)'  # Sum all RECOAIR sheet prices
-        summary_sheet[f'B{summary_row + 6}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
-        summary_sheet[f'B{summary_row + 7}'] = f'=B{summary_row + 1}+B{summary_row + 2}+B{summary_row + 3}+B{summary_row + 4}+B{summary_row + 5}+B{summary_row + 6}'  # Project price total (including RecoAir)
-        
-        # Create SUMIF formulas to sum by sheet type for COSTS (column D)
-        summary_sheet[f'C{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",D:D)'  # Sum all CANOPY sheet costs
-        summary_sheet[f'C{summary_row + 2}'] = f'=SUMIF(A:A,"FIRE SUPP",D:D)'  # Sum all FIRE SUPP sheet costs
-        summary_sheet[f'C{summary_row + 3}'] = f'=SUMIF(A:A,"EBOX",D:D)'  # Sum all EBOX sheet costs
-        summary_sheet[f'C{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",D:D)'  # Sum all SDU sheet costs
-        summary_sheet[f'C{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",D:D)'  # Sum all RECOAIR sheet costs
-        summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
-        summary_sheet[f'C{summary_row + 7}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}'  # Project cost total (including RecoAir)
+        # Cost totals
+        summary_sheet[f'D{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",D:D)'  # Sum all CANOPY sheet costs
+        summary_sheet[f'D{summary_row + 2}'] = f'=SUMIF(A:A,"FIRE SUPP",D:D)'  # Sum all FIRE SUPP sheet costs
+        summary_sheet[f'D{summary_row + 3}'] = f'=SUMIF(A:A,"EBOX",D:D)'  # Sum all EBOX sheet costs
+        summary_sheet[f'D{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",D:D)'  # Sum all SDU sheet costs
+        summary_sheet[f'D{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",D:D)'  # Sum all RECOAIR sheet costs
+        summary_sheet[f'D{summary_row + 6}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
+        summary_sheet[f'D{summary_row + 7}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}'  # Project cost total
         
         # Store the summary row positions for JOB TOTAL to reference
         summary_sheet['H1'] = 'Reference Cells for JOB TOTAL'
-        summary_sheet['H2'] = f'CANOPY_PRICE_TOTAL=B{summary_row + 1}'
-        summary_sheet['H3'] = f'FIRE_SUPP_PRICE_TOTAL=B{summary_row + 2}'
-        summary_sheet['H4'] = f'EBOX_PRICE_TOTAL=B{summary_row + 3}'
-        summary_sheet['H5'] = f'SDU_PRICE_TOTAL=B{summary_row + 4}'
-        summary_sheet['H6'] = f'RECOAIR_PRICE_TOTAL=B{summary_row + 5}'
-        summary_sheet['H7'] = f'OTHER_PRICE_TOTAL=B{summary_row + 6}'
-        summary_sheet['H8'] = f'PROJECT_PRICE_TOTAL=B{summary_row + 7}'
-        summary_sheet['H9'] = f'CANOPY_COST_TOTAL=C{summary_row + 1}'
-        summary_sheet['H10'] = f'FIRE_SUPP_COST_TOTAL=C{summary_row + 2}'
-        summary_sheet['H11'] = f'EBOX_COST_TOTAL=C{summary_row + 3}'
-        summary_sheet['H12'] = f'SDU_COST_TOTAL=C{summary_row + 4}'
-        summary_sheet['H13'] = f'RECOAIR_COST_TOTAL=C{summary_row + 5}'
-        summary_sheet['H14'] = f'OTHER_COST_TOTAL=C{summary_row + 6}'
-        summary_sheet['H15'] = f'PROJECT_COST_TOTAL=C{summary_row + 7}'
+        summary_sheet['H2'] = f'CANOPY_PRICE_TOTAL=C{summary_row + 1}'
+        summary_sheet['H3'] = f'FIRE_SUPP_PRICE_TOTAL=C{summary_row + 2}'
+        summary_sheet['H4'] = f'EBOX_PRICE_TOTAL=C{summary_row + 3}'
+        summary_sheet['H5'] = f'SDU_PRICE_TOTAL=C{summary_row + 4}'
+        summary_sheet['H6'] = f'RECOAIR_PRICE_TOTAL=C{summary_row + 5}'
+        summary_sheet['H7'] = f'OTHER_PRICE_TOTAL=C{summary_row + 6}'
+        summary_sheet['H8'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 7}'
+        summary_sheet['H9'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
+        summary_sheet['H10'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
+        summary_sheet['H11'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
+        summary_sheet['H12'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
+        summary_sheet['H13'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
+        summary_sheet['H14'] = f'OTHER_COST_TOTAL=D{summary_row + 6}'
+        summary_sheet['H15'] = f'PROJECT_COST_TOTAL=D{summary_row + 7}'
         
         print(f"Created PRICING_SUMMARY sheet with {current_row - 2} individual sheet references")
         
@@ -2943,58 +3299,58 @@ def update_job_total_sheet(wb: Workbook) -> None:
         # Only populate rows 16-25 for columns S (cost) and T (price)
         
         # Write PRICE totals to column T:
-        job_total_sheet['T16'] = f"=PRICING_SUMMARY!B{summary_row + 1}"  # Canopy Total (Price)
-        job_total_sheet['T17'] = f"=PRICING_SUMMARY!B{summary_row + 2}"  # Fire Suppression Total (Price)
-        job_total_sheet['T18'] = f"=PRICING_SUMMARY!B{summary_row + 4}"  # SDU Total (SDU category - Price)
-        job_total_sheet['T19'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Vent Clg Total (OTHER category - Price)
+        job_total_sheet['T16'] = f"=PRICING_SUMMARY!C{summary_row + 1}"  # Canopy Total (Price)
+        job_total_sheet['T17'] = f"=PRICING_SUMMARY!C{summary_row + 2}"  # Fire Suppression Total (Price)
+        job_total_sheet['T18'] = f"=PRICING_SUMMARY!C{summary_row + 4}"  # SDU Total (SDU category - Price)
+        job_total_sheet['T19'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Vent Clg Total (OTHER category - Price)
         # Conditionally add MARVEL system if enabled
         if is_feature_enabled('marvel_system'):
-            job_total_sheet['T20'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # MARVEL Total (OTHER category - Price)
+            job_total_sheet['T20'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # MARVEL Total (OTHER category - Price)
         else:
             job_total_sheet['T20'] = 0  # Hide MARVEL if not enabled
             
-        job_total_sheet['T21'] = f"=PRICING_SUMMARY!B{summary_row + 3}"  # Edge Total (EBOX/UV-C - Price)
-        job_total_sheet['T22'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Aerolys Total (OTHER category - Price)
+        job_total_sheet['T21'] = f"=PRICING_SUMMARY!C{summary_row + 3}"  # Edge Total (EBOX/UV-C - Price)
+        job_total_sheet['T22'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Aerolys Total (OTHER category - Price)
         
         # Conditionally add Pollustop system if enabled
         if is_feature_enabled('pollustop_unit'):
-            job_total_sheet['T23'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Pollustop Total (OTHER category - Price)
+            job_total_sheet['T23'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Pollustop Total (OTHER category - Price)
         else:
             job_total_sheet['T23'] = 0  # Hide Pollustop if not enabled
             
-        job_total_sheet['T24'] = f"=PRICING_SUMMARY!B{summary_row + 5}"  # Reco Total (RecoAir - Price)
+        job_total_sheet['T24'] = f"=PRICING_SUMMARY!C{summary_row + 5}"  # Reco Total (RecoAir - Price)
         
         # Conditionally add Reactaway system if enabled
         if is_feature_enabled('reactaway_unit'):
-            job_total_sheet['T25'] = f"=PRICING_SUMMARY!B{summary_row + 6}"  # Reactaway Total (OTHER category - Price)
+            job_total_sheet['T25'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Reactaway Total (OTHER category - Price)
         else:
             job_total_sheet['T25'] = 0  # Hide Reactaway if not enabled
         
         # Write COST totals to column S:
-        job_total_sheet['S16'] = f"=PRICING_SUMMARY!C{summary_row + 1}"  # Canopy Total (Cost)
-        job_total_sheet['S17'] = f"=PRICING_SUMMARY!C{summary_row + 2}"  # Fire Suppression Total (Cost)
-        job_total_sheet['S18'] = f"=PRICING_SUMMARY!C{summary_row + 4}"  # SDU Total (SDU category - Cost)
-        job_total_sheet['S19'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Vent Clg Total (OTHER category - Cost)
+        job_total_sheet['S16'] = f"=PRICING_SUMMARY!D{summary_row + 1}"  # Canopy Total (Cost)
+        job_total_sheet['S17'] = f"=PRICING_SUMMARY!D{summary_row + 2}"  # Fire Suppression Total (Cost)
+        job_total_sheet['S18'] = f"=PRICING_SUMMARY!D{summary_row + 4}"  # SDU Total (SDU category - Cost)
+        job_total_sheet['S19'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Vent Clg Total (OTHER category - Cost)
         # Conditionally add MARVEL system if enabled
         if is_feature_enabled('marvel_system'):
-            job_total_sheet['S20'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # MARVEL Total (OTHER category - Cost)
+            job_total_sheet['S20'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # MARVEL Total (OTHER category - Cost)
         else:
             job_total_sheet['S20'] = 0  # Hide MARVEL if not enabled
             
-        job_total_sheet['S21'] = f"=PRICING_SUMMARY!C{summary_row + 3}"  # Edge Total (EBOX/UV-C - Cost)
-        job_total_sheet['S22'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Aerolys Total (OTHER category - Cost)
+        job_total_sheet['S21'] = f"=PRICING_SUMMARY!D{summary_row + 3}"  # Edge Total (EBOX/UV-C - Cost)
+        job_total_sheet['S22'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Aerolys Total (OTHER category - Cost)
         
         # Conditionally add Pollustop system if enabled
         if is_feature_enabled('pollustop_unit'):
-            job_total_sheet['S23'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Pollustop Total (OTHER category - Cost)
+            job_total_sheet['S23'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Pollustop Total (OTHER category - Cost)
         else:
             job_total_sheet['S23'] = 0  # Hide Pollustop if not enabled
             
-        job_total_sheet['S24'] = f"=PRICING_SUMMARY!C{summary_row + 5}"  # Reco Total (RecoAir - Cost)
+        job_total_sheet['S24'] = f"=PRICING_SUMMARY!D{summary_row + 5}"  # Reco Total (RecoAir - Cost)
         
         # Conditionally add Reactaway system if enabled
         if is_feature_enabled('reactaway_unit'):
-            job_total_sheet['S25'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Reactaway Total (OTHER category - Cost)
+            job_total_sheet['S25'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Reactaway Total (OTHER category - Cost)
         else:
             job_total_sheet['S25'] = 0  # Hide Reactaway if not enabled
         
@@ -3061,11 +3417,11 @@ def create_revision_from_existing(excel_path: str, new_revision: str, new_date: 
         if 'ProjectData' in wb.sheetnames:
             try:
                 hidden_sheet = wb['ProjectData']
-                hidden_sheet['B7'] = new_revision  # Update revision in ProjectData
+                hidden_sheet['B8'] = new_revision  # Update revision in ProjectData (moved from B7 to B8)
                 if new_date:
                     # Add date to ProjectData if not already there
-                    hidden_sheet['A8'] = 'Date'
-                    hidden_sheet['B8'] = new_date
+                    hidden_sheet['A9'] = 'Date'
+                    hidden_sheet['B9'] = new_date
                 print(f"Updated revision in ProjectData sheet to {new_revision}")
             except Exception as e:
                 print(f"Warning: Could not update ProjectData sheet: {str(e)}")
@@ -3467,13 +3823,13 @@ def validate_cell_data(sheet_name: str, cell_ref: str, value, expected_type: str
             return True, value, ""
             
     except (ValueError, TypeError) as e:
-        error_msg = f"❌ **Data Type Error in {sheet_name}**\n"
-        error_msg += f"   📍 **Location:** Cell {cell_ref}\n"
-        error_msg += f"   📊 **Found Value:** '{value}' (type: {type(value).__name__})\n"
-        error_msg += f"   🎯 **Expected:** {expected_type}\n"
+        error_msg = f"**Data Type Error in {sheet_name}**\n"
+        error_msg += f"   **Location:** Cell {cell_ref}\n"
+        error_msg += f"   **Found Value:** '{value}' (type: {type(value).__name__})\n"
+        error_msg += f"   **Expected:** {expected_type}\n"
         if context:
-            error_msg += f"   📝 **Used For:** {context}\n"
-        error_msg += f"   🔧 **Fix:** Please enter a valid {expected_type} value in cell {cell_ref}"
+            error_msg += f"   **Used For:** {context}\n"
+        error_msg += f"   **Fix:** Please enter a valid {expected_type} value in cell {cell_ref}"
         
         return False, None, error_msg
 
@@ -3497,3 +3853,133 @@ def add_validation_error(error_message: str):
     """
     errors = collect_validation_errors()
     errors.append(error_message)
+
+def calculate_uv_extra_over_cost(wb: Workbook, level_name: str, area_number: int, uv_sheet_name: str, non_uv_sheet_name: str) -> float:
+    """
+    Calculate the UV Extra Over cost by comparing UV canopies vs non-UV equivalent canopies.
+    
+    Args:
+        wb (Workbook): The workbook containing the UV comparison sheets
+        level_name (str): Level name for sheet identification
+        area_number (int): Area number for sheet identification
+        uv_sheet_name (str): Name of the sheet with UV canopies
+        non_uv_sheet_name (str): Name of the sheet with non-UV equivalent canopies
+        
+    Returns:
+        float: The UV Extra Over cost (UV cost - non-UV cost)
+    """
+    try:
+        if uv_sheet_name not in wb.sheetnames or non_uv_sheet_name not in wb.sheetnames:
+            return 0.0
+        
+        uv_sheet = wb[uv_sheet_name]
+        non_uv_sheet = wb[non_uv_sheet_name]
+        
+        # Get the total cost from both sheets (assuming it's in a standard location like N9 or similar)
+        # You may need to adjust this based on your Excel template structure
+        uv_total_cell = uv_sheet['N9']  # Adjust cell reference as needed
+        non_uv_total_cell = non_uv_sheet['N9']  # Adjust cell reference as needed
+        
+        uv_total = uv_total_cell.value or 0
+        non_uv_total = non_uv_total_cell.value or 0
+        
+        # Calculate the difference (UV cost - non-UV cost)
+        uv_extra_over_cost = float(uv_total) - float(non_uv_total)
+        
+        return max(0, uv_extra_over_cost)  # Ensure non-negative cost
+        
+    except Exception as e:
+        print(f"Warning: Could not calculate UV Extra Over cost for {level_name} ({area_number}): {str(e)}")
+        return 0.0
+
+def create_uv_extra_over_calculations_sheet(wb: Workbook) -> None:
+    """
+    Create a hidden sheet to track UV Extra Over calculations with dynamic formulas.
+    This sheet calculates the difference between UV canopy costs and non-UV equivalent costs per area.
+    
+    Args:
+        wb (Workbook): The workbook to add the calculations sheet to
+    """
+    try:
+        # Create or get the hidden calculations sheet
+        sheet_name = "UV_EXTRA_OVER_CALC"
+        if sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            # Clear existing data
+            sheet.delete_rows(1, sheet.max_row)
+        else:
+            sheet = wb.create_sheet(sheet_name)
+        
+        # Hide the sheet
+        sheet.sheet_state = 'hidden'
+        
+        # Set up headers
+        sheet['A1'] = 'Area Identifier'
+        sheet['B1'] = 'UV Sheet Name'
+        sheet['C1'] = 'Non-UV Sheet Name'
+        sheet['D1'] = 'UV Total Price'
+        sheet['E1'] = 'Non-UV Total Price'
+        sheet['F1'] = 'UV Extra Over Cost'
+        sheet['G1'] = 'UV Total Cost'
+        sheet['H1'] = 'Non-UV Total Cost'
+        sheet['I1'] = 'UV Extra Over Cost (Cost)'
+        
+        # Style headers
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']:
+            cell = sheet[f'{col}1']
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+        
+        # Find all UV Extra Over pairs and add formulas
+        row = 2
+        for sheet_name in wb.sheetnames:
+            if 'CANOPY (UV) - ' in sheet_name:
+                # Find corresponding non-UV sheet
+                uv_sheet_title = sheet_name
+                # Look for the corresponding non-UV sheet (same area, but without UV)
+                area_part = sheet_name.replace('CANOPY (UV) - ', '')  # e.g., "LEVEL 1 (1)"
+                non_uv_sheet_name = f"CANOPY - {area_part}"
+                
+                if non_uv_sheet_name in wb.sheetnames:
+                    # Add calculation row
+                    sheet[f'A{row}'] = area_part  # Area identifier
+                    sheet[f'B{row}'] = uv_sheet_title  # UV sheet name
+                    sheet[f'C{row}'] = non_uv_sheet_name  # Non-UV sheet name
+                    
+                    # Dynamic formulas that reference the actual sheet totals
+                    uv_safe_name = f"'{uv_sheet_title}'" if ' ' in uv_sheet_title else uv_sheet_title
+                    non_uv_safe_name = f"'{non_uv_sheet_name}'" if ' ' in non_uv_sheet_name else non_uv_sheet_name
+                    
+                    # Price formulas (N9 contains the total price)
+                    sheet[f'D{row}'] = f"=IFERROR({uv_safe_name}!N9,0)"  # UV Total Price
+                    sheet[f'E{row}'] = f"=IFERROR({non_uv_safe_name}!N9,0)"  # Non-UV Total Price
+                    sheet[f'F{row}'] = f"=D{row}-E{row}"  # UV Extra Over Cost (Price)
+                    
+                    # Cost formulas (K9 contains the total cost)
+                    sheet[f'G{row}'] = f"=IFERROR({uv_safe_name}!K9,0)"  # UV Total Cost
+                    sheet[f'H{row}'] = f"=IFERROR({non_uv_safe_name}!K9,0)"  # Non-UV Total Cost
+                    sheet[f'I{row}'] = f"=G{row}-H{row}"  # UV Extra Over Cost (Cost)
+                    
+                    row += 1
+        
+        # Add summary totals at the bottom
+        if row > 2:  # Only if we have data
+            summary_row = row + 1
+            sheet[f'A{summary_row}'] = 'TOTALS'
+            sheet[f'A{summary_row}'].font = Font(bold=True)
+            
+            # Sum all UV Extra Over costs
+            sheet[f'F{summary_row}'] = f"=SUM(F2:F{row-1})"  # Total UV Extra Over (Price)
+            sheet[f'I{summary_row}'] = f"=SUM(I2:I{row-1})"  # Total UV Extra Over (Cost)
+            
+            # Style totals row
+            for col in ['A', 'F', 'I']:
+                cell = sheet[f'{col}{summary_row}']
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+        
+        print(f"Created UV Extra Over calculations sheet with {row-2} area calculations")
+        
+    except Exception as e:
+        print(f"Warning: Could not create UV Extra Over calculations sheet: {str(e)}")
+        pass

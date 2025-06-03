@@ -538,13 +538,14 @@ def project_structure_form() -> List[Dict[str, Any]]:
                 else:
                     st.session_state.project_structure.append(level_data)
     
-    # Save button handling
-    if st.button("Save Project Structure", use_container_width=True, type="primary"):
+    # Next button handling - validates and saves in one step
+    if st.button("Next ➡️", use_container_width=True, type="primary"):
         if not levels_data:
             st.error("Please fill in at least one area name")
             return None
-        # Set the save flag
+        # Set flags to save and advance to next step
         st.session_state.save_clicked = True
+        st.session_state.step2_next_clicked = True
         return levels_data
     
     # Return the current structure data

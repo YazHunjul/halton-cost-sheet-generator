@@ -39,17 +39,27 @@ def get_fire_suppression_system_description(system_type: str) -> str:
         # For "FIRE SUPPRESSION", "1 TANK SYSTEM", or any other value, default to Ansul R102
         return 'Ansul R102 system. Supplied, installed & commissioned.'
 
-def get_sales_contact_info(estimator_name: str) -> Dict[str, str]:
+def get_sales_contact_info(estimator_name: str, project_data: Dict = None) -> Dict[str, str]:
     """
-    Get sales contact information based on estimator name.
+    Get sales contact information based on project data or estimator name.
     
     Args:
-        estimator_name (str): Name of the estimator
+        estimator_name (str): Name of the estimator (kept for backward compatibility)
+        project_data (Dict, optional): Project data containing sales_contact
         
     Returns:
         Dict: Contact information including name and phone
     """
-    # Try to match estimator to sales contact
+    # First, try to use sales_contact from project_data if available
+    if project_data and project_data.get('sales_contact'):
+        sales_contact_name = project_data['sales_contact']
+        if sales_contact_name in SALES_CONTACTS:
+            return {
+                'name': sales_contact_name,
+                'phone': SALES_CONTACTS[sales_contact_name]
+            }
+    
+    # Fallback: try to match estimator to sales contact (old logic, likely won't match)
     for contact_name, phone in SALES_CONTACTS.items():
         if estimator_name and any(name.lower() in estimator_name.lower() for name in contact_name.split()):
             return {
@@ -289,20 +299,23 @@ def generate_quote_title(revision: str) -> str:
     Generate quote title based on revision.
     
     Args:
-        revision (str): Project revision (A, B, C, etc.)
+        revision (str): Project revision (A, B, C, etc.) or empty for initial version
         
     Returns:
-        str: Quote title ("QUOTATION" for revision A, "QUOTATION - REVISION B" for others)
+        str: Quote title ("QUOTATION" for no revision or blank, "QUOTATION - REVISION A" for A and beyond)
     """
-    if not revision:
-        revision = "A"  # Default to A if no revision provided
+    # If no revision or empty/blank revision, just return "QUOTATION"
+    if not revision or str(revision).strip() == "":
+        return "QUOTATION"
     
     revision = str(revision).strip().upper()
     
-    if revision == "A":
+    # For blank/empty revision (initial version), just return "QUOTATION"
+    if revision == "":
         return "QUOTATION"
-    else:
-        return f"QUOTATION - REVISION {revision}"
+    
+    # For any actual revision letter (A, B, C, etc.), include it in the title
+    return f"QUOTATION - REVISION {revision}"
 
 def normalize_area_object(area: Dict) -> Dict:
     """
@@ -348,7 +361,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     estimator_rank = project_data.get('estimator_rank', 'Estimator')
     
     # Get sales contact info
-    sales_contact = get_sales_contact_info(estimator)
+    sales_contact = get_sales_contact_info(estimator, project_data)
     
     # Prepare all canopies data with level-area combinations
     all_canopies = []
@@ -612,7 +625,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     )
     
     # Generate quote title based on revision
-    quote_title = generate_quote_title(project_data.get('revision', 'A'))
+    quote_title = generate_quote_title(project_data.get('revision', ''))
     
     # Extract customer first name
     customer_first_name = get_customer_first_name(project_data.get('customer', ''))
@@ -632,8 +645,8 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     # Prepare the context
     context = {
         # Basic project information
-        'client_name': handle_empty_value(project_data.get('customer', '')),
-        'customer_first_name': handle_empty_value(customer_first_name),  # Customer's first name
+        'client_name': project_data.get('customer', ''),  # Don't use handle_empty_value for customer name
+        'customer_first_name': customer_first_name,  # Don't use handle_empty_value for customer first name
         'company': handle_empty_value(project_data.get('company', '')),
         'address': handle_empty_value(project_data.get('address', '')),
         'project_name': handle_empty_value(project_data.get('project_name', '')),
@@ -644,7 +657,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'estimator_initials': combined_initials,  # Combined Sales Contact / Estimator initials
         'reference_variable': reference_variable,  # Project reference (projectnumber/salesinitials/estimatorintials)
         'quote_title': quote_title,  # Quote title based on revision (QUOTATION or QUOTATION - REVISION X)
-        'revision': handle_empty_value(project_data.get('revision', 'A')),  # Project revision
+        'revision': project_data.get('revision', ''),  # Project revision - keep blank for initial version
         
         # Formatted data
         'date': format_date_for_display(project_data.get('date', '')),
@@ -738,7 +751,10 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'recoair_location': 'INTERNAL',  # Fallback for RecoAir unit location
         'unit_price': 0,  # Fallback for unit price
         'quantity': 0,  # Fallback for quantity
-        'delivery_installation_price': 0  # Fallback for delivery price
+        'delivery_installation_price': 0,  # Fallback for delivery price
+        'total_uv_extra_over_cost': pricing_totals.get('total_uv_extra_over_cost', 0),  # Use calculated total UV Extra Over costs
+        'has_any_uv_extra_over': pricing_totals.get('has_any_uv_extra_over', False),  # Use calculated UV Extra Over flag
+        'extra_overs': area.get('options', {}).get('uv_extra_over', False),  # Easy flag for templates
     }
     
     return context
@@ -1077,6 +1093,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
         'total_sdu_price': 0,
         'total_sdu_subtotal': 0,  # New: total of all SDU subtotals
         'total_recoair_price': 0,
+        'total_uv_extra_over_cost': 0,  # New: total of all UV Extra Over costs
+        'has_any_uv_extra_over': False,  # New: flag indicating if any area has UV Extra Over
         'areas': [],
         'project_total': 0
     }
@@ -1117,6 +1135,11 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
                 'canopy_schedule_subtotal': 0,  # Canopy total + delivery + commissioning (excluding fire suppression)
                 'area_subtotal': 0,
                 'canopies': [],
+                
+                # Add UV Extra Over support
+                'has_uv_extra_over': area.get('options', {}).get('uv_extra_over', False),
+                'uv_extra_over_cost': area.get('uv_extra_over_cost', 0),
+                'extra_overs': area.get('options', {}).get('uv_extra_over', False),  # Easy flag for templates
                 
                 # Add SDU data if this area has SDU
                 'has_sdu': area.get('options', {}).get('sdu', False),
@@ -1194,6 +1217,11 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
             totals['total_sdu_subtotal'] += sdu_subtotal  # Add SDU subtotal to project totals
             totals['total_recoair_price'] += area_totals['recoair_price']
             
+            # Update UV Extra Over cost and flag
+            if area.get('options', {}).get('uv_extra_over', False):
+                totals['total_uv_extra_over_cost'] += area.get('uv_extra_over_cost', 0)
+                totals['has_any_uv_extra_over'] = True
+            
             totals['areas'].append(area_totals)
     
     # Calculate project total (excluding RecoAir price - RecoAir has separate quotation)
@@ -1215,19 +1243,23 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
 
 def format_currency(amount) -> str:
     """
-    Format currency amount for display.
+    Format currency amount for display with ceiling rounding.
+    All amounts are rounded UP to the nearest whole pound.
     
     Args:
         amount: Currency amount to format
         
     Returns:
-        str: Formatted currency string
+        str: Formatted currency string (always ends in .00)
     """
     if not amount:
         return "£0.00"
     
     try:
-        return f"£{float(amount):,.2f}"
+        import math
+        # Round UP to the nearest whole number (ceiling)
+        rounded_amount = math.ceil(float(amount))
+        return f"£{rounded_amount:,.2f}"
     except (ValueError, TypeError):
         return "£0.00"
 

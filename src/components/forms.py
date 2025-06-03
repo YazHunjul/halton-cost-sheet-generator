@@ -139,7 +139,7 @@ def general_project_form() -> Dict[str, Any]:
                 help="Select the estimator for this project"
             )
         
-        submitted = st.form_submit_button("Save & Continue")
+        submitted = st.form_submit_button("Next ➡️", type="primary")
         
         if submitted:
             # Validate required fields based on company mode
@@ -202,9 +202,11 @@ def general_project_form() -> Dict[str, Any]:
             
             # Store in session state for form persistence
             st.session_state.general_form_data = project_data
+            # Set flag to advance to next step
+            st.session_state.step1_next_clicked = True
             return project_data
-            
-    # Return the current form data even if not submitted
+    
+    # Return current form data for persistence
     if st.session_state.general_form_data:
         return st.session_state.general_form_data
     return None 

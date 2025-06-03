@@ -387,7 +387,7 @@ def preview_with_download(docx_path: str, filename: str) -> None:
         docx_path (str): Path to the Word document
         filename (str): Filename for download
     """
-    st.subheader("📄 Document Preview")
+    st.subheader(" Document Preview")
     
     # Check capabilities
     capabilities = check_preview_requirements()
@@ -411,7 +411,7 @@ def preview_with_download(docx_path: str, filename: str) -> None:
     with col1:
         st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
         if capabilities['table_preservation']:
-            st.write("✅ Table preservation enabled")
+            st.write(" Table preservation enabled")
     
     # Generate and display preview
     try:
@@ -425,7 +425,7 @@ def preview_with_download(docx_path: str, filename: str) -> None:
         st.markdown("---")
         with open(docx_path, "rb") as file:
             st.download_button(
-                label="📥 Download Document",
+                label=" Download Document",
                 data=file.read(),
                 file_name=filename,
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -440,7 +440,7 @@ def preview_with_download(docx_path: str, filename: str) -> None:
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("📄 Paragraphs", paragraph_count)
+                st.metric(" Paragraphs", paragraph_count)
             with col2:
                 st.metric("📊 Tables", table_count)
             with col3:
@@ -451,13 +451,13 @@ def preview_with_download(docx_path: str, filename: str) -> None:
             st.write(f"Preview stats unavailable: {str(e)}")
             
     except Exception as e:
-        st.error(f"❌ Error generating preview: {str(e)}")
+        st.error(f"Error: Error generating preview: {str(e)}")
         
         # Fallback: still offer download
         st.markdown("---")
         with open(docx_path, "rb") as file:
             st.download_button(
-                label="📥 Download Document (Preview Failed)",
+                label=" Download Document (Preview Failed)",
                 data=file.read(),
                 file_name=filename,
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"

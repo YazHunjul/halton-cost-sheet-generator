@@ -2,18 +2,24 @@
 Main Streamlit application for the Halton Cost Sheet Generator.
 """
 import streamlit as st
-from components.forms import general_project_form
-from components.project_forms import project_structure_form
-from config.constants import SessionKeys, PROJECT_TYPES
+import os
+import tempfile
+import time
+from datetime import datetime
+from config.business_data import ESTIMATORS, SALES_CONTACTS, DELIVERY_LOCATIONS, COMPANY_ADDRESSES
+from config.constants import VALID_CANOPY_MODELS
 from utils.excel import read_excel_project_data, save_to_excel
 from utils.word import generate_quotation_document
-from openpyxl import load_workbook
-import os
 from utils.date_utils import format_date_for_display, get_current_date
+from openpyxl import load_workbook
+# from components.forms import general_project_form
+# from components.project_forms import project_structure_form
+# from config.constants import SessionKeys, PROJECT_TYPES
+from utils.word import analyze_project_areas
 
 def display_project_summary(project_data: dict):
     """Display a formatted summary of the project data."""
-    st.header("📋 Project Summary")
+    st.header("Project Summary")
     
     # General Information
     st.subheader("General Information")
@@ -32,7 +38,6 @@ def display_project_summary(project_data: dict):
         st.write("**Address:**", project_data.get("address"))
         st.write("**Sales Contact:**", project_data.get("sales_contact"))
         st.write("**Estimator:**", project_data.get("estimator"))
-        st.write("**Project Type:**", project_data.get("project_type"))
     
     # Project Structure
     if "levels" in project_data:
@@ -93,9 +98,9 @@ def display_project_summary(project_data: dict):
                     st.markdown("---")
 
 def word_generation_page():
-    """Page for generating Word documents from Excel files."""
-    st.header("📄 Generate Word Quotation")
-    st.markdown("Upload an Excel cost sheet to generate a Word quotation document.")
+    """Page for generating Word documents from uploaded Excel files."""
+    st.header(" Generate Word Documents from Excel")
+    st.markdown("Upload an existing Excel cost sheet to generate Word quotation documents.")
     
     uploaded_file = st.file_uploader(
         "Choose Excel file",
@@ -113,32 +118,26 @@ def word_generation_page():
             # Read project data from Excel
             with st.spinner("Reading project data from Excel..."):
                 project_data = read_excel_project_data(temp_path)
-                
-                # Detect and set project type based on the data (required for Excel generation)
-                if not project_data.get("project_type"):
-                    # Default to "Commercial Kitchen" as it's the most common type
-                    project_data["project_type"] = "Commercial Kitchen"
             
             # Display summary of extracted data
-            st.success("✅ Successfully extracted project data from Excel!")
+            st.success("Successfully extracted project data from Excel!")
             
             # Analyze project to show what type it is
-            from utils.word import analyze_project_areas
             has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
             
             # Show project type analysis
             if is_recoair_only:
-                st.info("🔄 **Project Type:** RecoAir-only project detected")
+                st.info("**Project Type:** RecoAir-only project detected")
             elif has_canopies and has_recoair:
-                st.info("🔄 **Project Type:** Mixed project (Canopies + RecoAir) detected")
+                st.info("**Project Type:** Mixed project (Canopies + RecoAir) detected")
             elif has_canopies:
-                st.info("🔄 **Project Type:** Canopy-only project detected")
+                st.info("**Project Type:** Canopy-only project detected")
             else:
-                st.warning("⚠️ **Project Type:** No canopies or RecoAir systems detected")
+                st.warning("**Project Type:** No canopies or RecoAir systems detected")
             
             # Show download button first for quick access
             st.markdown("---")
-            st.subheader("📥 Quick Download")
+            st.subheader("Quick Download")
             
             try:
                 with st.spinner("Preparing download..."):
@@ -151,22 +150,22 @@ def word_generation_page():
                     with open(download_word_path, "rb") as file:
                         zip_filename = os.path.basename(download_word_path)
                         st.download_button(
-                            label="📥 Download All Documents (ZIP)",
+                            label="Download All Documents (ZIP)",
                             data=file.read(),
                             file_name=zip_filename,
                             mime="application/zip",
                             type="primary"
                         )
-                    st.info("📦 ZIP file contains both Main Quotation and RecoAir Quotation documents.")
+                    st.info("ZIP file contains both Main Quotation and RecoAir Quotation documents.")
                 else:
                     # Single document
                     doc_filename = os.path.basename(download_word_path)
                     with open(download_word_path, "rb") as file:
                         # Determine appropriate label based on document type
                         if is_recoair_only:
-                            label = "📥 Download RecoAir Quotation"
+                            label = "Download RecoAir Quotation"
                         else:
-                            label = "📥 Download Quotation"
+                            label = "Download Quotation"
                         
                         st.download_button(
                             label=label,
@@ -178,16 +177,16 @@ def word_generation_page():
                     
                     # Show appropriate success message
                     if is_recoair_only:
-                        st.info("📄 RecoAir quotation document ready for download.")
+                        st.info("RecoAir quotation document ready for download.")
                     else:
-                        st.info("📄 Quotation document ready for download.")
+                        st.info("Quotation document ready for download.")
                         
             except Exception as e:
-                st.error(f"❌ Error preparing download: {str(e)}")
+                st.error(f"Error preparing download: {str(e)}")
             
             # Automatically generate and show preview of existing document
             st.markdown("---")
-            st.subheader("📄 Document Preview")
+            st.subheader("Document Preview")
             
             try:
                 with st.spinner("Generating preview of current document..."):
@@ -212,16 +211,16 @@ def word_generation_page():
                         
                         if not capabilities['advanced_preview']:
                             if "not installed" in str(capabilities.get('pandoc_version', '')):
-                                st.info("💡 Install pypandoc for enhanced preview")
+                                st.info(" Install pypandoc for enhanced preview")
                             else:
-                                st.warning(f"⚠️ {capabilities.get('pandoc_version', 'Pandoc issue')}")
+                                st.warning(f" {capabilities.get('pandoc_version', 'Pandoc issue')}")
                         elif capabilities['pandoc_version']:
-                            st.success(f"✅ Pandoc v{capabilities['pandoc_version']}")
+                            st.success(f"Yes Pandoc v{capabilities['pandoc_version']}")
                     
                     with col1:
                         st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
                         if capabilities['table_preservation']:
-                            st.write("✅ Table preservation enabled")
+                            st.write("Yes Table preservation enabled")
                     
                     # Generate and display preview
                     try:
@@ -240,22 +239,22 @@ def word_generation_page():
                             
                             col1, col2, col3 = st.columns(3)
                             with col1:
-                                st.metric("📄 Paragraphs", paragraph_count)
+                                st.metric(" Paragraphs", paragraph_count)
                             with col2:
-                                st.metric("📊 Tables", table_count)
+                                st.metric(" Tables", table_count)
                             with col3:
                                 file_size = os.path.getsize(word_path)
-                                st.metric("💾 File Size", f"{file_size/1024:.1f} KB")
+                                st.metric(" File Size", f"{file_size/1024:.1f} KB")
                                 
                         except Exception as e:
                             st.write(f"Preview stats unavailable: {str(e)}")
                             
                     except Exception as e:
-                        st.error(f"❌ Error generating preview: {str(e)}")
+                        st.error(f"No Error generating preview: {str(e)}")
                         st.write("Preview failed, but you can still generate the document below.")
                 else:
                     # Multiple documents - show previews for both
-                    st.info("📦 Multiple documents detected - showing previews for both documents:")
+                    st.info(" Multiple documents detected - showing previews for both documents:")
                     
                     # Extract and preview individual documents from the ZIP
                     import zipfile
@@ -277,16 +276,16 @@ def word_generation_page():
                         
                         if not capabilities['advanced_preview']:
                             if "not installed" in str(capabilities.get('pandoc_version', '')):
-                                st.info("💡 Install pypandoc for enhanced preview")
+                                st.info(" Install pypandoc for enhanced preview")
                             else:
-                                st.warning(f"⚠️ {capabilities.get('pandoc_version', 'Pandoc issue')}")
+                                st.warning(f" {capabilities.get('pandoc_version', 'Pandoc issue')}")
                         elif capabilities['pandoc_version']:
-                            st.success(f"✅ Pandoc v{capabilities['pandoc_version']}")
+                            st.success(f"Yes Pandoc v{capabilities['pandoc_version']}")
                     
                     with col1:
                         st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
                         if capabilities['table_preservation']:
-                            st.write("✅ Table preservation enabled")
+                            st.write("Yes Table preservation enabled")
                     
                     try:
                         with zipfile.ZipFile(word_path, 'r') as zip_ref:
@@ -294,7 +293,7 @@ def word_generation_page():
                             
                             for i, filename in enumerate(file_list):
                                 if filename.endswith('.docx'):
-                                    st.markdown(f"### 📄 Document {i+1}: {filename}")
+                                    st.markdown(f"###  Document {i+1}: {filename}")
                                     
                                     # Extract to temporary file
                                     with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_file:
@@ -318,18 +317,18 @@ def word_generation_page():
                                             
                                             col1, col2, col3 = st.columns(3)
                                             with col1:
-                                                st.metric("📄 Paragraphs", paragraph_count)
+                                                st.metric(" Paragraphs", paragraph_count)
                                             with col2:
-                                                st.metric("📊 Tables", table_count)
+                                                st.metric(" Tables", table_count)
                                             with col3:
                                                 file_size = os.path.getsize(tmp_path)
-                                                st.metric("💾 File Size", f"{file_size/1024:.1f} KB")
+                                                st.metric(" File Size", f"{file_size/1024:.1f} KB")
                                                 
                                         except Exception as e:
                                             st.write(f"Preview stats unavailable: {str(e)}")
                                     
                                     except Exception as e:
-                                        st.error(f"❌ Error generating preview for {filename}: {str(e)}")
+                                        st.error(f"No Error generating preview for {filename}: {str(e)}")
                                     
                                     finally:
                                         # Clean up temp file
@@ -340,16 +339,16 @@ def word_generation_page():
                                         st.markdown("---")
                     
                     except Exception as e:
-                        st.error(f"❌ Error extracting documents from ZIP: {str(e)}")
+                        st.error(f"No Error extracting documents from ZIP: {str(e)}")
                         st.write("Preview failed, but you can still generate the documents below.")
                     
             except Exception as e:
-                st.error(f"❌ Error generating preview: {str(e)}")
+                st.error(f"No Error generating preview: {str(e)}")
                 st.write("Preview failed, but you can still generate the document below.")
             
             st.markdown("---")
             
-            with st.expander("📋 Extracted Project Data", expanded=False):
+            with st.expander(" Extracted Project Data", expanded=False):
                 col1, col2 = st.columns(2)
                 with col1:
                     st.write("**Project Name:**", project_data.get("project_name"))
@@ -366,7 +365,7 @@ def word_generation_page():
                     # Show combined initials calculation, reference variable, customer first name, and quote title
                     from utils.word import get_sales_contact_info, get_combined_initials, generate_reference_variable, get_customer_first_name, generate_quote_title
                     estimator_name = project_data.get("estimator", "")
-                    sales_contact = get_sales_contact_info(estimator_name)
+                    sales_contact = get_sales_contact_info(estimator_name, project_data)
                     combined_initials = get_combined_initials(sales_contact['name'], estimator_name)
                     reference_variable = generate_reference_variable(
                         project_data.get('project_number', ''), 
@@ -374,30 +373,30 @@ def word_generation_page():
                         estimator_name
                     )
                     customer_first_name = get_customer_first_name(project_data.get('customer', ''))
-                    quote_title = generate_quote_title(project_data.get('revision', 'A'))
+                    quote_title = generate_quote_title(project_data.get('revision', ''))
                     st.write("**Combined Initials (Sales/Estimator):**", combined_initials)
                     st.write("**Reference Variable:**", reference_variable)
                     st.write("**Customer First Name:**", customer_first_name)
                     st.write("**Quote Title:**", quote_title)
-                    st.write("**Revision:**", project_data.get('revision', 'A'))
+                    st.write("**Revision:**", project_data.get('revision', '') or 'Initial Version')
                     st.write("**Sales Contact:**", sales_contact['name'])
                     
                     st.write("**Levels Found:**", len(project_data.get("levels", [])))
                 
                 # Show detailed analysis
                 st.markdown("---")
-                st.markdown("**📊 Project Analysis:**")
+                st.markdown("** Project Analysis:**")
                 analysis_col1, analysis_col2, analysis_col3 = st.columns(3)
                 with analysis_col1:
-                    st.write("**Has Canopies:**", "✅ Yes" if has_canopies else "❌ No")
+                    st.write("**Has Canopies:**", "Yes" if has_canopies else "No")
                 with analysis_col2:
-                    st.write("**Has RecoAir:**", "✅ Yes" if has_recoair else "❌ No")
+                    st.write("**Has RecoAir:**", "Yes" if has_recoair else "No")
                 with analysis_col3:
-                    st.write("**RecoAir Only:**", "✅ Yes" if is_recoair_only else "❌ No")
+                    st.write("**RecoAir Only:**", "Yes" if is_recoair_only else "No")
                 
                 # Show areas and their options
                 if project_data.get("levels"):
-                    st.markdown("**🏢 Areas Found:**")
+                    st.markdown("** Areas Found:**")
                     for level in project_data.get("levels", []):
                         for area in level.get("areas", []):
                             area_name = f"{level.get('level_name', '')} - {area.get('name', '')}"
@@ -406,37 +405,37 @@ def word_generation_page():
                             
                             st.write(f"• **{area_name}**: {canopy_count} canopies")
                             if options.get('uvc'):
-                                st.write("  - ✅ UV-C System")
+                                st.write("  - Yes UV-C System")
                             if options.get('sdu'):
-                                st.write("  - ✅ SDU")
+                                st.write("  - Yes SDU")
                             if options.get('recoair'):
-                                st.write("  - ✅ RecoAir System")
+                                st.write("  - Yes RecoAir System")
             
             # Show what documents will be generated
             st.markdown("---")
-            st.markdown("**📄 Documents to Generate:**")
+            st.markdown("** Documents to Generate:**")
             if is_recoair_only:
-                st.info("📋 **RecoAir Quotation** will be generated (single document)")
-                st.write("💡 Your Excel file now has dynamic pricing - totals update automatically!")
+                st.info(" **RecoAir Quotation** will be generated (single document)")
+                st.write(" Your Excel file now has dynamic pricing - totals update automatically!")
             elif has_canopies and has_recoair:
-                st.info("📦 **ZIP Package** will be generated containing:")
+                st.info(" **ZIP Package** will be generated containing:")
                 st.write("• Main Quotation (for canopies)")
                 st.write("• RecoAir Quotation (for RecoAir systems)")
-                st.write("💡 Your Excel file now has dynamic pricing - totals update automatically!")
+                st.write(" Your Excel file now has dynamic pricing - totals update automatically!")
             elif has_canopies:
-                st.info("📋 **Main Quotation** will be generated (single document)")
-                st.write("💡 Your Excel file now has dynamic pricing - totals update automatically!")
+                st.info(" **Main Quotation** will be generated (single document)")
+                st.write(" Your Excel file now has dynamic pricing - totals update automatically!")
             else:
-                st.warning("⚠️ No documents can be generated - no systems detected")
+                st.warning(" No documents can be generated - no systems detected")
             
             # Generate Word document
-            if st.button("📄 Generate Word Quotation", type="primary"):
+            if st.button(" Generate Word Quotation", type="primary"):
                 try:
                     with st.spinner("Generating Word quotation document(s)..."):
                         # Generate Word documents only (Excel has dynamic pricing now)
                         word_path = generate_quotation_document(project_data, temp_path)
                     
-                    st.success("✅ Word quotation document(s) generated successfully!")
+                    st.success("Yes Word quotation document(s) generated successfully!")
                     
                     # Determine file type and provide appropriate download button
                     if word_path.endswith('.zip'):
@@ -445,29 +444,29 @@ def word_generation_page():
                             # Extract filename from the generated path
                             zip_filename = os.path.basename(word_path)
                             st.download_button(
-                                label="📥 Download Quotation Documents (ZIP)",
+                                label=" Download Quotation Documents (ZIP)",
                                 data=file.read(),
                                 file_name=zip_filename,
                                 mime="application/zip"
                             )
-                        st.info("📦 Multiple quotation documents generated and packaged in ZIP file.")
+                        st.info(" Multiple quotation documents generated and packaged in ZIP file.")
                     else:
                         # Single document - automatically show preview with download option
                         doc_filename = os.path.basename(word_path)
                         
                         # Determine appropriate success message based on document type
                         if is_recoair_only:
-                            st.info("📄 RecoAir quotation document generated successfully.")
+                            st.info(" RecoAir quotation document generated successfully.")
                         else:
-                            st.info("📄 Quotation document generated successfully.")
+                            st.info(" Quotation document generated successfully.")
                         
                         # Show download button first
                         with open(word_path, "rb") as file:
                             # Determine appropriate label based on document type
                             if is_recoair_only:
-                                label = "📥 Download RecoAir Quotation"
+                                label = " Download RecoAir Quotation"
                             else:
-                                label = "📥 Download Quotation"
+                                label = " Download Quotation"
                             
                             st.download_button(
                                 label=label,
@@ -481,7 +480,7 @@ def word_generation_page():
                         from utils.word_preview import preview_with_download
                         
                         # Show preview with a more compact interface
-                        st.subheader("📄 Document Preview")
+                        st.subheader(" Document Preview")
                         
                         # Check capabilities and show preview options
                         from utils.word_preview import check_preview_requirements
@@ -497,14 +496,14 @@ def word_generation_page():
                             )
                             
                             if not capabilities['advanced_preview']:
-                                st.info("💡 Install pypandoc for enhanced preview")
+                                st.info(" Install pypandoc for enhanced preview")
                             elif capabilities['pandoc_version']:
                                 st.caption(f"Pandoc version: {capabilities['pandoc_version']}")
                         
                         with col1:
                             st.write("**Preview Mode:**", "Enhanced" if use_advanced else "Basic")
                             if capabilities['table_preservation']:
-                                st.write("✅ Table preservation enabled")
+                                st.write("Yes Table preservation enabled")
                         
                         # Generate and display preview
                         try:
@@ -524,25 +523,25 @@ def word_generation_page():
                                 
                                 col1, col2, col3 = st.columns(3)
                                 with col1:
-                                    st.metric("📄 Paragraphs", paragraph_count)
+                                    st.metric(" Paragraphs", paragraph_count)
                                 with col2:
-                                    st.metric("📊 Tables", table_count)
+                                    st.metric(" Tables", table_count)
                                 with col3:
                                     file_size = os.path.getsize(word_path)
-                                    st.metric("💾 File Size", f"{file_size/1024:.1f} KB")
+                                    st.metric(" File Size", f"{file_size/1024:.1f} KB")
                                     
                             except Exception as e:
                                 st.write(f"Preview stats unavailable: {str(e)}")
                                 
                         except Exception as e:
-                            st.error(f"❌ Error generating preview: {str(e)}")
+                            st.error(f"No Error generating preview: {str(e)}")
                             st.write("The document was generated successfully but preview failed. You can still download it above.")
                     
                     # Add note about dynamic pricing
                     st.success("✨ **Your Excel file now has dynamic pricing!** The JOB TOTAL sheet will automatically update when you edit any individual sheet prices.")
                 
                 except Exception as e:
-                    st.error(f"❌ Error generating Word document: {str(e)}")
+                    st.error(f"No Error generating Word document: {str(e)}")
             
             # Clean up temp file
             if os.path.exists(temp_path):
@@ -553,7 +552,7 @@ def word_generation_page():
             
             # Check if this is a validation error with detailed information
             if "Data validation errors found:" in error_message:
-                st.error("❌ **Excel File Validation Errors**")
+                st.error("No **Excel File Validation Errors**")
                 st.markdown("The following data validation errors were found in your Excel file:")
                 
                 # Split the error message to extract the validation details
@@ -561,27 +560,27 @@ def word_generation_page():
                 if len(parts) > 1:
                     validation_details = parts[1].strip()
                     # Display each validation error in an expandable section
-                    with st.expander("📋 **Detailed Error Information**", expanded=True):
+                    with st.expander(" **Detailed Error Information**", expanded=True):
                         st.markdown(validation_details)
                 
                 st.markdown("---")
-                st.markdown("### 🔧 **How to Fix:**")
+                st.markdown("###  **How to Fix:**")
                 st.markdown("1. Open your Excel file")
                 st.markdown("2. Navigate to the specific cells mentioned above")
                 st.markdown("3. Ensure all numeric fields contain valid numbers (not letters or text)")
                 st.markdown("4. Save the file and try uploading again")
                 
-                st.info("💡 **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
+                st.info(" **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
                 
             else:
-                st.error(f"❌ Error reading Excel file: {error_message}")
+                st.error(f"No Error reading Excel file: {error_message}")
             
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
 def revision_page():
     """Page for creating new revisions from existing Excel files."""
-    st.header("📝 Create New Revision")
+    st.header(" Create New Revision")
     st.markdown("Upload an existing Excel cost sheet to create a new revision with the same data.")
     
     uploaded_file = st.file_uploader(
@@ -600,20 +599,17 @@ def revision_page():
             # Read project data from Excel
             with st.spinner("Reading project data from Excel..."):
                 project_data = read_excel_project_data(temp_path)
-                
-                # Ensure project type is set (required for Excel generation)
-                if not project_data.get("project_type"):
-                    # Default to "Commercial Kitchen" as it's the most common type
-                    project_data["project_type"] = "Commercial Kitchen"
             
-            st.success("✅ Successfully extracted project data from Excel!")
+            # Display summary of extracted data
+            st.success("Yes Successfully extracted project data from Excel!")
             
             # Show current revision info
-            current_revision = project_data.get('revision', 'A')
-            st.info(f"📋 **Current Revision:** {current_revision}")
+            current_revision = project_data.get('revision', '')
+            revision_display = current_revision if current_revision else 'Initial Version'
+            st.info(f" **Current Revision:** {revision_display}")
             
             # Display project summary
-            with st.expander("📋 Project Information", expanded=False):
+            with st.expander(" Project Information", expanded=False):
                 col1, col2 = st.columns(2)
                 with col1:
                     st.write("**Project Name:**", project_data.get("project_name"))
@@ -629,22 +625,24 @@ def revision_page():
                     st.write("**Current Revision:**", current_revision)
                     
                     # Show project analysis
-                    from utils.word import analyze_project_areas
                     has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
-                    st.write("**Has Canopies:**", "✅ Yes" if has_canopies else "❌ No")
-                    st.write("**Has RecoAir:**", "✅ Yes" if has_recoair else "❌ No")
-                    st.write("**Has UV Canopies:**", "✅ Yes" if has_uv else "❌ No")
+                    st.write("**Has Canopies:**", "Yes" if has_canopies else "No")
+                    st.write("**Has RecoAir:**", "Yes" if has_recoair else "No")
+                    st.write("**Has UV Canopies:**", "Yes" if has_uv else "No")
                     st.write("**Levels Found:**", len(project_data.get("levels", [])))
             
             # Revision options
             st.markdown("---")
-            st.subheader("🔄 Revision Options")
+            st.subheader(" Revision Options")
             
             col1, col2 = st.columns(2)
             
             with col1:
                 # Auto-increment revision
-                next_revision = chr(ord(current_revision) + 1) if current_revision and len(current_revision) == 1 and current_revision < 'Z' else 'B'
+                if current_revision == '':
+                    next_revision = 'A'  # First revision from blank should be A
+                else:
+                    next_revision = chr(ord(current_revision) + 1) if current_revision and len(current_revision) == 1 and current_revision < 'Z' else 'B'
                 st.write(f"**Suggested Next Revision:** {next_revision}")
                 
                 revision_choice = st.radio(
@@ -676,7 +674,7 @@ def revision_page():
                 st.write(f"**Date will remain:** {format_date_for_display(new_date)}")
             
             # Generate new revision
-            if st.button("🔄 Create New Revision", type="primary"):
+            if st.button(" Create New Revision", type="primary"):
                 try:
                     with st.spinner(f"Generating revision {new_revision}..."):
                         from utils.excel import create_revision_from_existing
@@ -692,7 +690,7 @@ def revision_page():
                         with open(output_path, "rb") as file:
                             excel_data = file.read()
                     
-                    st.success(f"✅ Revision {new_revision} created successfully!")
+                    st.success(f"Yes Revision {new_revision} created successfully!")
                     
                     # Create download filename: "Project Number Cost Sheet Date"
                     project_number = project_data.get('project_number', 'unknown')
@@ -700,23 +698,23 @@ def revision_page():
                     download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
                     
                     st.download_button(
-                        label=f"📥 Download Revision {new_revision}",
+                        label=f" Download Revision {new_revision}",
                         data=excel_data,
                         file_name=download_filename,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                     
                     # Show what changed
-                    st.info(f"📋 **Changes Made:**")
+                    st.info(f" **Changes Made:**")
                     st.write(f"• Revision updated: {current_revision} → {new_revision}")
                     if update_date:
                         st.write(f"• Date updated: {format_date_for_display(project_data.get('date', 'N/A'))} → {new_date}")
-                    st.write("• ✅ All existing data preserved (canopies, pricing, formulas)")
-                    st.write("• ✅ Dynamic pricing formulas maintained")
-                    st.write("• ✅ All manual entries and calculations preserved")
+                    st.write("• Yes All existing data preserved (canopies, pricing, formulas)")
+                    st.write("• Yes Dynamic pricing formulas maintained")
+                    st.write("• Yes All manual entries and calculations preserved")
                     
                 except Exception as e:
-                    st.error(f"❌ Error creating revision: {str(e)}")
+                    st.error(f"No Error creating revision: {str(e)}")
             
             # Clean up temp file
             if os.path.exists(temp_path):
@@ -727,7 +725,7 @@ def revision_page():
             
             # Check if this is a validation error with detailed information
             if "Data validation errors found:" in error_message:
-                st.error("❌ **Excel File Validation Errors**")
+                st.error("No **Excel File Validation Errors**")
                 st.markdown("The following data validation errors were found in your Excel file:")
                 
                 # Split the error message to extract the validation details
@@ -735,175 +733,742 @@ def revision_page():
                 if len(parts) > 1:
                     validation_details = parts[1].strip()
                     # Display each validation error in an expandable section
-                    with st.expander("📋 **Detailed Error Information**", expanded=True):
+                    with st.expander(" **Detailed Error Information**", expanded=True):
                         st.markdown(validation_details)
                 
                 st.markdown("---")
-                st.markdown("### 🔧 **How to Fix:**")
+                st.markdown("###  **How to Fix:**")
                 st.markdown("1. Open your Excel file")
                 st.markdown("2. Navigate to the specific cells mentioned above")
                 st.markdown("3. Ensure all numeric fields contain valid numbers (not letters or text)")
                 st.markdown("4. Save the file and try uploading again")
                 
-                st.info("💡 **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
+                st.info(" **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
                 
             else:
-                st.error(f"❌ Error reading Excel file: {error_message}")
+                st.error(f"No Error reading Excel file: {error_message}")
             
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
 def initialize_session_state():
-    """Initialize all session state variables if they don't exist."""
-    if SessionKeys.PROJECT_DATA not in st.session_state:
-        st.session_state[SessionKeys.PROJECT_DATA] = {}
-    
-    if SessionKeys.CURRENT_STEP not in st.session_state:
-        st.session_state[SessionKeys.CURRENT_STEP] = 1
-        
-    if SessionKeys.PROJECT_TYPE not in st.session_state:
-        st.session_state[SessionKeys.PROJECT_TYPE] = None
+    """Initialize session state variables."""
+    if 'uploaded_project_data' not in st.session_state:
+        st.session_state.uploaded_project_data = None
+    if 'upload_success' not in st.session_state:
+        st.session_state.upload_success = False
+    if 'levels' not in st.session_state:
+        st.session_state.levels = []
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 1
+    if 'project_info' not in st.session_state:
+        st.session_state.project_info = {}
 
 def navigation_buttons():
-    """Render navigation buttons based on current step."""
-    cols = st.columns([1, 1, 1])
+    """Display navigation buttons based on the current step."""
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    with cols[0]:
-        if st.session_state[SessionKeys.CURRENT_STEP] > 1:
-            if st.button("⬅️ Go Back", use_container_width=True):
-                st.session_state[SessionKeys.CURRENT_STEP] -= 1
-                st.rerun()  # Force page refresh to show the previous step
+    with col1:
+        if st.session_state.current_step > 1:
+            if st.button("← Previous", key="nav_prev"):
+                st.session_state.current_step -= 1
+                st.rerun()
+    
+    with col2:
+        # Progress indicator
+        steps = ["Project Info", "Structure", "Canopies", "Review"]
+        current_step = st.session_state.current_step
+        progress_text = f"Step {current_step}/4: {steps[current_step-1]}"
+        st.markdown(f"<div style='text-align: center; font-weight: bold;'>{progress_text}</div>", unsafe_allow_html=True)
+        
+        # Progress bar
+        progress = current_step / 4
+        st.progress(progress)
+    
+    with col3:
+        if st.session_state.current_step < 4:
+            if st.button("Next →", key="nav_next"):
+                st.session_state.current_step += 1
+                st.rerun()
+
+def step1_project_information():
+    """Step 1: Project Information"""
+    st.header("Step 1: Project Information")
+    
+    # Use uploaded data if available
+    if st.session_state.uploaded_project_data:
+        project_data = st.session_state.uploaded_project_data.copy()
+        if not st.session_state.project_info:  # Only show message once
+            st.info("Form auto-populated from uploaded Excel file. You can modify any fields as needed.")
+    else:
+        project_data = st.session_state.project_info
+    
+    # Company selection mode (outside columns for immediate reactivity)
+    company_mode = st.radio(
+        "Company Selection *",
+        options=["Select from list", "Enter custom company"],
+        index=0 if project_data.get("company_mode", "Select from list") == "Select from list" else 1,
+        key="company_mode_input",
+        help="Choose whether to select from predefined companies or enter a custom company"
+    )
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        project_name = st.text_input("Project Name", value=project_data.get('project_name', ''), key="project_name")
+        customer = st.text_input("Customer Name", value=project_data.get('customer', ''), key="customer")
+        
+        # Company and address selection based on mode
+        if company_mode == "Select from list":
+            # Get current company value and find its index
+            current_company = project_data.get('company', '')
+            company_options = list(COMPANY_ADDRESSES.keys())
+            default_index = 0
+            if current_company in company_options:
+                default_index = company_options.index(current_company)
+            
+            company = st.selectbox(
+                "Company *",
+                options=company_options,
+                index=default_index,
+                key="company_select",
+                help="Select the company from the predefined list"
+            )
+            
+            # Auto-populate address based on selected company
+            if company in COMPANY_ADDRESSES:
+                address = st.text_area("Address", value=COMPANY_ADDRESSES[company], key="address", help="Address auto-populated from company selection")
+            else:
+                address = st.text_area("Address", value=project_data.get('address', ''), key="address")
+            
+            custom_company_name = ""
+            custom_company_address = ""
+        else:
+            # Custom company mode
+            company = ""
+            custom_company_name = st.text_input(
+                "Custom Company Name *",
+                value=project_data.get('custom_company_name', project_data.get('company', '')),
+                key="custom_company_name_input",
+                help="Enter the custom company name"
+            )
+            custom_company_address = st.text_area(
+                "Custom Company Address *",
+                value=project_data.get('custom_company_address', project_data.get('address', '')),
+                key="custom_company_address_input",
+                help="Enter the full company address (use line breaks for multiple lines)",
+                height=100
+            )
+            address = custom_company_address
+        
+        location = st.text_input("Location", value=project_data.get('project_location', ''), key="project_location")
+    
+    with col2:
+        project_number = st.text_input("Project Number", value=project_data.get('project_number', ''), key="project_number")
+        
+        # Handle date conversion from string format
+        if project_data.get('date'):
+            try:
+                if isinstance(project_data['date'], str):
+                    # Try to parse date string in DD/MM/YYYY format
+                    date_obj = datetime.strptime(project_data['date'], "%d/%m/%Y").date()
+                    date = st.date_input("Date", value=date_obj, key="date")
+                else:
+                    date = st.date_input("Date", value=project_data['date'], key="date")
+            except:
+                date = st.date_input("Date", key="date")
+        else:
+            date = st.date_input("Date", key="date")
+        
+        # Get estimator options and set default from uploaded data
+        estimator_options = list(ESTIMATORS.keys())
+        default_estimator_index = 0
+        if project_data.get('estimator'):
+            try:
+                default_estimator_index = estimator_options.index(project_data['estimator'])
+            except ValueError:
+                # If exact match not found, try partial match
+                for i, estimator in enumerate(estimator_options):
+                    if estimator.lower() in project_data['estimator'].lower() or project_data['estimator'].lower() in estimator.lower():
+                        default_estimator_index = i
+                        break
+        
+        estimator = st.selectbox("Estimator", estimator_options, index=default_estimator_index, key="estimator")
+        
+        # Get sales contact options and set default from uploaded data
+        sales_contact_options = list(SALES_CONTACTS.keys())
+        default_sales_contact_index = 0
+        if project_data.get('sales_contact'):
+            try:
+                default_sales_contact_index = sales_contact_options.index(project_data['sales_contact'])
+            except ValueError:
+                # If exact match not found, try partial match
+                for i, contact in enumerate(sales_contact_options):
+                    if contact.lower() in project_data['sales_contact'].lower() or project_data['sales_contact'].lower() in contact.lower():
+                        default_sales_contact_index = i
+                        break
+        
+        sales_contact = st.selectbox("Sales Contact", sales_contact_options, index=default_sales_contact_index, key="sales_contact")
+        
+        # Get delivery location options and set default from uploaded data
+        delivery_options = DELIVERY_LOCATIONS
+        default_delivery_index = 0
+        if project_data.get('delivery_location'):
+            try:
+                default_delivery_index = delivery_options.index(project_data['delivery_location'])
+            except ValueError:
+                # If exact match not found, keep default as 0 (Select...)
+                pass
+        
+        delivery_location = st.selectbox("Delivery Location", delivery_options, index=default_delivery_index, key="delivery_location")
+        
+        # Revision field with uploaded data
+        revision = st.text_input("Revision (leave blank for initial version)", value=project_data.get('revision', ''), key="revision")
+    
+    # Determine final company name and address based on mode
+    if company_mode == "Select from list":
+        final_company_name = company
+        final_address = COMPANY_ADDRESSES.get(company, address)
+    else:  # Custom company
+        final_company_name = custom_company_name
+        final_address = custom_company_address
+    
+    # Store project info in session state
+    st.session_state.project_info = {
+        'project_name': project_name,
+        'customer': customer,
+        'company': final_company_name,
+        'address': final_address,
+        'project_location': location,
+        'project_number': project_number,
+        'date': date.strftime("%d/%m/%Y") if date else "",
+        'estimator': estimator,
+        'sales_contact': sales_contact,
+        'delivery_location': delivery_location if delivery_location != "Select..." else "",
+        'revision': revision,
+        # Store the selection mode and custom fields for form persistence
+        'company_mode': company_mode,
+        'custom_company_name': custom_company_name,
+        'custom_company_address': custom_company_address
+    }
+    
+    # Validation
+    if company_mode == "Select from list":
+        required_fields = [project_name, project_number, final_company_name]
+    else:
+        required_fields = [project_name, project_number, custom_company_name, custom_company_address]
+    
+    if all(required_fields):
+        st.success("Project information is complete!")
+    else:
+        st.warning("Please fill in all required fields to continue.")
+
+def step2_project_structure():
+    """Step 2: Project Structure (Levels and Areas)"""
+    st.header("Step 2: Project Structure")
+    st.markdown("Define the levels and areas for your project.")
+    
+    # Load uploaded levels data if available and not already loaded
+    if (st.session_state.uploaded_project_data and 
+        st.session_state.uploaded_project_data.get('levels') and 
+        not st.session_state.levels):  # Only load if levels is empty
+        st.session_state.levels = st.session_state.uploaded_project_data['levels'].copy()
+        st.rerun()  # Refresh to show the loaded data
+    
+    # Level management
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader("Levels")
+    with col2:
+        if st.button("Add Level", key="add_level"):
+            new_level_number = len(st.session_state.levels) + 1
+            st.session_state.levels.append({
+                "level_number": new_level_number,
+                "level_name": f"Level {new_level_number}",
+                "areas": []
+            })
+            st.rerun()
+
+    # Display levels
+    for level_idx, level in enumerate(st.session_state.levels):
+        with st.expander(f"Level {level['level_number']}: {level['level_name']}", expanded=True):
+            # Level name input
+            new_level_name = st.text_input(f"Level Name", value=level['level_name'], key=f"level_name_{level_idx}")
+            if new_level_name != level['level_name']:
+                st.session_state.levels[level_idx]['level_name'] = new_level_name
+                st.rerun()
+            
+            # Remove level button
+            if st.button(f"Remove Level {level['level_number']}", key=f"remove_level_{level_idx}"):
+                del st.session_state.levels[level_idx]
+                # Renumber remaining levels
+                for i, remaining_level in enumerate(st.session_state.levels):
+                    remaining_level['level_number'] = i + 1
+                    remaining_level['level_name'] = remaining_level['level_name'].replace(f"Level {remaining_level['level_number']}", f"Level {i + 1}")
+                st.rerun()
+            
+            # Area management for this level
+            st.markdown(f"### Areas in {level['level_name']}")
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button(f"Add Area", key=f"add_area_{level_idx}"):
+                    st.session_state.levels[level_idx]['areas'].append({
+                        "name": f"Area {len(level['areas']) + 1}",
+                        "canopies": [],
+                        "options": {"uvc": False, "sdu": False, "recoair": False, "uv_extra_over": False}
+                    })
+                    st.rerun()
+            
+            # Display areas
+            for area_idx, area in enumerate(level['areas']):
+                area_key = f"level_{level_idx}_area_{area_idx}"
+                with st.container():
+                    st.markdown(f"#### Area: {area['name']}")
+                    
+                    # Area name and options
+                    col1, col2, col3 = st.columns([2, 1, 1])
+                    with col1:
+                        new_area_name = st.text_input("Area Name", value=area['name'], key=f"{area_key}_name")
+                        if new_area_name != area['name']:
+                            st.session_state.levels[level_idx]['areas'][area_idx]['name'] = new_area_name
+                            st.rerun()
+                    
+                    with col2:
+                        # Area options
+                        st.markdown("**Options:**")
+                        uvc = st.checkbox("UV-C", value=area['options'].get('uvc', False), key=f"{area_key}_uvc")
+                        sdu = st.checkbox("SDU", value=area['options'].get('sdu', False), key=f"{area_key}_sdu")
+                        recoair = st.checkbox("RecoAir", value=area['options'].get('recoair', False), key=f"{area_key}_recoair")
+                        
+                        # UV Extra Over option - always available if area has canopies
+                        has_canopies = len(area.get('canopies', [])) > 0
+                        if has_canopies:
+                            uv_extra_over = st.checkbox("UV Extra Over", value=area['options'].get('uv_extra_over', False), key=f"{area_key}_uv_extra_over", help="Calculate additional cost for UV functionality")
+                        else:
+                            uv_extra_over = False
+                        
+                        # Update options
+                        st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
+                            'uvc': uvc,
+                            'sdu': sdu,
+                            'recoair': recoair,
+                            'uv_extra_over': uv_extra_over
+                        }
+                    
+                    with col3:
+                        if st.button(f"Remove Area", key=f"{area_key}_remove"):
+                            del st.session_state.levels[level_idx]['areas'][area_idx]
+                            st.rerun()
+                    
+                    st.markdown("---")
+
+def step3_canopy_configuration():
+    """Step 3: Canopy Configuration"""
+    st.header("Step 3: Canopy Configuration")
+    st.markdown("Configure canopies for each area.")
+    
+    if not st.session_state.levels:
+        st.warning("Please add levels and areas in Step 2 before configuring canopies.")
+        return
+    
+    # Display areas with canopy configuration
+    for level_idx, level in enumerate(st.session_state.levels):
+        st.subheader(f"Level {level['level_number']}: {level['level_name']}")
+        
+        for area_idx, area in enumerate(level['areas']):
+            area_key = f"level_{level_idx}_area_{area_idx}"
+            with st.expander(f"Area: {area['name']}", expanded=True):
+                # Check if area has any UV canopies to determine available options
+                has_uv_canopies = any(canopy.get('model', '').upper().startswith('UV') for canopy in area.get('canopies', []))
+                
+                # Display area options with UV Extra Over
+                options_text = f"UV-C: {'Yes' if area['options']['uvc'] else 'No'} | SDU: {'Yes' if area['options']['sdu'] else 'No'} | RecoAir: {'Yes' if area['options']['recoair'] else 'No'}"
+                options_text += f" | UV Extra Over: {'Yes' if area['options'].get('uv_extra_over', False) else 'No'}"
+                
+                st.markdown(f"**Area Options:** {options_text}")
+                
+                # Canopy management
+                st.markdown("**Canopies:**")
+                col1, col2 = st.columns([3, 1])
+                with col2:
+                    if st.button("Add Canopy", key=f"{area_key}_add_canopy"):
+                        new_canopy = {
+                            "reference_number": f"C{len(area['canopies']) + 1:03d}",
+                            "configuration": "",
+                            "model": "",
+                            "length": "",
+                            "width": "",
+                            "height": "",
+                            "sections": "",
+                            "lighting_type": "",
+                            "extract_volume": "",
+                            "extract_static": "",
+                            "mua_volume": "",
+                            "supply_static": "",
+                            "options": {"fire_suppression": False},
+                            "wall_cladding": {"type": "None", "width": None, "height": None, "position": None}
+                        }
+                        st.session_state.levels[level_idx]['areas'][area_idx]['canopies'].append(new_canopy)
+                        st.rerun()
+                
+                # Display canopies
+                for canopy_idx, canopy in enumerate(area['canopies']):
+                    canopy_key = f"{area_key}_canopy_{canopy_idx}"
+                    with st.container():
+                        st.markdown(f"**Canopy {canopy_idx + 1}:**")
+                        
+                        # Basic canopy info - clean organized layout
+                        
+                        # Row 1: Reference, Model, Configuration
+                        row1_col1, row1_col2, row1_col3 = st.columns(3)
+                        
+                        with row1_col1:
+                            ref_num = st.text_input("Reference", value=canopy.get('reference_number', ''), key=f"{canopy_key}_ref")
+                        
+                        with row1_col2:
+                            model = st.selectbox("Model", [""] + VALID_CANOPY_MODELS, 
+                                               index=([""] + VALID_CANOPY_MODELS).index(canopy.get('model', '')) if canopy.get('model', '') in ([""] + VALID_CANOPY_MODELS) else 0,
+                                               key=f"{canopy_key}_model")
+                        
+                        with row1_col3:
+                            configuration = st.selectbox("Configuration", 
+                                                       ["", "Wall", "Island", "Single", "Double", "Corner"], 
+                                                       index=["", "Wall", "Island", "Single", "Double", "Corner"].index(canopy.get('configuration', '')) if canopy.get('configuration', '') in ["", "Wall", "Island", "Single", "Double", "Corner"] else 0,
+                                                       key=f"{canopy_key}_config")
+                        
+                        # Row 2: Dimensions - Length, Width, Height
+                        st.markdown("**Dimensions:**")
+                        row2_col1, row2_col2, row2_col3 = st.columns(3)
+                        
+                        with row2_col1:
+                            length = st.number_input("Length", value=int(canopy.get('length', 0)) if canopy.get('length') else 0, key=f"{canopy_key}_length")
+                        
+                        with row2_col2:
+                            width = st.number_input("Width", value=int(canopy.get('width', 0)) if canopy.get('width') else 0, key=f"{canopy_key}_width")
+                        
+                        with row2_col3:
+                            height = st.number_input("Height", value=int(canopy.get('height', 0)) if canopy.get('height') else 0, key=f"{canopy_key}_height")
+                        
+                        # Row 3: Sections and Fire Suppression
+                        row3_col1, row3_col2, row3_col3 = st.columns(3)
+                        
+                        with row3_col1:
+                            sections = st.number_input("Sections", value=int(canopy.get('sections', 0)) if canopy.get('sections') else 0, key=f"{canopy_key}_sections")
+                        
+                        with row3_col2:
+                            fire_suppression = st.checkbox("Fire Suppression", value=canopy.get('options', {}).get('fire_suppression', False), key=f"{canopy_key}_fire")
+                        
+                        # Update canopy data
+                        st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx].update({
+                            'reference_number': ref_num,
+                            'configuration': configuration,
+                            'model': model,
+                            'length': length,
+                            'width': width,
+                            'height': height,
+                            'sections': sections,
+                            'options': {'fire_suppression': fire_suppression}
+                        })
+                        
+                        # Remove canopy button
+                        if st.button(f"Remove Canopy", key=f"{canopy_key}_remove"):
+                            del st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]
+                            st.rerun()
+                        
+                        st.markdown("---")
+
+def step4_review_and_generate():
+    """Step 4: Review and Generate"""
+    st.header("Step 4: Review & Generate")
+    st.markdown("Review your project configuration and generate the cost sheet.")
+    
+    # Validation
+    if not st.session_state.project_info.get('project_name') or not st.session_state.project_info.get('project_number'):
+        st.error("Please complete Step 1: Project Information")
+        return
+    
+    # Project summary
+    st.subheader("Project Summary")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Project Name:**", st.session_state.project_info.get('project_name'))
+        st.write("**Customer:**", st.session_state.project_info.get('customer'))
+        st.write("**Company:**", st.session_state.project_info.get('company'))
+        st.write("**Address:**", st.session_state.project_info.get('address'))
+        st.write("**Location:**", st.session_state.project_info.get('project_location'))
+    
+    with col2:
+        st.write("**Project Number:**", st.session_state.project_info.get('project_number'))
+        st.write("**Date:**", st.session_state.project_info.get('date'))
+        st.write("**Estimator:**", st.session_state.project_info.get('estimator'))
+        st.write("**Sales Contact:**", st.session_state.project_info.get('sales_contact'))
+        st.write("**Delivery Location:**", st.session_state.project_info.get('delivery_location'))
+        st.write("**Revision:**", st.session_state.project_info.get('revision') or 'Initial Version')
+    
+    # Structure summary
+    st.subheader("Project Structure")
+    total_levels = len(st.session_state.levels)
+    total_areas = sum(len(level.get('areas', [])) for level in st.session_state.levels)
+    total_canopies = sum(len(area.get('canopies', [])) for level in st.session_state.levels for area in level.get('areas', []))
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Levels", total_levels)
+    with col2:
+        st.metric("Areas", total_areas)
+    with col3:
+        st.metric("Canopies", total_canopies)
+    
+    # Detailed structure
+    if st.session_state.levels:
+        with st.expander("Detailed Structure", expanded=False):
+            for level in st.session_state.levels:
+                st.markdown(f"**{level['level_name']}**")
+                for area in level['areas']:
+                    canopy_count = len(area['canopies'])
+                    options = []
+                    if area['options']['uvc']: options.append("UV-C")
+                    if area['options']['sdu']: options.append("SDU")
+                    if area['options']['recoair']: options.append("RecoAir")
+                    options_str = ", ".join(options) if options else "None"
+                    st.write(f"  • {area['name']}: {canopy_count} canopies, Options: {options_str}")
+    
+    # Generate button
+    st.markdown("---")
+    if st.button("Generate Excel Cost Sheet", type="primary", use_container_width=True):
+        try:
+            # Combine all project data
+            final_project_data = st.session_state.project_info.copy()
+            final_project_data['levels'] = st.session_state.levels
+            
+            # Generate Excel file
+            with st.spinner("Generating Excel cost sheet..."):
+                output_path = save_to_excel(final_project_data)
+            
+            st.success(f"Excel cost sheet generated successfully!")
+            
+            # Provide download option for Excel file
+            try:
+                with open(output_path, "rb") as file:
+                    excel_data = file.read()
+                
+                # Create download filename
+                project_number = final_project_data.get('project_number', 'unknown')
+                date_str = final_project_data.get('date', '')
+                if date_str:
+                    formatted_date = date_str.replace('/', '')
+                else:
+                    formatted_date = get_current_date().replace('/', '')
+                
+                download_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
+                
+                st.download_button(
+                    label="Download Excel Cost Sheet",
+                    data=excel_data,
+                    file_name=download_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
+                
+            except Exception as e:
+                st.warning(f"Excel file generated but download preparation failed: {str(e)}")
+                st.info(f"File saved to: `{output_path}`")
+            
+            # Show project summary
+            with st.expander("Generated Project Summary", expanded=True):
+                from utils.word import get_sales_contact_info, get_combined_initials, generate_reference_variable, get_customer_first_name, generate_quote_title
+                estimator_name = final_project_data.get("estimator", "")
+                sales_contact = get_sales_contact_info(estimator_name, final_project_data)
+                combined_initials = get_combined_initials(sales_contact['name'], estimator_name)
+                reference_variable = generate_reference_variable(final_project_data.get("project_number", ""), sales_contact['name'], estimator_name)
+                customer_first_name = get_customer_first_name(final_project_data.get("customer", ""))
+                quote_title = generate_quote_title(final_project_data.get('revision', ''))
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.markdown(f"**Project:** {final_project_data.get('project_name', 'N/A')}")
+                    st.markdown(f"**Customer:** {final_project_data.get('customer', 'N/A')}")
+                    st.markdown(f"**Company:** {final_project_data.get('company', 'N/A')}")
+                with col2:
+                    st.markdown(f"**Project Number:** {final_project_data.get('project_number', 'N/A')}")
+                    st.markdown(f"**Combined Initials:** {combined_initials}")
+                    st.markdown(f"**Reference Variable:** {reference_variable}")
+                with col3:
+                    st.markdown(f"**Customer First Name:** {customer_first_name}")
+                    st.markdown(f"**Quote Title:** {quote_title}")
+                    st.markdown(f"**Revision:** {final_project_data.get('revision', '') or 'Initial Version'}")
+            
+        except Exception as e:
+            st.error(f"Error generating Excel file: {str(e)}")
 
 def main():
-    # Set page config
-    st.set_page_config(
-        page_title="Halton Cost Sheet Generator",
-        page_icon="🏢",
-        layout="wide"
-    )
+    st.set_page_config(page_title="Halton Quotation System", page_icon="🏭", layout="wide")
+    st.title("Halton Quotation System")
     
     # Initialize session state
     initialize_session_state()
     
-    # Sidebar for navigation
-    with st.sidebar:
-        st.title("Navigation")
-        page = st.radio("Choose a page:", ["Create New Project", "Generate Word Document", "Create New Revision"])
+    # Sidebar navigation
+    st.sidebar.title("Navigation")
+    
+    page = st.sidebar.selectbox(
+        "Choose a page:",
+        ["Project Setup", "Generate Word Documents", "Create Revision"]
+    )
+    
+    # Page routing
+    if page == "Project Setup":
+        # Excel Upload Feature
+        st.markdown("### Quick Start from Existing Project")
+        st.markdown("Upload an existing Excel file to auto-populate form fields")
         
-        st.markdown("---")
-        st.subheader("Debug Info")
-        st.write("Current Step:", st.session_state[SessionKeys.CURRENT_STEP])
-        st.write("Project Type:", st.session_state[SessionKeys.PROJECT_TYPE])
-        if st.button("Start Over"):
-            # Clear all session state except the current page
-            for key in st.session_state.keys():
-                if key != "pages_initialized":  # Streamlit internal state
-                    del st.session_state[key]
-            initialize_session_state()
-            st.rerun()
-    
-    # Header
-    st.title("Halton Cost Sheet Generator")
-    st.markdown("---")
-    
-    if page == "Generate Word Document":
-        word_generation_page()
-        return
-    elif page == "Create New Revision":
-        revision_page()
-        return
-    
-    # Project Type Selection
-    if st.session_state[SessionKeys.PROJECT_TYPE] is None:
-        st.info("Please select a project type to begin")
-        project_type = st.selectbox(
-            "Select Project Type *",
-            options=PROJECT_TYPES,
-            index=None,
-            help="Choose the type of project you're creating"
+        uploaded_file = st.file_uploader(
+            "Choose an Excel file", 
+            type=['xlsx'],
+            help="Upload a previous project Excel file to automatically fill in the form"
         )
         
-        if project_type:
-            st.session_state[SessionKeys.PROJECT_TYPE] = project_type
-            # Store project type in project data
-            st.session_state[SessionKeys.PROJECT_DATA]["project_type"] = project_type
-            st.rerun()
-    
-    # Show current project type
-    st.info(f"Project Type: {st.session_state[SessionKeys.PROJECT_TYPE]}")
-    
-    # Navigation buttons
-    navigation_buttons()
-    
-    # Step 1: General Project Information
-    if st.session_state[SessionKeys.CURRENT_STEP] == 1:
-        st.header("Step 1: General Project Information")
-        project_data = general_project_form()
+        # Process uploaded file with AI loading effect
+        if uploaded_file is not None and not st.session_state.upload_success:
+            try:
+                # Save uploaded file temporarily
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                    tmp_file.write(uploaded_file.getvalue())
+                    temp_path = tmp_file.name
+                
+                # Simplified loading effect without rainbow border
+                with st.container():
+                    # Create columns for better layout
+                    col1, col2 = st.columns([2, 1])
+                    
+                    with col1:
+                        # Progress container
+                        progress_container = st.container()
+                        status_container = st.container()
+                    
+                    with col2:
+                        # Animation placeholder
+                        ai_placeholder = st.empty()
+                    
+                    # Loading animation frames
+                    ai_frames = [
+                        "Initializing AI...",
+                        "Analyzing Excel structure...",
+                        "Reading project metadata...",
+                        "Extracting canopy data...",
+                        "Processing fire suppression...",
+                        "Analyzing lighting options...",
+                        "Calculating pricing...",
+                        "Finalizing extraction..."
+                    ]
+                    
+                    # Progress bar
+                    progress_bar = progress_container.progress(0)
+                    status_text = status_container.empty()
+                    
+                    # Animate the loading process
+                    for i, frame in enumerate(ai_frames):
+                        progress = (i + 1) / len(ai_frames)
+                        progress_bar.progress(progress)
+                        status_text.markdown(f"**{frame}**")
+                        ai_placeholder.markdown(f"### {frame}")
+                        time.sleep(0.5)  # Pause for effect
+                    
+                    # Final processing
+                    status_text.markdown("**Processing project data...**")
+                    ai_placeholder.markdown("### Processing project data...")
+                    
+                    # Actually extract the data
+                    extracted_data = read_excel_project_data(temp_path)
+                    
+                    # Success animation
+                    progress_bar.progress(1.0)
+                    status_text.markdown("**Extraction Complete!**")
+                    ai_placeholder.markdown("### Extraction Complete!")
+                    time.sleep(1)
+                    
+                    # Clear loading animation
+                    progress_container.empty()
+                    status_container.empty()
+                    ai_placeholder.empty()
+                    
+                    # Store extracted data
+                    st.session_state.uploaded_project_data = extracted_data
+                    st.session_state.upload_success = True
+                    
+                    # Success message
+                    st.success("Project data extracted successfully! Form fields have been auto-populated.")
+                    
+                    # Show extracted project summary
+                    with st.expander("Extracted Project Summary", expanded=True):
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.markdown(f"**Project:** {extracted_data.get('project_name', 'N/A')}")
+                            st.markdown(f"**Customer:** {extracted_data.get('customer', 'N/A')}")
+                            st.markdown(f"**Company:** {extracted_data.get('company', 'N/A')}")
+                        
+                        with col2:
+                            st.markdown(f"**Project Number:** {extracted_data.get('project_number', 'N/A')}")
+                            st.markdown(f"**Estimator:** {extracted_data.get('estimator', 'N/A')}")
+                            st.markdown(f"**Date:** {extracted_data.get('date', 'N/A')}")
+                        
+                        with col3:
+                            st.markdown(f"**Revision:** {extracted_data.get('revision', 'Initial') or 'Initial'}")
+                            total_levels = len(extracted_data.get('levels', []))
+                            total_areas = sum(len(level.get('areas', [])) for level in extracted_data.get('levels', []))
+                            total_canopies = sum(len(area.get('canopies', [])) for level in extracted_data.get('levels', []) for area in level.get('areas', []))
+                            st.markdown(f"**Levels:** {total_levels}")
+                            st.markdown(f"**Areas:** {total_areas}")
+                            st.markdown(f"**Canopies:** {total_canopies}")
+                
+                # Clean up temp file
+                os.unlink(temp_path)
+                
+            except Exception as e:
+                st.error(f"Error extracting data from Excel file: {str(e)}")
+                st.session_state.uploaded_project_data = None
+                st.session_state.upload_success = False
+                # Clean up temp file if it exists
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
         
-        if project_data:
-            # Ensure project type is preserved
-            project_data["project_type"] = st.session_state[SessionKeys.PROJECT_TYPE]
-            st.session_state[SessionKeys.PROJECT_DATA].update(project_data)
-            st.success("Project information saved!")
-            st.session_state[SessionKeys.CURRENT_STEP] = 2
-            st.rerun()
-    
-    # Step 2: Project Structure
-    elif st.session_state[SessionKeys.CURRENT_STEP] == 2:
-        # Show Step 1 data in expander
-        with st.expander("Step 1: Project Information", expanded=False):
-            st.json(st.session_state[SessionKeys.PROJECT_DATA])
-        
-        st.header("Step 2: Project Structure")
-        
-        # Get any existing structure data
-        existing_structure = st.session_state[SessionKeys.PROJECT_DATA].get("levels", None)
-        if existing_structure:
-            st.success("Project structure data exists. You can modify it below.")
-        
-        levels_data = project_structure_form()
-        
-        # Only update and proceed if Save button was clicked
-        if levels_data and st.session_state.get("save_clicked", False):
-            st.session_state[SessionKeys.PROJECT_DATA]["levels"] = levels_data
-            st.success("Project structure saved successfully!")
-            st.session_state[SessionKeys.CURRENT_STEP] = 3
-            # Clear the save flag
-            st.session_state.save_clicked = False
-            st.rerun()
-    
-    # Step 3: Review
-    elif st.session_state[SessionKeys.CURRENT_STEP] == 3:
-        display_project_summary(st.session_state[SessionKeys.PROJECT_DATA])
+        # Add a button to clear uploaded data
+        if st.session_state.upload_success:
+            if st.button("Clear Uploaded Data", help="Clear uploaded data and start fresh"):
+                st.session_state.uploaded_project_data = None
+                st.session_state.upload_success = False
+                st.session_state.current_step = 1  # Reset to step 1
+                st.session_state.project_info = {}
+                st.session_state.levels = []
+                st.rerun()
         
         st.markdown("---")
-        st.subheader("📊 Generate Cost Sheet")
         
-        if st.button("Generate Excel Cost Sheet", type="primary"):
-            try:
-                from utils.excel import save_to_excel
-                
-                # Ensure project type is set
-                if "project_type" not in st.session_state[SessionKeys.PROJECT_DATA]:
-                    st.session_state[SessionKeys.PROJECT_DATA]["project_type"] = st.session_state[SessionKeys.PROJECT_TYPE]
-                
-                with st.spinner("Generating Excel cost sheet..."):
-                    output_path = save_to_excel(st.session_state[SessionKeys.PROJECT_DATA])
-                    
-                    # Read the file for download
-                    with open(output_path, "rb") as file:
-                        excel_data = file.read()
-                    
-                    st.success("Cost sheet generated successfully!")
-                    st.download_button(
-                        label="📥 Download Cost Sheet",
-                        data=excel_data,
-                        file_name=os.path.basename(output_path),
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-            except Exception as e:
-                st.error(f"Error generating cost sheet: {str(e)}")
-                st.error("Please ensure all required data is filled in correctly.")
+        # Multi-step process
+        # Step routing
+        if st.session_state.current_step == 1:
+            step1_project_information()
+        elif st.session_state.current_step == 2:
+            step2_project_structure()
+        elif st.session_state.current_step == 3:
+            step3_canopy_configuration()
+        elif st.session_state.current_step == 4:
+            step4_review_and_generate()
+        
+        st.markdown("---")
+        
+        # Navigation buttons
+        navigation_buttons()
+        
+    elif page == "Generate Word Documents":
+        word_generation_page()
+        
+    elif page == "Create Revision":
+        revision_page()
 
 if __name__ == "__main__":
-    main() 
+    main()
