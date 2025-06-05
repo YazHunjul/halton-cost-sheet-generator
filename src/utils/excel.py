@@ -759,6 +759,50 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
             }
         }
 
+def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str):
+    """
+    Write cost sheet identifier to N2 of each sheet.
+    Format: F24-19.1 (sheet type) COST SHEET for individual sheets
+    Format: F24-19.1 COST SHEET for JOB TOTAL sheet
+    
+    Args:
+        sheet (Worksheet): The worksheet to write to
+        sheet_name (str): Name of the sheet to determine the identifier
+    """
+    try:
+        # Base identifier
+        base_identifier = "F24-19.1"
+        
+        # Determine sheet type from sheet name
+        if sheet_name == "JOB TOTAL":
+            identifier = f"{base_identifier} COST SHEET"
+        else:
+            # Extract sheet type from sheet name
+            sheet_type = ""
+            if "CANOPY" in sheet_name:
+                if "CANOPY (UV)" in sheet_name:
+                    sheet_type = "CANOPY (UV)"
+                else:
+                    sheet_type = "CANOPY"
+            elif "FIRE SUPP" in sheet_name:
+                sheet_type = "FIRE SUPPRESSION"
+            elif "EBOX" in sheet_name:
+                sheet_type = "EBOX"
+            elif "SDU" in sheet_name:
+                sheet_type = "SDU"
+            elif "RECOAIR" in sheet_name:
+                sheet_type = "RECOAIR"
+            else:
+                sheet_type = "SYSTEM"  # Default fallback
+            
+            identifier = f"{base_identifier} ({sheet_type}) COST SHEET"
+        
+        # Write to N2
+        sheet['N2'] = identifier
+        
+    except Exception as e:
+        print(f"Warning: Could not write cost sheet identifier to N2 on {sheet_name}: {str(e)}")
+
 def write_project_metadata(sheet: Worksheet, project_data: Dict):
     """
     Write project metadata to the specified cells in the sheet.
@@ -826,6 +870,9 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict):
             except Exception as e2:
                 print(f"Warning: Still could not write {field} to cell {cell} after unmerging: {str(e2)}")
                 continue
+    
+    # Add cost sheet identifier to N2
+    write_cost_sheet_identifier(sheet, sheet.title)
 
 def write_canopy_pricing_data(sheet: Worksheet, canopy: Dict, row_index: int):
     """
@@ -1518,6 +1565,10 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
                 except Exception as e2:
                     print(f"Warning: Still could not write {field} to EBOX cell {cell} after unmerging: {str(e2)}")
                     continue
+        
+        # Add cost sheet identifier to N2
+        write_cost_sheet_identifier(sheet, sheet.title)
+        
     except Exception as e:
         print(f"Warning: Could not write EBOX metadata: {str(e)}")
         pass
@@ -1602,6 +1653,9 @@ def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: st
                 except Exception as e2:
                     print(f"Warning: Still could not write {field} to RECOAIR cell {cell} after unmerging: {str(e2)}")
         
+        # Add cost sheet identifier to N2
+        write_cost_sheet_identifier(sheet, sheet.title)
+        
     except Exception as e:
         print(f"Warning: Could not write RECOAIR metadata: {str(e)}")
 
@@ -1681,6 +1735,9 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict):
             
         except Exception as e:
             print(f"Warning: Could not write SDU project metadata: {str(e)}")
+        
+        # Add cost sheet identifier to N2
+        write_cost_sheet_identifier(sheet, sheet.title)
         
     except Exception as e:
         print(f"Warning: Could not write SDU metadata: {str(e)}")
