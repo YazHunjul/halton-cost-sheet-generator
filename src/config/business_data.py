@@ -108,6 +108,7 @@ COMPANY_ADDRESSES = {
 # Valid canopy models
 VALID_CANOPY_MODELS = [
     'KVF', 'UVF', 'CMWF', 'CMWI', 'KVI', 'UVI', 'CXW',
+    'KVX', 'KVX-M', 'UVX', 'UVX-M', 'UV-C POD', 'CXW-M', 'KVV'
 ]
 
 # Delivery locations with distances

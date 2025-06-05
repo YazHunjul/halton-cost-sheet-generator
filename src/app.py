@@ -763,6 +763,11 @@ def initialize_session_state():
         st.session_state.current_step = 1
     if 'project_info' not in st.session_state:
         st.session_state.project_info = {}
+    # Initialize template selection with default 19.1
+    if "selected_template" not in st.session_state:
+        st.session_state.selected_template = "Cost Sheet R19.1 May 2025"
+    if "template_path" not in st.session_state:
+        st.session_state.template_path = "templates/excel/Cost Sheet R19.1 May 2025.xlsx"
 
 def navigation_buttons():
     """Display navigation buttons based on the current step."""
@@ -815,8 +820,26 @@ def step1_project_information():
     col1, col2 = st.columns(2)
     
     with col1:
-        project_name = st.text_input("Project Name", value=project_data.get('project_name', ''), key="project_name")
-        customer = st.text_input("Customer Name", value=project_data.get('customer', ''), key="customer")
+        # Initialize session state for project fields
+        if "project_name_state" not in st.session_state:
+            st.session_state.project_name_state = project_data.get('project_name', '')
+        if "customer_state" not in st.session_state:
+            st.session_state.customer_state = project_data.get('customer', '')
+        
+        def update_project_name():
+            st.session_state.project_name_state = st.session_state.project_name
+        
+        def update_customer():
+            st.session_state.customer_state = st.session_state.customer
+            
+        project_name = st.text_input("Project Name", 
+                                   value=st.session_state.project_name_state, 
+                                   key="project_name",
+                                   on_change=update_project_name)
+        customer = st.text_input("Customer Name", 
+                                value=st.session_state.customer_state, 
+                                key="customer",
+                                on_change=update_customer)
         
         # Company and address selection based on mode
         if company_mode == "Select from list":
@@ -846,25 +869,60 @@ def step1_project_information():
         else:
             # Custom company mode
             company = ""
+            
+            # Initialize session state for custom company fields
+            if "custom_company_name_state" not in st.session_state:
+                st.session_state.custom_company_name_state = project_data.get('custom_company_name', project_data.get('company', ''))
+            if "custom_company_address_state" not in st.session_state:
+                st.session_state.custom_company_address_state = project_data.get('custom_company_address', project_data.get('address', ''))
+            
+            def update_custom_company_name():
+                st.session_state.custom_company_name_state = st.session_state.custom_company_name_input
+            
+            def update_custom_company_address():
+                st.session_state.custom_company_address_state = st.session_state.custom_company_address_input
+            
             custom_company_name = st.text_input(
                 "Custom Company Name *",
-                value=project_data.get('custom_company_name', project_data.get('company', '')),
+                value=st.session_state.custom_company_name_state,
                 key="custom_company_name_input",
-                help="Enter the custom company name"
+                help="Enter the custom company name",
+                on_change=update_custom_company_name
             )
             custom_company_address = st.text_area(
                 "Custom Company Address *",
-                value=project_data.get('custom_company_address', project_data.get('address', '')),
+                value=st.session_state.custom_company_address_state,
                 key="custom_company_address_input",
                 help="Enter the full company address (use line breaks for multiple lines)",
-                height=100
+                height=100,
+                on_change=update_custom_company_address
             )
             address = custom_company_address
         
-        location = st.text_input("Location", value=project_data.get('project_location', ''), key="project_location")
+        # Initialize session state for location
+        if "location_state" not in st.session_state:
+            st.session_state.location_state = project_data.get('project_location', '')
+        
+        def update_location():
+            st.session_state.location_state = st.session_state.project_location
+        
+        location = st.text_input("Location", 
+                                value=st.session_state.location_state, 
+                                key="project_location",
+                                on_change=update_location)
     
     with col2:
-        project_number = st.text_input("Project Number", value=project_data.get('project_number', ''), key="project_number")
+        # Initialize session state for project number
+        if "project_number_state" not in st.session_state:
+            st.session_state.project_number_state = project_data.get('project_number', '')
+        
+        def update_project_number():
+            st.session_state.project_number_state = st.session_state.project_number
+        
+        project_number = st.text_input("Project Number", 
+                                     value=st.session_state.project_number_state, 
+                                     key="project_number",
+                                     on_change=update_project_number)
         
         # Handle date conversion from string format
         if project_data.get('date'):
@@ -922,41 +980,54 @@ def step1_project_information():
         
         delivery_location = st.selectbox("Delivery Location", delivery_options, index=default_delivery_index, key="delivery_location")
         
+        # Initialize session state for revision
+        if "revision_state" not in st.session_state:
+            st.session_state.revision_state = project_data.get('revision', '')
+        
+        def update_revision():
+            st.session_state.revision_state = st.session_state.revision
+        
         # Revision field with uploaded data
-        revision = st.text_input("Revision (leave blank for initial version)", value=project_data.get('revision', ''), key="revision")
+        revision = st.text_input("Revision (leave blank for initial version)", 
+                                value=st.session_state.revision_state, 
+                                key="revision",
+                                on_change=update_revision)
     
     # Determine final company name and address based on mode
     if company_mode == "Select from list":
         final_company_name = company
         final_address = COMPANY_ADDRESSES.get(company, address)
     else:  # Custom company
-        final_company_name = custom_company_name
-        final_address = custom_company_address
+        final_company_name = st.session_state.get('custom_company_name_state', '')
+        final_address = st.session_state.get('custom_company_address_state', '')
     
-    # Store project info in session state
+    # Note: uploaded_project_data is now used only for display purposes
+    # All actual data is stored directly in session state variables
+    
+    # Store project info in session state using session state values for immediate updates
     st.session_state.project_info = {
-        'project_name': project_name,
-        'customer': customer,
+        'project_name': st.session_state.project_name_state,
+        'customer': st.session_state.customer_state,
         'company': final_company_name,
         'address': final_address,
-        'project_location': location,
-        'project_number': project_number,
+        'project_location': st.session_state.location_state,
+        'project_number': st.session_state.project_number_state,
         'date': date.strftime("%d/%m/%Y") if date else "",
         'estimator': estimator,
         'sales_contact': sales_contact,
         'delivery_location': delivery_location if delivery_location != "Select..." else "",
-        'revision': revision,
+        'revision': st.session_state.revision_state,
         # Store the selection mode and custom fields for form persistence
         'company_mode': company_mode,
-        'custom_company_name': custom_company_name,
-        'custom_company_address': custom_company_address
+        'custom_company_name': st.session_state.get('custom_company_name_state', ''),
+        'custom_company_address': st.session_state.get('custom_company_address_state', '')
     }
     
     # Validation
     if company_mode == "Select from list":
-        required_fields = [project_name, project_number, final_company_name]
+        required_fields = [st.session_state.project_name_state, st.session_state.project_number_state, final_company_name]
     else:
-        required_fields = [project_name, project_number, custom_company_name, custom_company_address]
+        required_fields = [st.session_state.project_name_state, st.session_state.project_number_state, final_company_name, final_address]
     
     if all(required_fields):
         st.success("Project information is complete!")
@@ -968,12 +1039,8 @@ def step2_project_structure():
     st.header("Step 2: Project Structure")
     st.markdown("Define the levels and areas for your project.")
     
-    # Load uploaded levels data if available and not already loaded
-    if (st.session_state.uploaded_project_data and 
-        st.session_state.uploaded_project_data.get('levels') and 
-        not st.session_state.levels):  # Only load if levels is empty
-        st.session_state.levels = st.session_state.uploaded_project_data['levels'].copy()
-        st.rerun()  # Refresh to show the loaded data
+    # Note: Levels data is now loaded immediately when Excel is uploaded
+    # No need to load it here as it's already in st.session_state.levels
     
     # Level management
     col1, col2 = st.columns([3, 1])
@@ -992,11 +1059,14 @@ def step2_project_structure():
     # Display levels
     for level_idx, level in enumerate(st.session_state.levels):
         with st.expander(f"Level {level['level_number']}: {level['level_name']}", expanded=True):
-            # Level name input
-            new_level_name = st.text_input(f"Level Name", value=level['level_name'], key=f"level_name_{level_idx}")
-            if new_level_name != level['level_name']:
-                st.session_state.levels[level_idx]['level_name'] = new_level_name
-                st.rerun()
+            # Level name input with immediate update
+            def update_level_name():
+                st.session_state.levels[level_idx]['level_name'] = st.session_state[f"level_name_{level_idx}"]
+            
+            new_level_name = st.text_input(f"Level Name", 
+                                         value=level['level_name'], 
+                                         key=f"level_name_{level_idx}",
+                                         on_change=update_level_name)
             
             # Remove level button
             if st.button(f"Remove Level {level['level_number']}", key=f"remove_level_{level_idx}"):
@@ -1028,26 +1098,54 @@ def step2_project_structure():
                     # Area name and options
                     col1, col2, col3 = st.columns([2, 1, 1])
                     with col1:
-                        new_area_name = st.text_input("Area Name", value=area['name'], key=f"{area_key}_name")
-                        if new_area_name != area['name']:
-                            st.session_state.levels[level_idx]['areas'][area_idx]['name'] = new_area_name
-                            st.rerun()
+                        # Initialize session state for area name if not exists
+                        area_name_key = f"{area_key}_name_state"
+                        if area_name_key not in st.session_state:
+                            st.session_state[area_name_key] = area['name']
+                        
+                        def update_area_name():
+                            st.session_state.levels[level_idx]['areas'][area_idx]['name'] = st.session_state[f"{area_key}_name"]
+                            st.session_state[area_name_key] = st.session_state[f"{area_key}_name"]
+                        
+                        new_area_name = st.text_input("Area Name", 
+                                                    value=st.session_state[area_name_key], 
+                                                    key=f"{area_key}_name",
+                                                    on_change=update_area_name)
                     
                     with col2:
                         # Area options
                         st.markdown("**Options:**")
-                        uvc = st.checkbox("UV-C", value=area['options'].get('uvc', False), key=f"{area_key}_uvc")
-                        sdu = st.checkbox("SDU", value=area['options'].get('sdu', False), key=f"{area_key}_sdu")
-                        recoair = st.checkbox("RecoAir", value=area['options'].get('recoair', False), key=f"{area_key}_recoair")
                         
-                        # UV Extra Over option - always available if area has canopies
-                        has_canopies = len(area.get('canopies', [])) > 0
-                        if has_canopies:
-                            uv_extra_over = st.checkbox("UV Extra Over", value=area['options'].get('uv_extra_over', False), key=f"{area_key}_uv_extra_over", help="Calculate additional cost for UV functionality")
-                        else:
-                            uv_extra_over = False
+                        # Initialize session state for options if not exists
+                        def update_area_options():
+                            st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
+                                'uvc': st.session_state.get(f"{area_key}_uvc", False),
+                                'sdu': st.session_state.get(f"{area_key}_sdu", False),
+                                'recoair': st.session_state.get(f"{area_key}_recoair", False),
+                                'uv_extra_over': st.session_state.get(f"{area_key}_uv_extra_over", False)
+                            }
                         
-                        # Update options
+                        uvc = st.checkbox("UV-C", 
+                                        value=area['options'].get('uvc', False), 
+                                        key=f"{area_key}_uvc",
+                                        on_change=update_area_options)
+                        sdu = st.checkbox("SDU", 
+                                        value=area['options'].get('sdu', False), 
+                                        key=f"{area_key}_sdu",
+                                        on_change=update_area_options)
+                        recoair = st.checkbox("RecoAir", 
+                                            value=area['options'].get('recoair', False), 
+                                            key=f"{area_key}_recoair",
+                                            on_change=update_area_options)
+                        
+                        # UV Extra Over option - always available regardless of canopies
+                        uv_extra_over = st.checkbox("UV Extra Over", 
+                                                  value=area['options'].get('uv_extra_over', False), 
+                                                  key=f"{area_key}_uv_extra_over", 
+                                                  help="Calculate additional cost for UV functionality",
+                                                  on_change=update_area_options)
+                        
+                        # Update options immediately
                         st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
                             'uvc': uvc,
                             'sdu': sdu,
@@ -1098,7 +1196,7 @@ def step3_canopy_configuration():
                             "model": "",
                             "length": "",
                             "width": "",
-                            "height": "",
+                            "height": 555,  # Default height set to 555
                             "sections": "",
                             "lighting_type": "",
                             "extract_volume": "",
@@ -1119,56 +1217,205 @@ def step3_canopy_configuration():
                         
                         # Basic canopy info - clean organized layout
                         
+                        # Define update function for canopy data
+                        def update_canopy_data():
+                            try:
+                                # Check if indices are still valid before updating
+                                if (level_idx < len(st.session_state.levels) and 
+                                    area_idx < len(st.session_state.levels[level_idx]['areas']) and 
+                                    canopy_idx < len(st.session_state.levels[level_idx]['areas'][area_idx]['canopies'])):
+                                    
+                                    st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx].update({
+                                        'reference_number': st.session_state.get(f"{canopy_key}_ref", ''),
+                                        'model': st.session_state.get(f"{canopy_key}_model", ''),
+                                        'configuration': st.session_state.get(f"{canopy_key}_config", ''),
+                                        'length': st.session_state.get(f"{canopy_key}_length", 0),
+                                        'width': st.session_state.get(f"{canopy_key}_width", 0),
+                                        'height': st.session_state.get(f"{canopy_key}_height", 0),
+                                        'sections': st.session_state.get(f"{canopy_key}_sections", 0),
+                                        'options': {'fire_suppression': st.session_state.get(f"{canopy_key}_fire", False)}
+                                    })
+                            except (IndexError, KeyError) as e:
+                                # Silently ignore index errors - the UI will rerender with correct indices
+                                pass
+
                         # Row 1: Reference, Model, Configuration
                         row1_col1, row1_col2, row1_col3 = st.columns(3)
                         
                         with row1_col1:
-                            ref_num = st.text_input("Reference", value=canopy.get('reference_number', ''), key=f"{canopy_key}_ref")
+                            ref_num = st.text_input("Reference", 
+                                                   value=canopy.get('reference_number', ''), 
+                                                   key=f"{canopy_key}_ref",
+                                                   on_change=update_canopy_data)
                         
                         with row1_col2:
-                            model = st.selectbox("Model", [""] + VALID_CANOPY_MODELS, 
-                                               index=([""] + VALID_CANOPY_MODELS).index(canopy.get('model', '')) if canopy.get('model', '') in ([""] + VALID_CANOPY_MODELS) else 0,
-                                               key=f"{canopy_key}_model")
+                            model_options = [""] + VALID_CANOPY_MODELS
+                            model_index = 0
+                            if canopy.get('model', '') in model_options:
+                                model_index = model_options.index(canopy.get('model', ''))
+                            
+                            model = st.selectbox("Model", model_options,
+                                               index=model_index,
+                                               key=f"{canopy_key}_model",
+                                               on_change=update_canopy_data)
                         
                         with row1_col3:
-                            configuration = st.selectbox("Configuration", 
-                                                       ["", "Wall", "Island", "Single", "Double", "Corner"], 
-                                                       index=["", "Wall", "Island", "Single", "Double", "Corner"].index(canopy.get('configuration', '')) if canopy.get('configuration', '') in ["", "Wall", "Island", "Single", "Double", "Corner"] else 0,
-                                                       key=f"{canopy_key}_config")
+                            config_options = ["Wall", "Island"]
+                            config_index = 0
+                            if canopy.get('configuration', '') in config_options:
+                                config_index = config_options.index(canopy.get('configuration', ''))
+                            
+                            configuration = st.selectbox("Configuration", config_options,
+                                                       index=config_index,
+                                                       key=f"{canopy_key}_config",
+                                                       on_change=update_canopy_data)
                         
                         # Row 2: Dimensions - Length, Width, Height
                         st.markdown("**Dimensions:**")
                         row2_col1, row2_col2, row2_col3 = st.columns(3)
                         
                         with row2_col1:
-                            length = st.number_input("Length", value=int(canopy.get('length', 0)) if canopy.get('length') else 0, key=f"{canopy_key}_length")
+                            length = st.number_input("Length", 
+                                                   value=int(canopy.get('length', 0)) if canopy.get('length') else 0, 
+                                                   key=f"{canopy_key}_length",
+                                                   on_change=update_canopy_data,
+                                                   min_value=0)
                         
                         with row2_col2:
-                            width = st.number_input("Width", value=int(canopy.get('width', 0)) if canopy.get('width') else 0, key=f"{canopy_key}_width")
+                            width = st.number_input("Width", 
+                                                  value=int(canopy.get('width', 0)) if canopy.get('width') else 0, 
+                                                  key=f"{canopy_key}_width",
+                                                  on_change=update_canopy_data,
+                                                  min_value=0)
                         
                         with row2_col3:
-                            height = st.number_input("Height", value=int(canopy.get('height', 0)) if canopy.get('height') else 0, key=f"{canopy_key}_height")
+                            # Use 555 as default height if no height is set
+                            default_height = canopy.get('height', 555)
+                            if default_height == 0 or default_height == "":
+                                default_height = 555
+                            height = st.number_input("Height", 
+                                                   value=int(default_height), 
+                                                   key=f"{canopy_key}_height",
+                                                   on_change=update_canopy_data,
+                                                   min_value=0)
                         
                         # Row 3: Sections and Fire Suppression
                         row3_col1, row3_col2, row3_col3 = st.columns(3)
                         
                         with row3_col1:
-                            sections = st.number_input("Sections", value=int(canopy.get('sections', 0)) if canopy.get('sections') else 0, key=f"{canopy_key}_sections")
+                            sections = st.number_input("Sections", 
+                                                     value=int(canopy.get('sections', 0)) if canopy.get('sections') else 0, 
+                                                     key=f"{canopy_key}_sections",
+                                                     on_change=update_canopy_data,
+                                                     min_value=0)
                         
                         with row3_col2:
-                            fire_suppression = st.checkbox("Fire Suppression", value=canopy.get('options', {}).get('fire_suppression', False), key=f"{canopy_key}_fire")
+                            fire_suppression = st.checkbox("Fire Suppression", 
+                                                          value=canopy.get('options', {}).get('fire_suppression', False), 
+                                                          key=f"{canopy_key}_fire",
+                                                          on_change=update_canopy_data)
                         
-                        # Update canopy data
-                        st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx].update({
-                            'reference_number': ref_num,
-                            'configuration': configuration,
-                            'model': model,
-                            'length': length,
-                            'width': width,
-                            'height': height,
-                            'sections': sections,
-                            'options': {'fire_suppression': fire_suppression}
-                        })
+                        # Wall Cladding Section  
+                        st.markdown("**Wall Cladding:**")
+                        
+                        def update_wall_cladding():
+                            try:
+                                # Check if indices are still valid before updating
+                                if (level_idx < len(st.session_state.levels) and 
+                                    area_idx < len(st.session_state.levels[level_idx]['areas']) and 
+                                    canopy_idx < len(st.session_state.levels[level_idx]['areas'][area_idx]['canopies'])):
+                                    
+                                    wall_cladding_enabled = st.session_state.get(f"{canopy_key}_wall_cladding_enabled", False)
+                                    if wall_cladding_enabled:
+                                        wall_cladding_data = {
+                                            "type": "Custom",
+                                            "width": st.session_state.get(f"{canopy_key}_clad_width", 0) or None,
+                                            "height": st.session_state.get(f"{canopy_key}_clad_height", 0) or None,
+                                            "position": st.session_state.get(f"{canopy_key}_clad_position", []) or None
+                                        }
+                                    else:
+                                        wall_cladding_data = {"type": "None", "width": None, "height": None, "position": None}
+                                    
+                                    st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['wall_cladding'] = wall_cladding_data
+                            except (IndexError, KeyError) as e:
+                                # Silently ignore index errors - the UI will rerender with correct indices  
+                                pass
+                        
+                        wall_cladding_enabled = st.checkbox("With Wall Cladding", 
+                                                          value=canopy.get('wall_cladding', {}).get('type') not in ['None', None, ''],
+                                                          key=f"{canopy_key}_wall_cladding_enabled",
+                                                          on_change=update_wall_cladding)
+                        
+                        if wall_cladding_enabled:
+                            clad_col1, clad_col2, clad_col3 = st.columns(3)
+                            
+                            with clad_col1:
+                                cladding_width = st.number_input(
+                                    "Width (mm)", 
+                                    value=int(canopy.get('wall_cladding', {}).get('width', 0)) if canopy.get('wall_cladding', {}).get('width') else 0,
+                                    key=f"{canopy_key}_clad_width",
+                                    min_value=0,
+                                    on_change=update_wall_cladding
+                                )
+                            
+                            with clad_col2:
+                                cladding_height = st.number_input(
+                                    "Height (mm)", 
+                                    value=int(canopy.get('wall_cladding', {}).get('height', 0)) if canopy.get('wall_cladding', {}).get('height') else 0,
+                                    key=f"{canopy_key}_clad_height",
+                                    min_value=0,
+                                    on_change=update_wall_cladding
+                                )
+                            
+                            with clad_col3:
+                                # Position can be multiple selections
+                                current_positions = canopy.get('wall_cladding', {}).get('position', [])
+                                if isinstance(current_positions, str):
+                                    current_positions = [current_positions] if current_positions else []
+                                elif current_positions is None:
+                                    current_positions = []
+                                
+                                cladding_positions = st.multiselect(
+                                    "Position",
+                                    options=["rear", "left hand", "right hand"],
+                                    default=current_positions,
+                                    key=f"{canopy_key}_clad_position",
+                                    on_change=update_wall_cladding
+                                )
+                        
+                        # Update canopy data immediately (this ensures all changes are persisted)
+                        current_wall_cladding = canopy.get('wall_cladding', {})
+                        if wall_cladding_enabled:
+                            wall_cladding_data = {
+                                "type": "Custom",
+                                "width": st.session_state.get(f"{canopy_key}_clad_width", 0) or None,
+                                "height": st.session_state.get(f"{canopy_key}_clad_height", 0) or None,
+                                "position": st.session_state.get(f"{canopy_key}_clad_position", []) or None
+                            }
+                        else:
+                            wall_cladding_data = {"type": "None", "width": None, "height": None, "position": None}
+                        
+                        # Final update of all canopy data
+                        try:
+                            # Check if indices are still valid before final update
+                            if (level_idx < len(st.session_state.levels) and 
+                                area_idx < len(st.session_state.levels[level_idx]['areas']) and 
+                                canopy_idx < len(st.session_state.levels[level_idx]['areas'][area_idx]['canopies'])):
+                                
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx].update({
+                                    'reference_number': ref_num,
+                                    'configuration': configuration,
+                                    'model': model,
+                                    'length': length,
+                                    'width': width,
+                                    'height': height,
+                                    'sections': sections,
+                                    'options': {'fire_suppression': fire_suppression},
+                                    'wall_cladding': wall_cladding_data
+                                })
+                        except (IndexError, KeyError) as e:
+                            # Silently ignore index errors - the UI will rerender with correct indices
+                            pass
                         
                         # Remove canopy button
                         if st.button(f"Remove Canopy", key=f"{canopy_key}_remove"):
@@ -1242,9 +1489,10 @@ def step4_review_and_generate():
             final_project_data = st.session_state.project_info.copy()
             final_project_data['levels'] = st.session_state.levels
             
-            # Generate Excel file
+            # Generate Excel file using selected template
+            template_path = st.session_state.get('template_path', 'templates/excel/Cost Sheet R19.1 May 2025.xlsx')
             with st.spinner("Generating Excel cost sheet..."):
-                output_path = save_to_excel(final_project_data)
+                output_path = save_to_excel(final_project_data, template_path)
             
             st.success(f"Excel cost sheet generated successfully!")
             
@@ -1302,6 +1550,75 @@ def step4_review_and_generate():
         except Exception as e:
             st.error(f"Error generating Excel file: {str(e)}")
 
+def populate_session_state_from_uploaded_data(extracted_data):
+    """
+    Populate all session state variables with data from uploaded Excel file.
+    This ensures that all steps (project info, structure, canopies) are pre-filled.
+    """
+    try:
+        # Clear any existing session state for form fields to force update
+        form_fields_to_clear = [
+            'project_name_state', 'customer_state', 'location_state', 
+            'project_number_state', 'revision_state', 'custom_company_name_state', 
+            'custom_company_address_state'
+        ]
+        for field in form_fields_to_clear:
+            if field in st.session_state:
+                del st.session_state[field]
+        
+        # Determine company mode based on whether company is in predefined list
+        from config.business_data import COMPANY_ADDRESSES
+        company_name = extracted_data.get('company', '')
+        is_predefined_company = company_name in COMPANY_ADDRESSES.keys()
+        
+        # Populate project information
+        st.session_state.project_info = {
+            'project_name': extracted_data.get('project_name', ''),
+            'customer': extracted_data.get('customer', ''),
+            'company': company_name,
+            'address': extracted_data.get('address', ''),
+            'project_location': extracted_data.get('project_location', ''),
+            'project_number': extracted_data.get('project_number', ''),
+            'date': extracted_data.get('date', ''),
+            'estimator': extracted_data.get('estimator', ''),
+            'sales_contact': extracted_data.get('sales_contact', ''),
+            'delivery_location': extracted_data.get('delivery_location', ''),
+            'revision': extracted_data.get('revision', ''),
+            'company_mode': 'Select from list' if is_predefined_company else 'Enter custom company',
+            'custom_company_name': company_name if not is_predefined_company else '',
+            'custom_company_address': extracted_data.get('address', '') if not is_predefined_company else ''
+        }
+        
+        # Populate levels and areas structure
+        if extracted_data.get('levels'):
+            st.session_state.levels = extracted_data['levels'].copy()
+        
+        # Store template information if available in the extracted data
+        if extracted_data.get('template_used'):
+            # If we know which template was used, preserve that choice
+            st.session_state.selected_template = extracted_data['template_used']
+            # Update the template path based on the extracted template info
+            template_options = {
+                "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
+                "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
+            }
+            st.session_state.template_path = template_options.get(
+                extracted_data['template_used'], 
+                "templates/excel/Cost Sheet R19.1 May 2025.xlsx"  # Default to 19.1
+            )
+        
+        print(f"✅ Session state populated with uploaded data:")
+        print(f"   - Project: {extracted_data.get('project_name', 'N/A')}")
+        print(f"   - Levels: {len(extracted_data.get('levels', []))}")
+        total_areas = sum(len(level.get('areas', [])) for level in extracted_data.get('levels', []))
+        total_canopies = sum(len(area.get('canopies', [])) for level in extracted_data.get('levels', []) for area in level.get('areas', []))
+        print(f"   - Areas: {total_areas}")
+        print(f"   - Canopies: {total_canopies}")
+        
+    except Exception as e:
+        print(f"❌ Error populating session state from uploaded data: {str(e)}")
+        st.error(f"Error populating form data: {str(e)}")
+
 def main():
     st.set_page_config(page_title="Halton Quotation System", page_icon="🏭", layout="wide")
     st.title("Halton Quotation System")
@@ -1319,6 +1636,43 @@ def main():
     
     # Page routing
     if page == "Project Setup":
+        # Template Selection
+        st.markdown("### Cost Sheet Template Selection")
+        template_options = {
+            "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
+            "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
+        }
+        
+        # Initialize template selection in session state
+        if "selected_template" not in st.session_state:
+            st.session_state.selected_template = "Cost Sheet R19.1 May 2025"  # Default to 19.1
+        
+        selected_template = st.selectbox(
+            "Choose Cost Sheet Template:",
+            options=list(template_options.keys()),
+            index=list(template_options.keys()).index(st.session_state.selected_template),
+            key="template_selector",
+            help="Select which version of the cost sheet template to use for this project"
+        )
+        
+        # Update session state when selection changes
+        if selected_template != st.session_state.selected_template:
+            st.session_state.selected_template = selected_template
+            st.rerun()
+        
+        # Store the template path for use in Excel operations
+        st.session_state.template_path = template_options[selected_template]
+        
+        # Display template status
+        template_path = template_options[selected_template]
+        if os.path.exists(template_path) or os.path.exists(f"../{template_path}"):
+            st.success(f"✅ Using template: {selected_template}")
+        else:
+            st.warning(f"⚠️  Template file not found: {template_path}")
+            st.info("Please ensure the template file exists before generating Excel files.")
+        
+        st.markdown("---")
+        
         # Excel Upload Feature
         st.markdown("### Quick Start from Existing Project")
         st.markdown("Upload an existing Excel file to auto-populate form fields")
@@ -1393,9 +1747,12 @@ def main():
                     status_container.empty()
                     ai_placeholder.empty()
                     
-                    # Store extracted data
+                    # Store extracted data and immediately populate session state
                     st.session_state.uploaded_project_data = extracted_data
                     st.session_state.upload_success = True
+                    
+                    # Immediately populate all session state with uploaded data
+                    populate_session_state_from_uploaded_data(extracted_data)
                     
                     # Success message
                     st.success("Project data extracted successfully! Form fields have been auto-populated.")
@@ -1439,11 +1796,25 @@ def main():
         # Add a button to clear uploaded data
         if st.session_state.upload_success:
             if st.button("Clear Uploaded Data", help="Clear uploaded data and start fresh"):
+                # Clear uploaded data flags
                 st.session_state.uploaded_project_data = None
                 st.session_state.upload_success = False
                 st.session_state.current_step = 1  # Reset to step 1
+                
+                # Clear all project data
                 st.session_state.project_info = {}
                 st.session_state.levels = []
+                
+                # Clear all form state variables
+                form_fields_to_clear = [
+                    'project_name_state', 'customer_state', 'location_state', 
+                    'project_number_state', 'revision_state', 'custom_company_name_state', 
+                    'custom_company_address_state'
+                ]
+                for field in form_fields_to_clear:
+                    if field in st.session_state:
+                        del st.session_state[field]
+                
                 st.rerun()
         
         st.markdown("---")

@@ -88,30 +88,38 @@ def remove_external_links(wb: Workbook) -> None:
     except Exception as e:
         print(f"Warning: Could not remove external links: {str(e)}")
 
-def load_template_workbook() -> Workbook:
+def load_template_workbook(template_path: str = None) -> Workbook:
     """
     Load the Excel template workbook and remove external links.
+    
+    Args:
+        template_path (str, optional): Path to the template file. If None, uses default.
     
     Returns:
         Workbook: Template workbook with external links removed
     """
     try:
+        # Use provided template path or fall back to legacy default
+        if template_path is None:
+            template_path = TEMPLATE_PATH  # Use the constant as fallback
+        
         # Try relative path from src directory first, then from project root
         template_paths = [
-            "../templates/excel/Halton Cost Sheet Jan 2025.xlsx",  # From src directory
-            "templates/excel/Halton Cost Sheet Jan 2025.xlsx"      # From project root
+            f"../{template_path}",  # From src directory
+            template_path           # From project root
         ]
         
         wb = None
-        for template_path in template_paths:
+        for path in template_paths:
             try:
-                wb = load_workbook(template_path)
+                wb = load_workbook(path)
+                print(f"✅ Successfully loaded template: {path}")
                 break
             except FileNotFoundError:
                 continue
         
         if wb is None:
-            raise FileNotFoundError("Could not find template file in any of the expected locations")
+            raise FileNotFoundError(f"Could not find template file '{template_path}' in any of the expected locations")
         
         # Remove external links to prevent "unsafe external sources" warning
         remove_external_links(wb)
@@ -211,6 +219,100 @@ def get_initials(name_str: str) -> str:
     
     # Join with slash
     return '/'.join(initials_list)
+
+def _calculate_net_canopy_price(sheet: Worksheet, ref_row: int) -> float:
+    """
+    Calculate net canopy price by reading from P{ref_row} formula result, 
+    or manually calculating if formula result is not available.
+    
+    Args:
+        sheet (Worksheet): The worksheet to read from
+        ref_row (int): Reference row (12, 29, 46, etc.)
+    
+    Returns:
+        float: Net canopy price (canopy total minus cladding)
+    """
+    try:
+        # Try to read the calculated value from P12, P29, P46, etc.
+        p_cell_value = sheet[f'P{ref_row}'].value
+        if p_cell_value and isinstance(p_cell_value, (int, float)):
+            return float(p_cell_value)
+        
+        # If formula result not available, calculate manually
+        # Sum the canopy-related prices from the subtotal range, EXCLUDING the cladding price
+        start_row = ref_row + 2  # N14, N31, N48, etc.
+        cladding_row = ref_row + 7  # N19, N36, N53, etc.
+        end_row = ref_row + 15   # N27, N44, N61, etc.
+        
+        canopy_total = 0
+        for row in range(start_row, end_row + 1):
+            if row == cladding_row:
+                continue  # Skip the cladding price cell
+            cell_value = sheet[f'N{row}'].value
+            if cell_value and isinstance(cell_value, (int, float)):
+                canopy_total += float(cell_value)
+        
+        # Subtract cladding price from N19, N36, N53, etc.
+        cladding_price = sheet[f'N{cladding_row}'].value or 0
+        if isinstance(cladding_price, (int, float)):
+            cladding_price = float(cladding_price)
+        else:
+            cladding_price = 0
+        
+        net_price = canopy_total - cladding_price
+        return net_price
+        
+    except Exception as e:
+        print(f"Warning: Could not calculate net canopy price for ref_row {ref_row}: {str(e)}")
+        return 0
+
+def _calculate_net_delivery_price(sheet: Worksheet) -> float:
+    """
+    Calculate net delivery price by reading from P182 formula result,
+    or manually calculating if formula result is not available.
+    
+    Args:
+        sheet (Worksheet): The worksheet to read from
+    
+    Returns:
+        float: Net delivery price (delivery total minus testing/commissioning)
+    """
+    try:
+        # Try to read the calculated value from P182
+        p182_value = sheet['P182'].value
+        if p182_value and isinstance(p182_value, (int, float)):
+            return float(p182_value)
+        
+        # If formula result not available, calculate manually
+        # Try to read N182 (total delivery subtotal) first
+        n182_value = sheet['N182'].value
+        if n182_value and isinstance(n182_value, (int, float)):
+            delivery_total = float(n182_value)
+        else:
+            # N182 formula not evaluated yet, sum components manually
+            # Sum delivery prices from N183-N197 range, EXCLUDING the commissioning price
+            delivery_total = 0
+            commissioning_row = 193  # N193
+            for row in range(183, 198):  # N183 to N197
+                if row == commissioning_row:
+                    continue  # Skip the commissioning price cell
+                cell_value = sheet[f'N{row}'].value
+                if cell_value and isinstance(cell_value, (int, float)):
+                    delivery_total += float(cell_value)
+        
+        # Subtract commissioning price from N193
+        commissioning_price = sheet['N193'].value or 0
+        if isinstance(commissioning_price, (int, float)):
+            commissioning_price = float(commissioning_price)
+        else:
+            commissioning_price = 0
+        
+        net_price = delivery_total - commissioning_price
+        return net_price
+        
+    except Exception as e:
+        print(f"Warning: Could not calculate net delivery price: {str(e)}")
+        return 0
 
 def read_wall_cladding_from_canopy(sheet: Worksheet, base_row: int) -> Dict:
     """
@@ -725,6 +827,97 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict):
                 print(f"Warning: Still could not write {field} to cell {cell} after unmerging: {str(e2)}")
                 continue
 
+def write_canopy_pricing_data(sheet: Worksheet, canopy: Dict, row_index: int):
+    """
+    Write canopy pricing data to the sheet at the specified locations.
+    
+    Args:
+        sheet (Worksheet): The worksheet to write to
+        canopy (Dict): Canopy specification data with pricing information
+        row_index (int): Starting row for this canopy's data (this is the model/config row)
+    """
+    try:
+        # Calculate pricing rows - canopy prices go in N12-N19 pattern (8 cells per canopy)
+        # For first canopy (row_index=14), ref_row=12, so pricing starts at N12
+        # For second canopy (row_index=31), ref_row=29, so pricing starts at N29
+        ref_row = row_index - 2  # Reference row (B12, B29, B46, etc.)
+        
+        # Write canopy pricing data to cells that feed into the template's subtotal formulas
+        # For first canopy (row_index=14, ref_row=12): use N14-N19 range
+        # For second canopy (row_index=31, ref_row=29): use N31-N36 range
+        
+        # Canopy base price goes in first cell of the subtotal range (N14, N31, N48, etc.)
+        canopy_price = canopy.get('canopy_price', 0)
+        if canopy_price:
+            try:
+                sheet[f"N{ref_row + 2}"] = canopy_price  # N14, N31, N48, etc. (feeds into N12 subtotal)
+                print(f"✓ Wrote canopy price {canopy_price} to N{ref_row + 2}")
+            except Exception as e:
+                print(f"Warning: Could not write canopy price to N{ref_row + 2}: {str(e)}")
+        
+        # Fire suppression price goes in second cell if applicable (N15, N32, N49, etc.)
+        fire_suppression_price = canopy.get('fire_suppression_price', 0)
+        if fire_suppression_price:
+            try:
+                sheet[f"N{ref_row + 3}"] = fire_suppression_price  # N15, N32, N49, etc.
+                print(f"✓ Wrote fire suppression price {fire_suppression_price} to N{ref_row + 3}")
+            except Exception as e:
+                print(f"Warning: Could not write fire suppression price to N{ref_row + 3}: {str(e)}")
+        
+        # Cladding price goes in the cell used by P12 formula for subtraction (N19, N36, N53, etc.)
+        cladding_price = canopy.get('cladding_price', 0)
+        if cladding_price:
+            try:
+                sheet[f"N{ref_row + 7}"] = cladding_price  # N19, N36, N53, etc. (used in P12=N12-N19 formula)
+                print(f"✓ Wrote cladding price {cladding_price} to N{ref_row + 7}")
+            except Exception as e:
+                print(f"Warning: Could not write cladding price to N{ref_row + 7}: {str(e)}")
+        
+        # Reserve remaining cells in the range for future use (N16-N18, N33-N35, etc.)
+        
+    except Exception as e:
+        print(f"Warning: Failed to write canopy pricing data: {str(e)}")
+
+def write_area_delivery_install_pricing(sheet: Worksheet, area: Dict):
+    """
+    Write area-level delivery and installation pricing to N182-N193 range.
+    
+    Args:
+        sheet (Worksheet): The worksheet to write to
+        area (Dict): Area data containing delivery and installation pricing
+    """
+    try:
+        # Write delivery prices to cells that feed into N182 subtotal (N183-N197 range)
+        # Delivery and installation price goes in N183 (feeds into N182 subtotal)
+        delivery_installation_price = area.get('delivery_installation_price', 0)
+        if delivery_installation_price:
+            try:
+                sheet['N183'] = delivery_installation_price
+                print(f"✓ Wrote delivery/installation price {delivery_installation_price} to N183")
+            except Exception as e:
+                print(f"Warning: Could not write delivery/installation price to N183: {str(e)}")
+        
+        # Commissioning price goes in N193 (used by P182=N182-N193 formula for subtraction)
+        commissioning_price = area.get('commissioning_price', 0)
+        if commissioning_price:
+            try:
+                sheet['N193'] = commissioning_price
+                print(f"✓ Wrote commissioning price {commissioning_price} to N193")
+            except Exception as e:
+                print(f"Warning: Could not write commissioning price to N193: {str(e)}")
+        
+        # Update P182 formula to subtract N193 (delivery & install = total delivery - test & commission)
+        try:
+            sheet['P182'] = '=N182-N193'
+            print(f"✓ Updated P182 formula to =N182-N193")
+        except Exception as e:
+            print(f"Warning: Could not update P182 formula: {str(e)}")
+        
+        # Reserve remaining cells in N184-N192 for future area-level pricing
+        
+    except Exception as e:
+        print(f"Warning: Failed to write area delivery/install pricing: {str(e)}")
+
 def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
     """
     Write canopy specifications to the sheet at the specified row.
@@ -744,6 +937,9 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
             except Exception as e:
                 print(f"Warning: Could not write reference number to B{ref_row}: {str(e)}")
         
+        # Write pricing data for this canopy
+        write_canopy_pricing_data(sheet, canopy, row_index)
+        
         # Configuration and Model on same row
         configuration = canopy.get("configuration", "")
         if configuration:
@@ -757,6 +953,10 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
         if model:
             try:
                 sheet[f"D{row_index}"] = model.upper()
+                
+                # Add "1" to D18 for each canopy (4 rows below the model row)
+                quantity_row = row_index + 4  # D18, D35, D52, etc.
+                sheet[f"D{quantity_row}"] = 1
                 
                 # For CMWF/CMWI canopies, initialize C27 (base_row + 13) to 0
                 if model.upper() in ['CMWF', 'CMWI']:
@@ -786,6 +986,36 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
                         
             except Exception as e:
                 print(f"Warning: Could not write model to D{row_index}: {str(e)}")
+        
+        # Write canopy dimensions in E14, F14, G14 (width, length, height)
+        width = canopy.get("width", "")
+        if width:
+            try:
+                sheet[f"E{row_index}"] = width
+            except Exception as e:
+                print(f"Warning: Could not write width to E{row_index}: {str(e)}")
+        
+        length = canopy.get("length", "")
+        if length:
+            try:
+                sheet[f"F{row_index}"] = length
+            except Exception as e:
+                print(f"Warning: Could not write length to F{row_index}: {str(e)}")
+        
+        height = canopy.get("height", "")
+        if height:
+            try:
+                sheet[f"G{row_index}"] = height
+            except Exception as e:
+                print(f"Warning: Could not write height to G{row_index}: {str(e)}")
+        
+        # Write number of sections in H14, H31, H48, etc.
+        sections = canopy.get("sections", "")
+        if sections:
+            try:
+                sheet[f"H{row_index}"] = sections
+            except Exception as e:
+                print(f"Warning: Could not write sections to H{row_index}: {str(e)}")
         
         # Options (only fire suppression at canopy level now)
         options_row = row_index + 4
@@ -1213,10 +1443,10 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
         try:
             sheet["C12"] = "UV-C"  # Model name
             sheet["D38"] = 1       # Quantity
-            # Delivery location to E38
-            delivery_location = project_data.get('delivery_location', '')
-            if delivery_location:
-                sheet["E38"] = delivery_location
+            # Note: Delivery location written by general loop to E38
+            
+            # Add plant selection dropdowns to E39 and E40
+            add_plant_selection_dropdowns_to_ebox(sheet)
         except Exception as e:
             print(f"Warning: Could not write EBOX-specific data: {str(e)}")
         
@@ -1317,8 +1547,11 @@ def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: st
         try:
             sheet['C12'] = item_number  # Item number (1.01, 2.01, etc.)
             sheet['D37'] = 1  # Quantity
-            sheet['E37'] = project_data.get('delivery_location', '')  # Delivery location
+            # Note: Delivery location written by general loop to E37
             # N9 cell ready for RecoAir price (to be implemented)
+            
+            # Add plant selection dropdowns to E38 and E39
+            add_plant_selection_dropdowns_to_recoair(sheet)
         except Exception as e:
             print(f"Warning: Could not write RECOAIR-specific data: {str(e)}")
         
@@ -1390,10 +1623,7 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict):
             # Write quantity (1) to C97
             sheet['C97'] = 1
             
-            # Write delivery location to D97
-            delivery_location = project_data.get('delivery_location', '')
-            if delivery_location:
-                sheet['D97'] = delivery_location
+            # Note: Delivery location written by general loop to D97
         except Exception as e:
             print(f"Warning: Could not write SDU-specific data: {str(e)}")
         
@@ -1522,16 +1752,23 @@ def add_fire_suppression_dropdowns(sheet: Worksheet):
         sheet.add_data_validation(tank_dv)
         
         # Apply to specific cells with error handling
+        # Note: Only apply fire suppression dropdowns to fire suppression sheets, not canopy sheets
         try:
-            # Fire suppression system type (C16, C33, C50)
-            system_dv.add("C16")
-            system_dv.add("C33") 
-            system_dv.add("C50")
-            
-            # Tank installation options (C17, C34, C51)
-            tank_dv.add("C17")
-            tank_dv.add("C34")
-            tank_dv.add("C51")
+            # Fire suppression system type (C16, C33, C50) - ONLY on fire suppression sheets
+            if "FIRE" in sheet.title.upper() or "SUPP" in sheet.title.upper():
+                system_dv.add("C16")
+                system_dv.add("C33") 
+                system_dv.add("C50")
+                
+                # Tank installation options (C17, C34, C51) - ONLY on fire suppression sheets
+                tank_dv.add("C17")
+                tank_dv.add("C34")
+                tank_dv.add("C51")
+                
+                # Add plant selection dropdown to D184 for fire suppression sheets
+                add_plant_selection_dropdown_to_fire_supp(sheet)
+            else:
+                print(f"ℹ️  Skipping fire suppression dropdowns for non-fire suppression sheet: {sheet.title}")
         except Exception as e:
             print(f"Warning: Could not add fire suppression dropdown cells: {str(e)}")
         
@@ -1597,27 +1834,87 @@ def add_sdu_dropdowns(sheet: Worksheet):
             "28mm"
         ]
         
-        # Create data validation
+        # MCB #-way options for D35
+        mcb_way_options = [
+            "",  # Empty option
+            "MCB 4-WAY 125A",
+            "MCB 6-WAY 125A",
+            "MCB 8-WAY 125A",
+            "MCB 16-WAY 125A",
+            "MCB 18-WAY 125A",
+            "MCB 24-WAY 125A",
+            "MCB 4-WAY 160A",
+            "MCB 6-WAY 160A",
+            "MCB 8-WAY 160A",
+            "MCB 16-WAY 160A",
+            "MCB 18-WAY 160A",
+            "MCB 4-WAY 250A",
+            "MCB 6-WAY 250A",
+            "MCB 8-WAY 250A",
+            "MCB 16-WAY 250A",
+            "MCB 18-WAY 250A",
+            "MCB 24-WAY 250A"
+        ]
+        
+        # # Amp (No MCB) options for D40 to D47
+        amp_no_mcb_options = [
+            "",  # Empty option
+            "16 AMP 1-PH ISO/OUTLET(NO MCB)",
+            "32 AMP 1-PH ISO/OUTLET(NO MCB)",
+            "16 AMP 3-PH ISO/OUTLET(NO MCB)",
+            "32 AMP 3-PH ISO/OUTLET(NO MCB)",
+            "63 AMP 3-PH ISO/OUTLET(NO MCB)",
+            "125 AMP 3-PH ISO/OUTLET(NO MCB)"
+        ]
+        
+        # (MCB) options for D49 to D56
+        amp_mcb_options = [
+            "",  # Empty option
+            "16 AMP 1-PH ISO/OUTLET(MCB)",
+            "32 AMP 1-PH ISO/OUTLET(MCB)",
+            "16 AMP 3-PH ISO/OUTLET(MCB + VIGI)",
+            "32 AMP 3-PH ISO/OUTLET(MCB + VIGI)",
+            "63 AMP 3-PH ISO/OUTLET(MCB)",
+            "125 AMP 3-PH ISO/OUTLET(MCB)",
+            "16 AMP 3-PH ISO/OUTLET(MCB + RCD)",
+            "32 AMP 3-PH ISO/OUTLET(MCB + RCD)"
+        ]
+        
+        # Create data validation function that handles long lists
         def create_validation(options):
             formula = ",".join(options)
             if len(formula) > 255:  # Excel formula limit
-                # Truncate if too long
-                truncated_options = []
-                current_length = 0
-                for opt in options:
-                    if current_length + len(opt) + 1 > 250:
-                        break
-                    truncated_options.append(opt)
-                    current_length += len(opt) + 1
-                formula = ",".join(truncated_options)
-            return DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+                # For longer lists, write them to hidden cells and reference them
+                start_row = 500 + len(options)  # Start at row 500+ to avoid conflicts with delivery locations
+                for i, option in enumerate(options):
+                    try:
+                        sheet[f'AC{start_row + i}'] = option  # Use column AC (hidden area)
+                    except:
+                        pass  # If we can't write, fall back
+                
+                # Create a validation that references the range
+                try:
+                    range_ref = f'$AC${start_row}:$AC${start_row + len(options) - 1}'
+                    return DataValidation(type="list", formula1=range_ref, allow_blank=True)
+                except:
+                    # Fallback to allowing any text input
+                    return DataValidation(type="textLength", operator="lessThan", formula1="100", allow_blank=True)
+            else:
+                return DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
         
+        # Create all validations
         water_types_dv = create_validation(water_types_options)
         water_sizes_dv = create_validation(water_sizes_options)
+        mcb_way_dv = create_validation(mcb_way_options)
+        amp_no_mcb_dv = create_validation(amp_no_mcb_options)
+        amp_mcb_dv = create_validation(amp_mcb_options)
         
         # Add validations to sheet
         sheet.add_data_validation(water_types_dv)
         sheet.add_data_validation(water_sizes_dv)
+        sheet.add_data_validation(mcb_way_dv)
+        sheet.add_data_validation(amp_no_mcb_dv)
+        sheet.add_data_validation(amp_mcb_dv)
         
         # Apply water types to cells E89 to E91 and set default to CWS
         try:
@@ -1634,6 +1931,29 @@ def add_sdu_dropdowns(sheet: Worksheet):
                 water_sizes_dv.add(f"D{row}")
         except Exception as e:
             print(f"Warning: Could not add SDU water sizes dropdown cells: {str(e)}")
+        
+        # Apply MCB #-way dropdown to D35
+        try:
+            mcb_way_dv.add("D35")
+            print(f"✅ Added MCB #-way dropdown to D35 on SDU sheet")
+        except Exception as e:
+            print(f"Warning: Could not add MCB #-way dropdown to D35: {str(e)}")
+        
+        # Apply # Amp (No MCB) dropdowns to D40 to D47
+        try:
+            for row in range(40, 48):  # D40 to D47 inclusive
+                amp_no_mcb_dv.add(f"D{row}")
+            print(f"✅ Added # Amp (No MCB) dropdowns to D40-D47 on SDU sheet")
+        except Exception as e:
+            print(f"Warning: Could not add # Amp (No MCB) dropdown cells: {str(e)}")
+        
+        # Apply (MCB) dropdowns to D49 to D56
+        try:
+            for row in range(49, 57):  # D49 to D56 inclusive
+                amp_mcb_dv.add(f"D{row}")
+            print(f"✅ Added (MCB) dropdowns to D49-D56 on SDU sheet")
+        except Exception as e:
+            print(f"Warning: Could not add (MCB) dropdown cells: {str(e)}")
         
     except Exception as e:
         print(f"Warning: Could not add SDU dropdowns to sheet {sheet.title}: {str(e)}")
@@ -1806,33 +2126,88 @@ def write_company_data_to_hidden_sheet(wb: Workbook, project_data: Dict):
         print(f"Warning: Could not write company data to hidden sheet: {str(e)}")
         pass
 
-def write_delivery_location_to_sheet(sheet: Worksheet, delivery_location: str):
+def add_delivery_location_dropdown_to_sheet(sheet: Worksheet, selected_delivery_location: str = ""):
     """
-    Write delivery location to cell D183 on the given sheet.
+    Add delivery location dropdown to the appropriate cell based on sheet type.
     
     Args:
-        sheet (Worksheet): The worksheet to write to
-        delivery_location (str): The delivery location to write
+        sheet (Worksheet): The worksheet to add dropdown to
+        selected_delivery_location (str): The pre-selected delivery location value
     """
     try:
-        if delivery_location and delivery_location != "Select...":
-            sheet['D183'] = delivery_location
+        from config.business_data import DELIVERY_LOCATIONS
+        from openpyxl.worksheet.datavalidation import DataValidation
+        
+        sheet_name = sheet.title.upper()
+        
+        # Determine cell based on sheet type
+        if "SDU" in sheet_name:
+            cell = "D97"
+        elif "EBOX" in sheet_name or "EDGE BOX" in sheet_name:
+            cell = "E38"
+        elif "RECOAIR" in sheet_name:
+            cell = "E37"
+        elif "FIRE" in sheet_name and "SUPP" in sheet_name:
+            cell = "D183"
+        elif "CANOPY" in sheet_name:
+            cell = "D183"
+        else:
+            # Default to D183 for other sheet types
+            cell = "D183"
+        
+        # Create delivery location dropdown
+        # Note: Need to handle the long list of delivery locations
+        # Since Excel has a 255-character formula limit, we'll write to hidden cells and reference them
+        start_row = 400  # Use row 400+ to avoid conflicts
+        
+        for i, location in enumerate(DELIVERY_LOCATIONS):
+            try:
+                sheet[f'AB{start_row + i}'] = location  # Use column AB (hidden area)
+            except:
+                pass  # If we can't write, continue
+        
+        # Create a validation that references the range
+        try:
+            range_ref = f'$AB${start_row}:$AB${start_row + len(DELIVERY_LOCATIONS) - 1}'
+            delivery_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            
+            # Add validation to sheet
+            sheet.add_data_validation(delivery_dv)
+            
+            # Apply to the specific cell
+            delivery_dv.add(cell)
+            
+            # Set the selected value if provided and not "Select..."
+            if selected_delivery_location and selected_delivery_location != "Select...":
+                sheet[cell] = selected_delivery_location
+            
+            print(f"📍 Added delivery location dropdown to {cell} on {sheet.title}")
+            if selected_delivery_location and selected_delivery_location != "Select...":
+                print(f"   Pre-selected: '{selected_delivery_location}'")
+                
+        except Exception as e:
+            print(f"Warning: Could not create delivery location dropdown, writing value directly: {str(e)}")
+            # Fallback to writing the value directly
+            if selected_delivery_location and selected_delivery_location != "Select...":
+                sheet[cell] = selected_delivery_location
+    
     except Exception as e:
-        print(f"Warning: Could not write delivery location to sheet {sheet.title}: {str(e)}")
+        print(f"Warning: Could not add delivery location dropdown to sheet {sheet.title}: {str(e)}")
         pass
 
-def save_to_excel(project_data: Dict) -> str:
+def save_to_excel(project_data: Dict, template_path: str = None) -> str:
     """
     Generate a complete Excel workbook from project data.
     
     Args:
         project_data (Dict): Complete project specification data
+        template_path (str, optional): Path to the template file to use
     
     Returns:
         str: Path to the saved Excel file
     """
     try:
-        wb = load_template_workbook()
+        wb = load_template_workbook(template_path)
         
         # Get all sheets once and create lists of available sheets
         all_sheets = wb.sheetnames
@@ -1937,6 +2312,9 @@ def save_to_excel(project_data: Dict) -> str:
                         
                         # Write project metadata to canopy sheet (C/G columns)
                         write_project_metadata(current_canopy_sheet, project_data)
+                        
+                        # Write area-level delivery and installation pricing
+                        write_area_delivery_install_pricing(current_canopy_sheet, area)
                         
                         # Create fire suppression sheet if needed
                         if has_fire_suppression:
@@ -2185,15 +2563,19 @@ def save_to_excel(project_data: Dict) -> str:
         # Organize sheets by area for better navigation
         organize_sheets_by_area(wb)
         
-        # Write delivery location to D183 for all sheets except JOB TOTAL, EBOX, RECOAIR, and SDU
+        # Add delivery location dropdowns to all relevant sheets
         delivery_location = project_data.get('delivery_location', '')
+        print(f"🚚 Adding delivery location dropdowns, pre-selected: '{delivery_location}'")
+        
+        sheets_updated = 0
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
             if (sheet.sheet_state == 'visible' and 
-                sheet_name != 'JOB TOTAL' and 
-                sheet_name != 'Lists' and
-                not sheet_name.startswith(('EBOX', 'RECOAIR', 'SDU'))):
-                write_delivery_location_to_sheet(sheet, delivery_location)
+                sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData'] and
+                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU'])):
+                add_delivery_location_dropdown_to_sheet(sheet, delivery_location)
+                sheets_updated += 1
+        print(f"📝 Added delivery location dropdowns to {sheets_updated} sheets")
         
         # Remove any unused template sheets
         unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets
@@ -2236,6 +2618,47 @@ def save_to_excel(project_data: Dict) -> str:
     except Exception as e:
         raise Exception(f"Failed to generate Excel file: {str(e)}")
 
+def detect_template_version(wb: Workbook) -> str:
+    """
+    Detect which template version was used based on workbook structure.
+    
+    Args:
+        wb (Workbook): The Excel workbook to analyze
+        
+    Returns:
+        str: Template version identifier
+    """
+    try:
+        # Method 1: Check for version-specific sheets or cells
+        sheet_names = wb.sheetnames
+        
+        # Method 2: Check for specific cells or content that differ between versions
+        # For now, we'll use a simple heuristic - check if certain sheets exist
+        # You can expand this logic based on actual differences between templates
+        
+        if 'JOB TOTAL' in sheet_names:
+            job_total_sheet = wb['JOB TOTAL']
+            
+            # Check for specific cells or patterns that indicate version 19.1
+            # This is a placeholder - you'll need to identify actual differences
+            # between the templates and add specific detection logic here
+            
+            # For now, default to detecting based on file characteristics
+            # You can add more sophisticated detection later
+            pass
+        
+        # Default detection logic - you may want to enhance this
+        # by checking specific cell values, formulas, or sheet structures
+        # that differ between the two template versions
+        
+        # For now, we'll assume newer files are 19.1 unless we can detect otherwise
+        return "Cost Sheet R19.1 May 2025"
+        
+    except Exception as e:
+        print(f"Warning: Could not detect template version: {str(e)}")
+        # Default to 19.1 if detection fails
+        return "Cost Sheet R19.1 May 2025"
+
 def read_excel_project_data(excel_path: str) -> Dict:
     """
     Read project data back from a generated Excel file.
@@ -2268,6 +2691,10 @@ def read_excel_project_data(excel_path: str) -> Dict:
         
         # Extract project metadata using the same cell mappings
         project_data = {}
+        
+        # Detect which template version was used based on sheet structure/content
+        template_used = detect_template_version(wb)
+        project_data['template_used'] = template_used
         
         # Read basic project info
         project_data['project_number'] = data_sheet['C3'].value or ""
@@ -2415,8 +2842,9 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     'mua_volume': _read_mua_volume(sheet, base_row, model),
                                     'supply_static': sheet[f'L{base_row}'].value or "",
                                     
-                                    # Pricing data - individual canopy price
-                                    'canopy_price': sheet[f'P{ref_row}'].value or 0,  # P12, P29, P46, etc. (ref_row = base_row - 2)
+                                    # Pricing data - calculate net canopy price (canopy total minus cladding)
+                                    # Try to read from P12 formula result, or calculate manually if not available
+                                    'canopy_price': _calculate_net_canopy_price(sheet, ref_row),  # P12, P29, P46, etc. (net amount after cladding subtraction)
                                     
                                     # Fire suppression data - will be populated from FIRE SUPP sheet
                                     'fire_suppression_tank_quantity': 0,  # Default to 0, will be updated from FIRE SUPP sheet
@@ -2426,8 +2854,8 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     # Read wall cladding data from Excel
                                     'wall_cladding': read_wall_cladding_from_canopy(sheet, base_row),
                                     
-                                    # Read wall cladding price from Excel (N19, N20, N21, etc.)
-                                    'cladding_price': sheet[f'N{base_row + 5}'].value or 0  # N19, N36, N53, etc. (base_row + 5)
+                                    # Read wall cladding price from Excel (N19, N36, N53, etc.)
+                                    'cladding_price': sheet[f'N{ref_row + 7}'].value or 0  # N19, N36, N53, etc. (ref_row + 7)
                                 }
                                 
                                 # Add CWS/HWS data for CMWF and CMWI canopies
@@ -2470,9 +2898,9 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         level_name = title_parts[0]
                         area_name = title_parts[1]
                         
-                        # Get fire suppression commissioning price from N193 and delivery price from N182
+                        # Get fire suppression commissioning price from N193 and calculate net delivery price
                         fs_commissioning_price = sheet['N193'].value or 0
-                        fs_delivery_price = sheet['N182'].value or 0
+                        fs_delivery_price = _calculate_net_delivery_price(sheet)
                         
                         # Count how many fire suppression units are in this sheet
                         fs_units = []
@@ -2485,7 +2913,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             ref_number = sheet[f'B{ref_row}'].value
                             system_type = sheet[f'C{system_row}'].value  # Fire suppression system type from C16
                             tank_value = sheet[f'C{tank_row}'].value
-                            base_fire_suppression_price = sheet[f'N{ref_row}'].value or 0  # Fire suppression base price at N12, N29, N46, etc.
+                            base_fire_suppression_price = sheet[f'N{ref_row + 3}'].value or 0  # Fire suppression base price at N15, N32, N49, etc.
                             
                             # Only count actual fire suppression units, not template entries
                             if (ref_number and tank_value and 
@@ -2532,8 +2960,8 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         level_name = level_area[0]
                         area_name = level_area[1]
                         
-                        # Read area-level pricing
-                        delivery_installation_price = sheet['P182'].value or 0
+                        # Read area-level pricing - calculate net delivery price (delivery total minus testing/commissioning)
+                        delivery_installation_price = _calculate_net_delivery_price(sheet)
                         commissioning_price = sheet['N193'].value or 0
                         
                         # Find the area and add pricing data
@@ -3265,6 +3693,7 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
 def update_job_total_sheet(wb: Workbook) -> None:
     """
     Update the JOB TOTAL sheet to reference the PRICING_SUMMARY sheet for dynamic pricing.
+    Only references categories that actually exist in the project.
     
     Args:
         wb (Workbook): The workbook containing the JOB TOTAL sheet
@@ -3279,8 +3708,6 @@ def update_job_total_sheet(wb: Workbook) -> None:
             return
         
         job_total_sheet = wb['JOB TOTAL']
-        
-        # Get the summary row positions from PRICING_SUMMARY sheet
         pricing_summary = wb['PRICING_SUMMARY']
         
         # Find the summary totals section
@@ -3295,66 +3722,49 @@ def update_job_total_sheet(wb: Workbook) -> None:
             print("Warning: Could not find SUMMARY TOTALS section in PRICING_SUMMARY")
             return
         
-        # Update JOB TOTAL sheet with formulas referencing PRICING_SUMMARY
-        # Only populate rows 16-25 for columns S (cost) and T (price)
+        # Read what categories actually exist from PRICING_SUMMARY
+        categories = {}
+        for offset in range(1, 8):  # Check rows after SUMMARY TOTALS
+            category_cell = pricing_summary[f'B{summary_row + offset}'].value
+            if category_cell:
+                category_name = str(category_cell).replace(' TOTAL', '')
+                categories[category_name] = {
+                    'price_cell': f"C{summary_row + offset}",
+                    'cost_cell': f"D{summary_row + offset}"
+                }
         
-        # Write PRICE totals to column T:
-        job_total_sheet['T16'] = f"=PRICING_SUMMARY!C{summary_row + 1}"  # Canopy Total (Price)
-        job_total_sheet['T17'] = f"=PRICING_SUMMARY!C{summary_row + 2}"  # Fire Suppression Total (Price)
-        job_total_sheet['T18'] = f"=PRICING_SUMMARY!C{summary_row + 4}"  # SDU Total (SDU category - Price)
-        job_total_sheet['T19'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Vent Clg Total (OTHER category - Price)
-        # Conditionally add MARVEL system if enabled
-        if is_feature_enabled('marvel_system'):
-            job_total_sheet['T20'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # MARVEL Total (OTHER category - Price)
-        else:
-            job_total_sheet['T20'] = 0  # Hide MARVEL if not enabled
-            
-        job_total_sheet['T21'] = f"=PRICING_SUMMARY!C{summary_row + 3}"  # Edge Total (EBOX/UV-C - Price)
-        job_total_sheet['T22'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Aerolys Total (OTHER category - Price)
+        # Map Job Total categories to PRICING_SUMMARY categories and clear all first
+        job_total_mapping = {
+            16: ('Canopy', 'CANOPY'),           # Row 16: Canopy
+            17: ('Fire Suppression', 'FIRE SUPP'),  # Row 17: Fire Suppression
+            18: ('SDU', 'SDU'),                 # Row 18: SDU
+            19: ('Vent Clg', 'OTHER'),          # Row 19: Vent Clg -> OTHER
+            20: ('MARVEL', 'OTHER'),            # Row 20: MARVEL -> OTHER
+            21: ('Edge', 'EBOX'),               # Row 21: Edge -> EBOX
+            22: ('Aerolys', 'OTHER'),           # Row 22: Aerolys -> OTHER
+            23: ('Pollustop', 'OTHER'),         # Row 23: Pollustop -> OTHER
+            24: ('Reco', 'RECOAIR'),            # Row 24: Reco -> RECOAIR
+            25: ('Reactaway', 'OTHER'),         # Row 25: Reactaway -> OTHER
+        }
         
-        # Conditionally add Pollustop system if enabled
-        if is_feature_enabled('pollustop_unit'):
-            job_total_sheet['T23'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Pollustop Total (OTHER category - Price)
-        else:
-            job_total_sheet['T23'] = 0  # Hide Pollustop if not enabled
-            
-        job_total_sheet['T24'] = f"=PRICING_SUMMARY!C{summary_row + 5}"  # Reco Total (RecoAir - Price)
+        # Clear all Job Total cells first
+        for row_num in range(16, 26):
+            job_total_sheet[f'S{row_num}'] = 0  # Cost
+            job_total_sheet[f'T{row_num}'] = 0  # Price
         
-        # Conditionally add Reactaway system if enabled
-        if is_feature_enabled('reactaway_unit'):
-            job_total_sheet['T25'] = f"=PRICING_SUMMARY!C{summary_row + 6}"  # Reactaway Total (OTHER category - Price)
-        else:
-            job_total_sheet['T25'] = 0  # Hide Reactaway if not enabled
+        # Only populate rows for categories that actually exist
+        for row_num, (display_name, pricing_category) in job_total_mapping.items():
+            if pricing_category in categories:
+                # Set price (column T)
+                job_total_sheet[f'T{row_num}'] = f"=PRICING_SUMMARY!{categories[pricing_category]['price_cell']}"
+                # Set cost (column S)
+                job_total_sheet[f'S{row_num}'] = f"=PRICING_SUMMARY!{categories[pricing_category]['cost_cell']}"
+                print(f"✓ Linked {display_name} (row {row_num}) to {pricing_category} category")
+            else:
+                # Category doesn't exist - leave as 0
+                print(f"○ Skipped {display_name} (row {row_num}) - {pricing_category} category not found")
         
-        # Write COST totals to column S:
-        job_total_sheet['S16'] = f"=PRICING_SUMMARY!D{summary_row + 1}"  # Canopy Total (Cost)
-        job_total_sheet['S17'] = f"=PRICING_SUMMARY!D{summary_row + 2}"  # Fire Suppression Total (Cost)
-        job_total_sheet['S18'] = f"=PRICING_SUMMARY!D{summary_row + 4}"  # SDU Total (SDU category - Cost)
-        job_total_sheet['S19'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Vent Clg Total (OTHER category - Cost)
-        # Conditionally add MARVEL system if enabled
-        if is_feature_enabled('marvel_system'):
-            job_total_sheet['S20'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # MARVEL Total (OTHER category - Cost)
-        else:
-            job_total_sheet['S20'] = 0  # Hide MARVEL if not enabled
-            
-        job_total_sheet['S21'] = f"=PRICING_SUMMARY!D{summary_row + 3}"  # Edge Total (EBOX/UV-C - Cost)
-        job_total_sheet['S22'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Aerolys Total (OTHER category - Cost)
-        
-        # Conditionally add Pollustop system if enabled
-        if is_feature_enabled('pollustop_unit'):
-            job_total_sheet['S23'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Pollustop Total (OTHER category - Cost)
-        else:
-            job_total_sheet['S23'] = 0  # Hide Pollustop if not enabled
-            
-        job_total_sheet['S24'] = f"=PRICING_SUMMARY!D{summary_row + 5}"  # Reco Total (RecoAir - Cost)
-        
-        # Conditionally add Reactaway system if enabled
-        if is_feature_enabled('reactaway_unit'):
-            job_total_sheet['S25'] = f"=PRICING_SUMMARY!D{summary_row + 6}"  # Reactaway Total (OTHER category - Cost)
-        else:
-            job_total_sheet['S25'] = 0  # Hide Reactaway if not enabled
-        
-        print("Updated JOB TOTAL sheet with dynamic pricing formulas")
+        print(f"Updated JOB TOTAL sheet with dynamic pricing formulas for {len([cat for cat in categories.keys() if cat in [mapping[1] for mapping in job_total_mapping.values()]])} categories")
         
     except Exception as e:
         print(f"Warning: Could not update JOB TOTAL sheet: {str(e)}")
@@ -3983,3 +4393,125 @@ def create_uv_extra_over_calculations_sheet(wb: Workbook) -> None:
     except Exception as e:
         print(f"Warning: Could not create UV Extra Over calculations sheet: {str(e)}")
         pass
+
+def add_plant_selection_dropdowns_to_ebox(sheet: Worksheet):
+    """
+    Add plant selection dropdowns to EBOX sheet at E39 and E40.
+    
+    Args:
+        sheet (Worksheet): The EBOX worksheet to add dropdowns to
+    """
+    try:
+        # Plant selection options
+        plant_options = [
+            "",  # Empty option
+            "SL10 GENIE",
+            "EXTENSION FORKS",
+            "2.5M COMBI LADDER",
+            "1.5M PODIUM",
+            "3M TOWER",
+            "COMBI LADDER",
+            "PECO LIFT",
+            "3M YOUNGMAN BOARD",
+            "GS1930 SCISSOR LIFT",
+            "4-6 SHERASCOPIC",
+            "7-9 SHERASCOPIC"
+        ]
+        
+        # Create validation
+        from openpyxl.worksheet.datavalidation import DataValidation
+        formula = ",".join(plant_options)
+        plant_dv = DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+        
+        # Add validation to sheet
+        sheet.add_data_validation(plant_dv)
+        
+        # Apply to E39 and E40
+        plant_dv.add("E39")
+        plant_dv.add("E40")
+        
+        print(f"✅ Added plant selection dropdowns to E39 and E40 on EBOX sheet")
+        
+    except Exception as e:
+        print(f"Warning: Could not add plant selection dropdowns to EBOX sheet: {str(e)}")
+
+def add_plant_selection_dropdowns_to_recoair(sheet: Worksheet):
+    """
+    Add plant selection dropdowns to RecoAir sheet at E38 and E39.
+    
+    Args:
+        sheet (Worksheet): The RecoAir worksheet to add dropdowns to
+    """
+    try:
+        # Plant selection options
+        plant_options = [
+            "",  # Empty option
+            "SL10 GENIE",
+            "EXTENSION FORKS",
+            "2.5M COMBI LADDER",
+            "1.5M PODIUM",
+            "3M TOWER",
+            "COMBI LADDER",
+            "PECO LIFT",
+            "3M YOUNGMAN BOARD",
+            "GS1930 SCISSOR LIFT",
+            "4-6 SHERASCOPIC",
+            "7-9 SHERASCOPIC"
+        ]
+        
+        # Create validation
+        from openpyxl.worksheet.datavalidation import DataValidation
+        formula = ",".join(plant_options)
+        plant_dv = DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+        
+        # Add validation to sheet
+        sheet.add_data_validation(plant_dv)
+        
+        # Apply to E38 and E39
+        plant_dv.add("E38")
+        plant_dv.add("E39")
+        
+        print(f"✅ Added plant selection dropdowns to E38 and E39 on RecoAir sheet")
+        
+    except Exception as e:
+        print(f"Warning: Could not add plant selection dropdowns to RecoAir sheet: {str(e)}")
+
+def add_plant_selection_dropdown_to_fire_supp(sheet: Worksheet):
+    """
+    Add plant selection dropdown to Fire Suppression sheet at D184.
+    
+    Args:
+        sheet (Worksheet): The Fire Suppression worksheet to add dropdown to
+    """
+    try:
+        # Plant selection options
+        plant_options = [
+            "",  # Empty option
+            "SL10 GENIE",
+            "EXTENSION FORKS",
+            "2.5M COMBI LADDER",
+            "1.5M PODIUM",
+            "3M TOWER",
+            "COMBI LADDER",
+            "PECO LIFT",
+            "3M YOUNGMAN BOARD",
+            "GS1930 SCISSOR LIFT",
+            "4-6 SHERASCOPIC",
+            "7-9 SHERASCOPIC"
+        ]
+        
+        # Create validation
+        from openpyxl.worksheet.datavalidation import DataValidation
+        formula = ",".join(plant_options)
+        plant_dv = DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+        
+        # Add validation to sheet
+        sheet.add_data_validation(plant_dv)
+        
+        # Apply to D184
+        plant_dv.add("D184")
+        
+        print(f"✅ Added plant selection dropdown to D184 on Fire Suppression sheet")
+        
+    except Exception as e:
+        print(f"Warning: Could not add plant selection dropdown to Fire Suppression sheet: {str(e)}")
