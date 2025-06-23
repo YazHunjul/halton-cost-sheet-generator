@@ -608,21 +608,24 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
         # Get item reference from C12 (e.g., "1.01", "2.01")
         item_reference = sheet['C12'].value or ""
         
-        # Get delivery and installation price from P36 with validation
-        delivery_price_valid, delivery_installation_price, delivery_error = validate_cell_data(
-            sheet_name, 'P36', sheet['P36'].value, 'number', 'Delivery and Installation Price'
+        # Get delivery and installation price (N36 - N46) with validation
+        n36_valid, n36_value, n36_error = validate_cell_data(
+            sheet_name, 'N36', sheet['N36'].value, 'number', 'Total Delivery and Installation (N36)'
         )
-        if not delivery_price_valid:
-            add_validation_error(delivery_error)
-            delivery_installation_price = 0
-        
-        # Get N29 value (default addition to RecoAir unit price) with validation
-        n29_valid, n29_value, n29_error = validate_cell_data(
-            sheet_name, 'N29', sheet['N29'].value, 'number', 'Testing and Commissioning Price Addition'
+        if not n36_valid:
+            add_validation_error(n36_error)
+            n36_value = 0
+
+        # Get commissioning price from N46 with validation
+        n46_valid, n46_value, n46_error = validate_cell_data(
+            sheet_name, 'N46', sheet['N46'].value, 'number', 'Commissioning Price (N46)'
         )
-        if not n29_valid:
-            add_validation_error(n29_error)
-            n29_value = 0
+        if not n46_valid:
+            add_validation_error(n46_error)
+            n46_value = 0
+
+        # Calculate delivery and installation price (N36 - N46)
+        delivery_installation_price = n36_value - n46_value if n36_value > n46_value else 0
         
         # Get flat pack data from D40 and N40
         flat_pack_description = sheet['D40'].value or ""
@@ -680,9 +683,9 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
                     
                     location_raw = sheet[f'I{row}'].value or "INTERNAL"  # Default to INTERNAL
                     
-                    # Validate unit price
+                    # Read base price from N12 (fixed cell for all units)
                     price_valid, unit_price, price_error = validate_cell_data(
-                        sheet_name, f'N{row}', sheet[f'N{row}'].value, 'number', f'RecoAir Unit Price (Row {row})'
+                        sheet_name, 'N12', sheet['N12'].value, 'number', 'RecoAir Unit Base Price (N12)'
                     )
                     if not price_valid:
                         add_validation_error(price_error)
@@ -709,10 +712,11 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
                     # Get technical specifications for this model
                     specs = get_recoair_specifications(transformed_model)
                     
-                    # Calculate final unit price (base price + N29 value)
+                    # Calculate final unit price (base price + delivery/install share + commissioning)
                     base_unit_price = unit_price  # Already validated above
-                    n29_addition = n29_value      # Already validated above
-                    final_unit_price = base_unit_price + n29_addition
+                    delivery_per_unit = delivery_installation_price / selection_num if selection_num > 0 else 0
+                    commissioning_per_unit = n46_value / selection_num if selection_num > 0 else 0
+                    final_unit_price = base_unit_price + delivery_per_unit + commissioning_per_unit
                     
                     # Create RecoAir unit data
                     recoair_unit = {
@@ -725,9 +729,10 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
                         'length': length,  # Already validated above
                         'height': height,  # Already validated above
                         'location': location,
-                        'unit_price': final_unit_price,  # Use final price (base + N29)
-                        'base_unit_price': base_unit_price,  # Keep original base price for reference
-                        'n29_addition': n29_addition,  # Keep N29 addition for reference
+                        'unit_price': final_unit_price,  # Total price including all components
+                        'base_unit_price': base_unit_price,  # Base price from N12
+                        'delivery_installation_price': delivery_per_unit,  # Share of delivery/install price
+                        'commissioning_price': commissioning_per_unit,  # Share of commissioning price
                         'quantity': selection_num,
                         'row': row,  # Keep track of which row this came from
                         
@@ -2984,18 +2989,15 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             ref_number = sheet[f'B{ref_row}'].value
                             system_type = sheet[f'C{system_row}'].value  # Fire suppression system type from C16
                             tank_value = sheet[f'C{tank_row}'].value
-                            base_fire_suppression_price = sheet[f'N{ref_row + 3}'].value or 0  # Fire suppression base price at N15, N32, N49, etc.
+                            base_fire_suppression_price = sheet[f'N{ref_row}'].value or 0  # Fire suppression base price at N12, N29, N46, etc.
                             
                             # Only count actual fire suppression units, not template entries
-                            if ref_number and tank_value and str(ref_number).upper() != "ITEM":
-                                # Treat placeholder values like 'TANK INSTALL' / 'TANK INSTALLATION' as a dash so
-                                # they are still processed but result in a zero (→ 'TBD' in Word) tank quantity.
-                                if str(tank_value).upper() in ["TANK INSTALL", "TANK INSTALLATION"]:
-                                    tank_value_clean = "-"
-                                else:
-                                    tank_value_clean = tank_value
-
-                                tank_quantity = extract_tank_quantity(tank_value_clean)
+                            # Exclude entries with "ITEM" reference OR "TANK INSTALL"/"TANK INSTALLATION" tank values
+                            if (ref_number and tank_value and 
+                                str(ref_number).upper() != "ITEM" and 
+                                str(tank_value).upper() not in ["TANK INSTALL", "TANK INSTALLATION"]):
+                                
+                                tank_quantity = extract_tank_quantity(tank_value)
 
                                 fs_units.append({
                                     'ref_number': ref_number,
