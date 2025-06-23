@@ -240,26 +240,26 @@ def _calculate_net_canopy_price(sheet: Worksheet, ref_row: int) -> float:
         
         # If formula result not available, calculate manually
         # Sum the canopy-related prices from the subtotal range, EXCLUDING the cladding price
+        # The Excel formula is P12=N12-N19, so we need: subtotal(N14:N27) - N19
         start_row = ref_row + 2  # N14, N31, N48, etc.
         cladding_row = ref_row + 7  # N19, N36, N53, etc.
         end_row = ref_row + 15   # N27, N44, N61, etc.
         
-        canopy_total = 0
+        # Calculate subtotal (sum all values in the range)
+        subtotal = 0
         for row in range(start_row, end_row + 1):
-            if row == cladding_row:
-                continue  # Skip the cladding price cell
             cell_value = sheet[f'N{row}'].value
             if cell_value and isinstance(cell_value, (int, float)):
-                canopy_total += float(cell_value)
+                subtotal += float(cell_value)
         
-        # Subtract cladding price from N19, N36, N53, etc.
+        # Subtract cladding price (this matches the Excel formula P12=N12-N19)
         cladding_price = sheet[f'N{cladding_row}'].value or 0
         if isinstance(cladding_price, (int, float)):
             cladding_price = float(cladding_price)
         else:
             cladding_price = 0
         
-        net_price = canopy_total - cladding_price
+        net_price = subtotal - cladding_price
         return net_price
         
     except Exception as e:
@@ -271,6 +271,12 @@ def _calculate_net_delivery_price(sheet: Worksheet) -> float:
     Calculate net delivery price by reading from P182 formula result,
     or manually calculating if formula result is not available.
     
+    Excel structure:
+    - N183-N197: Individual delivery components (we write to N183)
+    - N193: Commissioning price (subtracted from total)
+    - N182: =SUBTOTAL(9,N183:N197) (TOTAL delivery price including all components)
+    - P182: =N182-N193 (NET delivery price = total delivery minus commissioning)
+    
     Args:
         sheet (Worksheet): The worksheet to read from
     
@@ -278,37 +284,45 @@ def _calculate_net_delivery_price(sheet: Worksheet) -> float:
         float: Net delivery price (delivery total minus testing/commissioning)
     """
     try:
-        # Try to read the calculated value from P182
+        # Try to read the calculated value from P182 (preferred method)
         p182_value = sheet['P182'].value
         if p182_value and isinstance(p182_value, (int, float)):
             return float(p182_value)
         
-        # If formula result not available, calculate manually
-        # Try to read N182 (total delivery subtotal) first
+        # If P182 formula result not available, try N182 minus N193
         n182_value = sheet['N182'].value
         if n182_value and isinstance(n182_value, (int, float)):
             delivery_total = float(n182_value)
-        else:
-            # N182 formula not evaluated yet, sum components manually
-            # Sum delivery prices from N183-N197 range, EXCLUDING the commissioning price
-            delivery_total = 0
-            commissioning_row = 193  # N193
-            for row in range(183, 198):  # N183 to N197
-                if row == commissioning_row:
-                    continue  # Skip the commissioning price cell
-                cell_value = sheet[f'N{row}'].value
-                if cell_value and isinstance(cell_value, (int, float)):
-                    delivery_total += float(cell_value)
+            # Subtract commissioning price from N193
+            commissioning_price = sheet['N193'].value or 0
+            if isinstance(commissioning_price, (int, float)):
+                commissioning_price = float(commissioning_price)
+            else:
+                commissioning_price = 0
+            return delivery_total - commissioning_price
         
-        # Subtract commissioning price from N193
+        # If N182 formula not evaluated, manually calculate the SUBTOTAL(9,N183:N197)
+        # But EXCLUDE N193 (commissioning) from the delivery total, as it should not be part of delivery costs
+        print(f"Warning: N182 formula not evaluated, manually calculating SUBTOTAL")
+        delivery_total = 0
+        commissioning_row = 193  # N193 should be excluded from delivery total
+        for row in range(183, 198):  # N183 to N197 (SUBTOTAL range)
+            if row == commissioning_row:
+                continue  # Skip N193 as it's commissioning, not delivery
+            cell_value = sheet[f'N{row}'].value
+            if cell_value and isinstance(cell_value, (int, float)):
+                delivery_total += float(cell_value)
+        
+        # Subtract commissioning price from N193 to get net delivery
         commissioning_price = sheet['N193'].value or 0
         if isinstance(commissioning_price, (int, float)):
             commissioning_price = float(commissioning_price)
         else:
             commissioning_price = 0
         
-        net_price = delivery_total - commissioning_price
-        return net_price
+        net_delivery = delivery_total - commissioning_price
+        print(f"Manual calculation: Total delivery {delivery_total} - Commissioning {commissioning_price} = Net {net_delivery}")
+        return net_delivery
         
     except Exception as e:
         print(f"Warning: Could not calculate net delivery price: {str(e)}")
@@ -2528,8 +2542,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 # UV Extra Over cost is now calculated dynamically in the hidden calculations sheet
                                 # No need to store it in individual cells anymore
                                 
-                                # Add a note to the main UV canopy sheet indicating UV Extra Over is active
-                                current_canopy_sheet['B3'] = "UV EXTRA OVER CALCULATION ACTIVE - Compare with non-UV equivalent sheet"
+                                # Note: UV Extra Over indication is handled through sheet naming convention
+                                # The "CANOPY (UV)" sheet name clearly indicates UV Extra Over is active
                         
                             else:
                                 print(f"Warning: Not enough CANOPY sheets in template for UV Extra Over comparison in area {area_name}")
@@ -2973,10 +2987,16 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             base_fire_suppression_price = sheet[f'N{ref_row + 3}'].value or 0  # Fire suppression base price at N15, N32, N49, etc.
                             
                             # Only count actual fire suppression units, not template entries
-                            if (ref_number and tank_value and 
-                                str(ref_number).upper() != "ITEM" and 
-                                str(tank_value).upper() not in ["TANK INSTALL", "TANK INSTALLATION"]):
-                                tank_quantity = extract_tank_quantity(tank_value)
+                            if ref_number and tank_value and str(ref_number).upper() != "ITEM":
+                                # Treat placeholder values like 'TANK INSTALL' / 'TANK INSTALLATION' as a dash so
+                                # they are still processed but result in a zero (→ 'TBD' in Word) tank quantity.
+                                if str(tank_value).upper() in ["TANK INSTALL", "TANK INSTALLATION"]:
+                                    tank_value_clean = "-"
+                                else:
+                                    tank_value_clean = tank_value
+
+                                tank_quantity = extract_tank_quantity(tank_value_clean)
+
                                 fs_units.append({
                                     'ref_number': ref_number,
                                     'system_type': system_type,  # Add system type from C16
