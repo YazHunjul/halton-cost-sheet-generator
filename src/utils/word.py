@@ -977,7 +977,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
             for unit in recoair_units:
                 reference_number = unit.get('item_reference', '')
                 model = unit.get('model', '')
-                unit_price = unit.get('unit_price', 0) or 0
+                base_unit_price = unit.get('base_unit_price', 0) or 0  # Use base price from N12
                 delivery_price = unit.get('delivery_installation_price', 0) or 0
                 
                 if reference_number and model:  # Only include units with reference and model
@@ -985,7 +985,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                     recoair_item = {
                         'reference_number': reference_number,
                         'model': model,
-                        'price': unit_price,
+                        'price': base_unit_price,  # Use base price from N12
                         'delivery_price': delivery_price
                     }
                     recoair_items.append(recoair_item)
@@ -994,7 +994,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                     recoair_unit_full = {
                         'reference_number': reference_number,
                         'model': model,
-                        'price': unit_price,
+                        'price': base_unit_price,  # Use base price from N12
                         'delivery_price': delivery_price,
                         # Technical specifications
                         'length': unit.get('length', 0),
@@ -1009,12 +1009,12 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                         'quantity': unit.get('quantity', 1),
                         'model_original': unit.get('model_original', model),
                         'extract_volume_raw': unit.get('extract_volume_raw', ''),
-                        'base_unit_price': unit.get('base_unit_price', unit_price),
+                        'base_unit_price': base_unit_price,  # Keep base price for reference
                         'n29_addition': unit.get('n29_addition', 0)
                     }
                     recoair_units_full.append(recoair_unit_full)
                     
-                    area_units_total += unit_price
+                    area_units_total += base_unit_price  # Use base price from N12
                     total_delivery_price += delivery_price
             
             # Get commissioning price (should be read from N46 in Excel)
@@ -1027,7 +1027,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
             
             # Calculate different subtotals for different purposes
             recoair_subtotal = area_units_total + total_delivery_price + commissioning_price  # RecoAir units + delivery + commissioning (excluding flat pack)
-            area_total_with_flat_pack = area_units_total + total_delivery_price + commissioning_price + flat_pack_price  # Everything including flat pack
+            area_total_with_flat_pack = recoair_subtotal + flat_pack_price  # Everything including flat pack
             
             # Only create pricing schedule if there are RecoAir units in this area
             if recoair_items:
@@ -1050,7 +1050,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                 }
                 pricing_schedules.append(area_pricing)
                 
-                # Add to job totals
+                # Add to job totals (without rounding)
                 job_totals['total_units_price'] += area_units_total
                 job_totals['total_delivery_price'] += total_delivery_price
                 job_totals['total_commissioning_price'] += commissioning_price
@@ -1258,7 +1258,17 @@ def format_currency(amount) -> str:
     try:
         import math
         # Round UP to the nearest whole number (ceiling)
-        rounded_amount = math.ceil(float(amount))
+        # Only round if this is a final total (amount ends in .99 or similar)
+        float_amount = float(amount)
+        decimal_part = float_amount - int(float_amount)
+        
+        if decimal_part > 0:
+            # This is a final total that needs rounding
+            rounded_amount = math.ceil(float_amount)
+        else:
+            # This is a component price that shouldn't be rounded
+            rounded_amount = float_amount
+            
         return f"£{rounded_amount:,.2f}"
     except (ValueError, TypeError):
         return "£0.00"

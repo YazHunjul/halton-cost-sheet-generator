@@ -713,9 +713,10 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
                     specs = get_recoair_specifications(transformed_model)
                     
                     # Calculate final unit price (base price + delivery/install share + commissioning)
-                    base_unit_price = unit_price  # Already validated above
+                    base_unit_price = unit_price  # Base price from N12
                     delivery_per_unit = delivery_installation_price / selection_num if selection_num > 0 else 0
                     commissioning_per_unit = n46_value / selection_num if selection_num > 0 else 0
+                    # Total price is base price from N12 plus share of delivery and commissioning
                     final_unit_price = base_unit_price + delivery_per_unit + commissioning_per_unit
                     
                     # Create RecoAir unit data
