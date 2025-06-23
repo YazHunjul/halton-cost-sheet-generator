@@ -763,11 +763,11 @@ def initialize_session_state():
         st.session_state.current_step = 1
     if 'project_info' not in st.session_state:
         st.session_state.project_info = {}
-    # Initialize template selection with default 19.1
+    # Initialize template selection with default 19.2
     if "selected_template" not in st.session_state:
-        st.session_state.selected_template = "Cost Sheet R19.1 May 2025"
+        st.session_state.selected_template = "Cost Sheet R19.2 Jun 2025"
     if "template_path" not in st.session_state:
-        st.session_state.template_path = "templates/excel/Cost Sheet R19.1 May 2025.xlsx"
+        st.session_state.template_path = "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx"
 
 def navigation_buttons():
     """Display navigation buttons based on the current step."""
@@ -1085,7 +1085,7 @@ def step2_project_structure():
                     st.session_state.levels[level_idx]['areas'].append({
                         "name": f"Area {len(level['areas']) + 1}",
                         "canopies": [],
-                        "options": {"uvc": False, "sdu": False, "recoair": False, "uv_extra_over": False}
+                        "options": {"uvc": False, "sdu": False, "recoair": False, "marvel": False, "uv_extra_over": False}
                     })
                     st.rerun()
             
@@ -1122,6 +1122,7 @@ def step2_project_structure():
                                 'uvc': st.session_state.get(f"{area_key}_uvc", False),
                                 'sdu': st.session_state.get(f"{area_key}_sdu", False),
                                 'recoair': st.session_state.get(f"{area_key}_recoair", False),
+                                'marvel': st.session_state.get(f"{area_key}_marvel", False),
                                 'uv_extra_over': st.session_state.get(f"{area_key}_uv_extra_over", False)
                             }
                         
@@ -1138,6 +1139,11 @@ def step2_project_structure():
                                             key=f"{area_key}_recoair",
                                             on_change=update_area_options)
                         
+                        marvel = st.checkbox("Marvel", 
+                                        value=area['options'].get('marvel', False), 
+                                        key=f"{area_key}_marvel",
+                                        on_change=update_area_options)
+                        
                         # UV Extra Over option - always available regardless of canopies
                         uv_extra_over = st.checkbox("UV Extra Over", 
                                                   value=area['options'].get('uv_extra_over', False), 
@@ -1150,6 +1156,7 @@ def step2_project_structure():
                             'uvc': uvc,
                             'sdu': sdu,
                             'recoair': recoair,
+                            'marvel': marvel,
                             'uv_extra_over': uv_extra_over
                         }
                     
@@ -1180,7 +1187,7 @@ def step3_canopy_configuration():
                 has_uv_canopies = any(canopy.get('model', '').upper().startswith('UV') for canopy in area.get('canopies', []))
                 
                 # Display area options with UV Extra Over
-                options_text = f"UV-C: {'Yes' if area['options']['uvc'] else 'No'} | SDU: {'Yes' if area['options']['sdu'] else 'No'} | RecoAir: {'Yes' if area['options']['recoair'] else 'No'}"
+                options_text = f"UV-C: {'Yes' if area['options']['uvc'] else 'No'} | SDU: {'Yes' if area['options']['sdu'] else 'No'} | RecoAir: {'Yes' if area['options']['recoair'] else 'No'} | Marvel: {'Yes' if area['options'].get('marvel', False) else 'No'}"
                 options_text += f" | UV Extra Over: {'Yes' if area['options'].get('uv_extra_over', False) else 'No'}"
                 
                 st.markdown(f"**Area Options:** {options_text}")
@@ -1478,6 +1485,7 @@ def step4_review_and_generate():
                     if area['options']['uvc']: options.append("UV-C")
                     if area['options']['sdu']: options.append("SDU")
                     if area['options']['recoair']: options.append("RecoAir")
+                    if area['options']['marvel']: options.append("Marvel")
                     options_str = ", ".join(options) if options else "None"
                     st.write(f"  • {area['name']}: {canopy_count} canopies, Options: {options_str}")
     
@@ -1599,12 +1607,13 @@ def populate_session_state_from_uploaded_data(extracted_data):
             st.session_state.selected_template = extracted_data['template_used']
             # Update the template path based on the extracted template info
             template_options = {
+                "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
                 "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
                 "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
             }
             st.session_state.template_path = template_options.get(
                 extracted_data['template_used'], 
-                "templates/excel/Cost Sheet R19.1 May 2025.xlsx"  # Default to 19.1
+                "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx"  # Default to 19.2
             )
         
         print(f"✅ Session state populated with uploaded data:")
@@ -1639,13 +1648,14 @@ def main():
         # Template Selection
         st.markdown("### Cost Sheet Template Selection")
         template_options = {
+            "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
             "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
             "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
         }
         
         # Initialize template selection in session state
         if "selected_template" not in st.session_state:
-            st.session_state.selected_template = "Cost Sheet R19.1 May 2025"  # Default to 19.1
+            st.session_state.selected_template = "Cost Sheet R19.2 Jun 2025"  # Default to 19.2
         
         selected_template = st.selectbox(
             "Choose Cost Sheet Template:",

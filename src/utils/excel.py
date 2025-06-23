@@ -15,7 +15,13 @@ from config.constants import is_feature_enabled
 from utils.date_utils import format_date_for_display, get_current_date
 
 # Constants for Excel operations
-TEMPLATE_PATH = "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
+TEMPLATE_PATHS = {
+    "R19.1": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
+    "R19.2": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx"
+}
+DEFAULT_TEMPLATE_PATH = TEMPLATE_PATHS["R19.2"]  # Default to latest version
+
+# Other constants
 BASE_SHEET_NAME = "CANOPY"  # The template sheet to copy from
 RECOAIR_SHEET_NAME = "RECOAIR"
 EDGE_BOX_SHEET_NAME = "EDGE BOX"
@@ -88,20 +94,38 @@ def remove_external_links(wb: Workbook) -> None:
     except Exception as e:
         print(f"Warning: Could not remove external links: {str(e)}")
 
-def load_template_workbook(template_path: str = None) -> Workbook:
+def get_template_path(version: str = None) -> str:
+    """
+    Get the template path for a specific version.
+    
+    Args:
+        version (str, optional): Version identifier (e.g. "R19.1" or "R19.2")
+        
+    Returns:
+        str: Path to the template file
+    """
+    if version and version in TEMPLATE_PATHS:
+        return TEMPLATE_PATHS[version]
+    return DEFAULT_TEMPLATE_PATH
+
+def load_template_workbook(template_path: str = None, version: str = None) -> Workbook:
     """
     Load the Excel template workbook and remove external links.
     
     Args:
         template_path (str, optional): Path to the template file. If None, uses default.
+        version (str, optional): Version identifier (e.g. "R19.1" or "R19.2")
     
     Returns:
         Workbook: Template workbook with external links removed
     """
     try:
-        # Use provided template path or fall back to legacy default
+        # Use provided template path, version-specific path, or fall back to default
         if template_path is None:
-            template_path = TEMPLATE_PATH  # Use the constant as fallback
+            if version:
+                template_path = get_template_path(version)
+            else:
+                template_path = DEFAULT_TEMPLATE_PATH
         
         # Try relative path from src directory first, then from project root
         template_paths = [
@@ -779,23 +803,34 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
             }
         }
 
-def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str):
+def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str, template_version: str = None):
     """
     Write cost sheet identifier to N2 of each sheet.
-    Format: F24-19.1 (sheet type) COST SHEET for individual sheets
-    Format: F24-19.1 COST SHEET for JOB TOTAL sheet
+    Format: R19.2 (sheet type) COST SHEET for individual sheets
+    Format: R19.2 COST SHEET for JOB TOTAL sheet
     
     Args:
         sheet (Worksheet): The worksheet to write to
         sheet_name (str): Name of the sheet to determine the identifier
+        template_version (str, optional): Template version to use. If None, tries to detect from B1
     """
     try:
-        # Base identifier
-        base_identifier = "F24-19.1"
+        # Use provided version or try to detect from B1
+        version = template_version or "R19.2"  # Default version
+        
+        if not template_version:
+            # Fallback: try to get version from B1 of this sheet
+            title = sheet['B1'].value
+            if title and ' - ' in title:
+                parts = title.split(' ')[0].split('-')
+                if len(parts) == 2:
+                    detected_version = f"R{parts[1]}"
+                    if detected_version in TEMPLATE_PATHS:
+                        version = detected_version
         
         # Determine sheet type from sheet name
         if sheet_name == "JOB TOTAL":
-            identifier = f"{base_identifier} COST SHEET"
+            identifier = f"{version} COST SHEET"
         else:
             # Extract sheet type from sheet name
             sheet_type = ""
@@ -812,10 +847,12 @@ def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str):
                 sheet_type = "SDU"
             elif "RECOAIR" in sheet_name:
                 sheet_type = "RECOAIR"
+            elif "MARVEL" in sheet_name:
+                sheet_type = "MARVEL"
             else:
                 sheet_type = "SYSTEM"  # Default fallback
             
-            identifier = f"{base_identifier} ({sheet_type}) COST SHEET"
+            identifier = f"{version} ({sheet_type}) COST SHEET"
         
         # Write to N2
         sheet['N2'] = identifier
@@ -823,13 +860,14 @@ def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str):
     except Exception as e:
         print(f"Warning: Could not write cost sheet identifier to N2 on {sheet_name}: {str(e)}")
 
-def write_project_metadata(sheet: Worksheet, project_data: Dict):
+def write_project_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None):
     """
     Write project metadata to the specified cells in the sheet.
     
     Args:
         sheet (Worksheet): The worksheet to write to
         project_data (Dict): Project metadata
+        template_version (str, optional): Template version to use for cost sheet identifier
     """
     for field, cell in CELL_MAPPINGS.items():
         value = project_data.get(field)
@@ -892,7 +930,7 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict):
                 continue
     
     # Add cost sheet identifier to N2
-    write_cost_sheet_identifier(sheet, sheet.title)
+    write_cost_sheet_identifier(sheet, sheet.title, template_version)
 
 def write_canopy_pricing_data(sheet: Worksheet, canopy: Dict, row_index: int):
     """
@@ -1224,11 +1262,23 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
     try:
         # Define dropdown options (keeping them shorter to avoid Excel corruption)
         lighting_options = [
+            'LIGHT SELECTION',
             'LED STRIP L6 Inc DALI',
-            'LED STRIP L12 inc DALI', 
+            'LED STRIP L12 Inc DALI', 
             'LED STRIP L18 Inc DALI',
-            'Small LED Spots inc DALI',
-            'LARGE LED Spots inc DALI'
+            'LED STRIP L6EM',
+            'LED STRIP L12EM',
+            'LED STRIP L18EM',
+            'LM6',
+            'LM12',
+            'LM18',
+            'Small LED Spots Inc DALI',
+            'Large LED Spots Inc DALI',
+            'HCL600 DALI',
+            'HCL1200 DALI',
+            'HCL1800 DALI',
+            'EL215',
+            'EL218'
         ]
         
         special_works_options = [
@@ -1486,7 +1536,7 @@ def set_sheet_tab_color(sheet: Worksheet, area_index: int):
     color = TAB_COLORS[area_index % len(TAB_COLORS)]
     sheet.sheet_properties.tabColor = color
 
-def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
+def write_ebox_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None):
     """
     Write project metadata to EBOX sheet with specific cell mappings.
     
@@ -1587,13 +1637,13 @@ def write_ebox_metadata(sheet: Worksheet, project_data: Dict):
                     continue
         
         # Add cost sheet identifier to N2
-        write_cost_sheet_identifier(sheet, sheet.title)
+        write_cost_sheet_identifier(sheet, sheet.title, template_version)
         
     except Exception as e:
         print(f"Warning: Could not write EBOX metadata: {str(e)}")
         pass
 
-def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: str = "1.01"):
+def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: str = "1.01", template_version: str = None):
     """
     Write project metadata to RECOAIR sheet with specific cell mappings.
     
@@ -1674,12 +1724,12 @@ def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: st
                     print(f"Warning: Still could not write {field} to RECOAIR cell {cell} after unmerging: {str(e2)}")
         
         # Add cost sheet identifier to N2
-        write_cost_sheet_identifier(sheet, sheet.title)
+        write_cost_sheet_identifier(sheet, sheet.title, template_version)
         
     except Exception as e:
         print(f"Warning: Could not write RECOAIR metadata: {str(e)}")
 
-def write_sdu_metadata(sheet: Worksheet, project_data: Dict):
+def write_sdu_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None):
     """
     Write project metadata to SDU sheet with specific cell mappings.
     
@@ -1757,7 +1807,7 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict):
             print(f"Warning: Could not write SDU project metadata: {str(e)}")
         
         # Add cost sheet identifier to N2
-        write_cost_sheet_identifier(sheet, sheet.title)
+        write_cost_sheet_identifier(sheet, sheet.title, template_version)
         
     except Exception as e:
         print(f"Warning: Could not write SDU metadata: {str(e)}")
@@ -2224,6 +2274,8 @@ def add_delivery_location_dropdown_to_sheet(sheet: Worksheet, selected_delivery_
             cell = "E38"
         elif "RECOAIR" in sheet_name:
             cell = "E37"
+        elif "MARVEL" in sheet_name:
+            cell = "D54"  # MARVEL sheets use D54 for delivery location
         elif "FIRE" in sheet_name and "SUPP" in sheet_name:
             cell = "D183"
         elif "CANOPY" in sheet_name:
@@ -2284,7 +2336,10 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         str: Path to the saved Excel file
     """
     try:
+        # Load template and detect version
         wb = load_template_workbook(template_path)
+        template_version = detect_template_version(wb)
+        print(f"🔍 Detected template version: {template_version}")
         
         # Get all sheets once and create lists of available sheets
         all_sheets = wb.sheetnames
@@ -2293,6 +2348,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         edge_box_sheets = [sheet for sheet in all_sheets if 'EBOX' in sheet or 'EDGE BOX' in sheet]
         recoair_sheets = [sheet for sheet in all_sheets if 'RECOAIR' in sheet]
         sdu_sheets = [sheet for sheet in all_sheets if 'SDU' in sheet and 'CANOPY' not in sheet and 'FIRE' not in sheet]
+        # MARVEL template sheets (for UV grease recovery option)
+        marvel_sheets = [sheet for sheet in all_sheets if 'MARVEL' in sheet]
         
         # Hide the Lists sheet if it exists
         if 'Lists' in wb.sheetnames:
@@ -2301,7 +2358,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         # Add project metadata to JOB TOTAL sheet by default
         if 'JOB TOTAL' in wb.sheetnames:
             job_total_sheet = wb['JOB TOTAL']
-            write_project_metadata(job_total_sheet, project_data)
+            write_project_metadata(job_total_sheet, project_data, template_version)
             job_total_sheet.sheet_state = 'visible'
         
         # Write company and estimator data to hidden sheet
@@ -2347,6 +2404,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 # Check if area has RecoAir system (area-level option)
                 has_recoair = area.get("options", {}).get("recoair", False)
                 
+                # Check if area has Marvel system (area-level option)
+                has_marvel = area.get("options", {}).get("marvel", False)
+                
                 # Check if area has UV Extra Over option
                 has_uv_extra_over = area.get("options", {}).get("uv_extra_over", False)
                 
@@ -2388,7 +2448,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         current_canopy_sheet.sheet_properties.tabColor = tab_color
                         
                         # Write project metadata to canopy sheet (C/G columns)
-                        write_project_metadata(current_canopy_sheet, project_data)
+                        write_project_metadata(current_canopy_sheet, project_data, template_version)
                         
                         # Write area-level delivery and installation pricing
                         write_area_delivery_install_pricing(current_canopy_sheet, area)
@@ -2404,7 +2464,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 fs_sheet.sheet_properties.tabColor = tab_color
                                 
                                 # Write project metadata to fire suppression sheet
-                                write_project_metadata(fs_sheet, project_data)
+                                write_project_metadata(fs_sheet, project_data, template_version)
                                 # Set fire suppression sheet title in B1
                                 fs_sheet['B1'] = f"{level_name} - {area_name} - FIRE SUPPRESSION"
                         
@@ -2419,7 +2479,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 ebox_sheet.sheet_properties.tabColor = tab_color
                                 
                                 # Write EBOX-specific metadata to EBOX sheet (D/H columns)
-                                write_ebox_metadata(ebox_sheet, project_data)
+                                write_ebox_metadata(ebox_sheet, project_data, template_version)
                                 # Set EBOX sheet title in C1
                                 ebox_sheet['C1'] = f"{level_name} - {area_name} - UV-C SYSTEM"
                             else:
@@ -2436,7 +2496,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 sdu_sheet.sheet_properties.tabColor = tab_color
                                 
                                 # Write SDU-specific metadata to SDU sheet (C/G columns)
-                                write_sdu_metadata(sdu_sheet, project_data)
+                                write_sdu_metadata(sdu_sheet, project_data, template_version)
                                 # Set SDU sheet title in B1
                                 sdu_sheet['B1'] = f"{level_name} - {area_name} - SDU SYSTEM"
                                 
@@ -2460,7 +2520,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 item_number = f"{recoair_sheet_count}.01"
                                 
                                 # Write RECOAIR-specific metadata to RECOAIR sheet (D/H columns)
-                                write_recoair_metadata(recoair_sheet, project_data, item_number)
+                                write_recoair_metadata(recoair_sheet, project_data, item_number, template_version)
                                 # Set RECOAIR sheet title in C1
                                 recoair_sheet['C1'] = f"{level_name} - {area_name} - RECOAIR SYSTEM"
                                 
@@ -2468,6 +2528,26 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 add_recoair_dropdowns(recoair_sheet)
                             else:
                                 print(f"Warning: Not enough RECOAIR sheets in template for RecoAir system in area {area_name}")
+                        
+                        # Create MARVEL sheet if Marvel is selected for this area
+                        if has_marvel:
+                            if marvel_sheets:
+                                marvel_sheet_name = marvel_sheets.pop(0)
+                                marvel_sheet = wb[marvel_sheet_name]
+                                new_marvel_name = f"MARVEL - {level_name} ({area_number})"
+                                marvel_sheet.title = new_marvel_name
+                                marvel_sheet.sheet_state = 'visible'
+                                marvel_sheet.sheet_properties.tabColor = tab_color
+                                
+                                # Write MARVEL-specific metadata to MARVEL sheet (F columns for project name/location/date)
+                                write_marvel_metadata(marvel_sheet, project_data, template_version)
+                                # Set MARVEL sheet title in C1 (handle merged cells)
+                                try:
+                                    marvel_sheet['C1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
+                                except Exception as e:
+                                    print(f"Warning: Could not write title to C1 on MARVEL sheet: {str(e)}")
+                            else:
+                                print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")
                         
                         # Write each canopy with proper spacing
                         fs_canopy_idx = 0  # Track fire suppression canopies separately
@@ -2517,7 +2597,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 
                                 # Set title in B1 for non-UV sheet
                                 non_uv_sheet['B1'] = f"{level_name} - {area_name} - NON-UV EQUIVALENT"
-                                write_project_metadata(non_uv_sheet, project_data)
+                                write_project_metadata(non_uv_sheet, project_data, template_version)
                                 
                                 # Create non-UV equivalent canopies by converting UV models to non-UV
                                 non_uv_canopies = []
@@ -2560,8 +2640,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                     else:
                         raise Exception(f"Not enough CANOPY sheets in template for area {area_name}")
                 
-                # Handle case where UV-C, SDU, and/or RecoAir are selected but no canopies exist (edge case)
-                elif (has_uvc or has_sdu or has_recoair) and not area_canopies:
+                # Handle case where UV-C, SDU, RecoAir, and/or Marvel are selected but no canopies exist (edge case)
+                elif (has_uvc or has_sdu or has_recoair or has_marvel) and not area_canopies:
                     # Create EBOX sheet if UV-C is selected
                     if has_uvc:
                         if edge_box_sheets:
@@ -2573,7 +2653,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             ebox_sheet.sheet_properties.tabColor = tab_color
                             
                             # Write EBOX-specific metadata to EBOX sheet (D/H columns)
-                            write_ebox_metadata(ebox_sheet, project_data)
+                            write_ebox_metadata(ebox_sheet, project_data, template_version)
                             # Set EBOX sheet title in C1
                             ebox_sheet['C1'] = f"{level_name} - {area_name} - UV-C SYSTEM"
                         else:
@@ -2590,7 +2670,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             sdu_sheet.sheet_properties.tabColor = tab_color
                             
                             # Write SDU-specific metadata to SDU sheet (C/G columns)
-                            write_sdu_metadata(sdu_sheet, project_data)
+                            write_sdu_metadata(sdu_sheet, project_data, template_version)
                             # Set SDU sheet title in B1
                             sdu_sheet['B1'] = f"{level_name} - {area_name} - SDU SYSTEM"
                             
@@ -2614,7 +2694,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             item_number = f"{recoair_sheet_count}.01"
                             
                             # Write RECOAIR-specific metadata to RECOAIR sheet (D/H columns)
-                            write_recoair_metadata(recoair_sheet, project_data, item_number)
+                            write_recoair_metadata(recoair_sheet, project_data, item_number, template_version)
                             # Set RECOAIR sheet title in C1
                             recoair_sheet['C1'] = f"{level_name} - {area_name} - RECOAIR SYSTEM"
                             
@@ -2622,6 +2702,26 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             add_recoair_dropdowns(recoair_sheet)
                         else:
                             print(f"Warning: Not enough RECOAIR sheets in template for RecoAir system in area {area_name}")
+                    
+                    # Create MARVEL sheet if Marvel is selected
+                    if has_marvel:
+                        if marvel_sheets:
+                            marvel_sheet_name = marvel_sheets.pop(0)
+                            marvel_sheet = wb[marvel_sheet_name]
+                            new_marvel_name = f"MARVEL - {level_name} ({area_number})"
+                            marvel_sheet.title = new_marvel_name
+                            marvel_sheet.sheet_state = 'visible'
+                            marvel_sheet.sheet_properties.tabColor = tab_color
+                            
+                            # Write MARVEL-specific metadata to MARVEL sheet (F columns for project name/location/date)
+                            write_marvel_metadata(marvel_sheet, project_data, template_version)
+                            # Set MARVEL sheet title in C1 (handle merged cells)
+                            try:
+                                marvel_sheet['C1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
+                            except Exception as e:
+                                print(f"Warning: Could not write title to C1 on MARVEL sheet: {str(e)}")
+                        else:
+                            print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")
                 
                 area_count += 1
         
@@ -2629,11 +2729,11 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
             if (sheet.sheet_state == 'visible' and 
-                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU')) and 
+                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL')) and 
                 sheet_name not in ['Lists', 'JOB TOTAL']):
-                # Write metadata to any other visible sheets (excluding EBOX, RECOAIR, and SDU which have their own metadata)
+                # Write metadata to any other visible sheets (excluding EBOX, RECOAIR, SDU, and MARVEL which have their own metadata)
                 try:
-                    write_project_metadata(sheet, project_data)
+                    write_project_metadata(sheet, project_data, template_version)
                 except Exception as e:
                     print(f"Warning: Could not write metadata to sheet {sheet_name}: {str(e)}")
         
@@ -2649,16 +2749,38 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
             sheet = wb[sheet_name]
             if (sheet.sheet_state == 'visible' and 
                 sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData'] and
-                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU'])):
+                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL'])):
                 add_delivery_location_dropdown_to_sheet(sheet, delivery_location)
                 sheets_updated += 1
         print(f"📝 Added delivery location dropdowns to {sheets_updated} sheets")
         
-        # Remove any unused template sheets
-        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets
+        # Hide any unused template sheets
+        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets
+        print(f"🔧 Hiding {len(unused_sheets)} unused template sheets...")
         for sheet_name in unused_sheets:
             if sheet_name in wb.sheetnames:
-                wb.remove(wb[sheet_name])
+                wb[sheet_name].sheet_state = 'hidden'
+                print(f"   Hidden (unused list): {sheet_name}")
+        
+        # Additional pass: hide any other leftover template sheets that are still visible
+        allowed_visible_prefixes = (
+            'CANOPY -', 'CANOPY (UV)', 'FIRE SUPP -', 'EBOX -', 'SDU -', 'RECOAIR -', 'MARVEL -',
+            'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData'
+        )
+        extra_hidden_count = 0
+        for sheet in wb.worksheets:
+            if sheet.sheet_state == 'visible':
+                keep_visible = False
+                for prefix in allowed_visible_prefixes:
+                    if sheet.title.startswith(prefix):
+                        keep_visible = True
+                        break
+                if not keep_visible:
+                    sheet.sheet_state = 'hidden'
+                    extra_hidden_count += 1
+                    print(f"   Hidden (extra pass): {sheet.title}")
+        if extra_hidden_count:
+            print(f"🔒 Additionally hid {extra_hidden_count} leftover template sheets that were still visible.")
         
         # Create pricing summary sheet for dynamic pricing aggregation
         print("Creating PRICING_SUMMARY sheet...")
@@ -2703,38 +2825,55 @@ def detect_template_version(wb: Workbook) -> str:
         wb (Workbook): The Excel workbook to analyze
         
     Returns:
-        str: Template version identifier
+        str: Template version identifier (e.g. "R19.2")
     """
     try:
-        # Method 1: Check for version-specific sheets or cells
+        # Method 1: Check for version in CANOPY sheet B1
         sheet_names = wb.sheetnames
         
-        # Method 2: Check for specific cells or content that differ between versions
-        # For now, we'll use a simple heuristic - check if certain sheets exist
-        # You can expand this logic based on actual differences between templates
+        # First try to find a CANOPY sheet
+        for sheet_name in sheet_names:
+            if 'CANOPY' in sheet_name:
+                sheet = wb[sheet_name]
+                title = sheet['B1'].value
+                if title and ' - ' in title:
+                    # Extract version from title (e.g. "F24-19.2 CANOPY COST SHEET" or "F24 - 19.1  CANOPY COST SHEET")
+                    # Handle both formats: "F24-19.2" and "F24 - 19.1"
+                    title_str = str(title)
+                    if ' - ' in title_str:
+                        # Format: "F24 - 19.1  CANOPY COST SHEET"
+                        parts = title_str.split(' - ')
+                        if len(parts) >= 2:
+                            version_part = parts[1].split()[0]  # Get "19.1" from "19.1  CANOPY"
+                            version = f"R{version_part}"
+                            if version in TEMPLATE_PATHS:  # Only return known versions
+                                return version
+                    elif '-' in title_str:
+                        # Format: "F24-19.2 CANOPY COST SHEET"
+                        parts = title_str.split(' ')[0].split('-')  # Split "F24-19.2" into ["F24", "19.2"]
+                        if len(parts) == 2:
+                            version = f"R{parts[1]}"
+                            if version in TEMPLATE_PATHS:  # Only return known versions
+                                return version
         
+        # Method 2: Check JOB TOTAL sheet if no CANOPY sheet found
         if 'JOB TOTAL' in sheet_names:
             job_total_sheet = wb['JOB TOTAL']
-            
-            # Check for specific cells or patterns that indicate version 19.1
-            # This is a placeholder - you'll need to identify actual differences
-            # between the templates and add specific detection logic here
-            
-            # For now, default to detecting based on file characteristics
-            # You can add more sophisticated detection later
-            pass
+            title = job_total_sheet['B1'].value
+            if title and ' - ' in title:
+                parts = title.split(' ')[0].split('-')
+                if len(parts) == 2:
+                    version = f"R{parts[1]}"
+                    if version in TEMPLATE_PATHS:  # Only return if it's a known version
+                        return version
         
-        # Default detection logic - you may want to enhance this
-        # by checking specific cell values, formulas, or sheet structures
-        # that differ between the two template versions
-        
-        # For now, we'll assume newer files are 19.1 unless we can detect otherwise
-        return "Cost Sheet R19.1 May 2025"
+        # Default to R19.2 if no version found
+        return "R19.2"
         
     except Exception as e:
         print(f"Warning: Could not detect template version: {str(e)}")
-        # Default to 19.1 if detection fails
-        return "Cost Sheet R19.1 May 2025"
+        # Default to R19.2 if detection fails
+        return "R19.2"
 
 def read_excel_project_data(excel_path: str) -> Dict:
     """
@@ -3843,8 +3982,10 @@ def update_job_total_sheet(wb: Workbook) -> None:
             else:
                 # Category doesn't exist - leave as 0
                 print(f"○ Skipped {display_name} (row {row_num}) - {pricing_category} category not found")
+            # Add margin formula in column U with IFERROR wrapper (always set)
+            job_total_sheet[f'U{row_num}'] = f"=IFERROR((T{row_num}-S{row_num})/T{row_num}, \"\")"
         
-        print(f"Updated JOB TOTAL sheet with dynamic pricing formulas for {len([cat for cat in categories.keys() if cat in [mapping[1] for mapping in job_total_mapping.values()]])} categories")
+        print(f"Updated JOB TOTAL sheet with dynamic pricing formulas for {len([cat for cat in categories.keys() if cat in [mapping[1] for mapping in job_total_mapping.values()]])} categories and added margin formulas")
         
     except Exception as e:
         print(f"Warning: Could not update JOB TOTAL sheet: {str(e)}")
@@ -4595,3 +4736,66 @@ def add_plant_selection_dropdown_to_fire_supp(sheet: Worksheet):
         
     except Exception as e:
         print(f"Warning: Could not add plant selection dropdown to Fire Suppression sheet: {str(e)}")
+
+# ---------------------- MARVEL METADATA ----------------------
+
+def write_marvel_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None):
+    """
+    Write project metadata to a MARVEL sheet (grease recovery system).
+    MARVEL sheets use column F instead of G for name/location/date.
+    """
+    try:
+        marvel_cell_mappings = {
+            "project_number": "C3",
+            "company": "C5",
+            "estimator": "C7",
+            "project_name": "F3",  # differs
+            "project_location": "F5",  # differs
+            "date": "F7",  # differs
+            "revision": "O7",
+        }
+
+        for field, cell in marvel_cell_mappings.items():
+            value = project_data.get(field)
+            try:
+                if field == "revision":
+                    sheet[cell] = value or ""
+                elif value:
+                    if field == "estimator":
+                        from utils.word import get_combined_initials
+                        value = get_combined_initials(project_data.get('sales_contact',''), value)
+                    elif field != "date":
+                        value = str(value).title()
+                    elif field == "date" and not value:
+                        value = get_current_date()
+                    sheet[cell] = value
+            except Exception as e:
+                # Handle merged cells like other metadata functions
+                print(f"Warning: Could not write {field} to MARVEL cell {cell}: {str(e)}")
+                try:
+                    # Try to unmerge the cell and write
+                    if hasattr(sheet, 'merged_cells'):
+                        for merged_range in list(sheet.merged_cells.ranges):
+                            if cell in merged_range:
+                                sheet.unmerge_cells(str(merged_range))
+                                break
+                    # Try writing again after unmerging
+                    if field == "revision":
+                        sheet[cell] = value or ""
+                    elif value:
+                        if field == "estimator":
+                            from utils.word import get_combined_initials
+                            value = get_combined_initials(project_data.get('sales_contact',''), value)
+                        elif field != "date":
+                            value = str(value).title()
+                        elif field == "date" and not value:
+                            value = get_current_date()
+                        sheet[cell] = value
+                except Exception as e2:
+                    print(f"Warning: Still could not write {field} to MARVEL cell {cell} after unmerging: {str(e2)}")
+                    continue
+
+        # Cost sheet identifier in N2 (same as others)
+        write_cost_sheet_identifier(sheet, sheet.title, template_version)
+    except Exception as e:
+        print(f"Warning: Could not write MARVEL metadata: {str(e)}")

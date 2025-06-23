@@ -146,13 +146,71 @@ def transform_lighting_type(lighting_type: str) -> str:
     
     # Check for LED strip variations (any string containing "LED STRIP")
     if "LED STRIP" in lighting_str:
-        return "LED STRIP"
+        if "DALI" in lighting_str:
+            # Return specific LED STRIP type with DALI
+            if "L6" in lighting_str:
+                return "LED STRIP L6 Inc DALI"
+            elif "L12" in lighting_str:
+                return "LED STRIP L12 Inc DALI"
+            elif "L18" in lighting_str:
+                return "LED STRIP L18 Inc DALI"
+            else:
+                return "LED STRIP Inc DALI"
+        elif "EM" in lighting_str:
+            # Return specific LED STRIP type with EM
+            if "L6" in lighting_str:
+                return "LED STRIP L6EM"
+            elif "L12" in lighting_str:
+                return "LED STRIP L12EM"
+            elif "L18" in lighting_str:
+                return "LED STRIP L18EM"
+            else:
+                return "LED STRIP EM"
+        else:
+            # Return specific LED STRIP type without DALI/EM
+            if "LM6" in lighting_str or "LM-6" in lighting_str:
+                return "LM6"
+            elif "LM12" in lighting_str or "LM-12" in lighting_str:
+                return "LM12"
+            elif "LM18" in lighting_str or "LM-18" in lighting_str:
+                return "LM18"
+            else:
+                return "LED STRIP"
+    
     # Check for spots variations
     elif "SPOTS" in lighting_str or "SPOT" in lighting_str:
-        return "LED SPOTS"
-    else:
-        # For any other value or unrecognized lighting type, return "-"
-        return "-"
+        if "DALI" in lighting_str:
+            if "SMALL" in lighting_str:
+                return "Small LED Spots Inc DALI"
+            elif "LARGE" in lighting_str:
+                return "Large LED Spots Inc DALI"
+            else:
+                return "LED SPOTS Inc DALI"
+        else:
+            return "LED SPOTS"
+    
+    # Check for HCL variations
+    elif lighting_str.startswith("HCL"):
+        if "600" in lighting_str:
+            return "HCL600 DALI"
+        elif "1200" in lighting_str:
+            return "HCL1200 DALI"
+        elif "1800" in lighting_str:
+            return "HCL1800 DALI"
+        else:
+            return "HCL DALI"
+    
+    # Check for EL variations
+    elif lighting_str.startswith("EL"):
+        if "215" in lighting_str:
+            return "EL215"
+        elif "218" in lighting_str:
+            return "EL218"
+        else:
+            return "EL"
+    
+    # For any other value or unrecognized lighting type, return "-"
+    return "-"
 
 def handle_empty_value(value) -> str:
     """
