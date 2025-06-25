@@ -695,7 +695,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     sdu_data = collect_sdu_data(project_data, excel_file_path)
     
     # Analyze project for global flags
-    has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
+    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
     
     # Calculate pricing totals once
     pricing_totals = calculate_pricing_totals(project_data, excel_file_path)
@@ -785,6 +785,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'has_recoair': has_recoair,
         'is_recoair_only': is_recoair_only,
         'has_uv': has_uv,
+        'has_marvel': has_marvel,
         
         # Feature flags for conditional display of systems
         'show_kitchen_extract_system': is_feature_enabled('kitchen_extract_system'),
@@ -817,7 +818,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     
     return context
 
-def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool]:
+def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, bool]:
     """
     Analyze project areas to determine what types of systems are present.
     
@@ -825,11 +826,12 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool]:
         project_data (Dict): Project data with levels and areas
         
     Returns:
-        Tuple[bool, bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only, has_uv)
+        Tuple[bool, bool, bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel)
     """
     has_canopies = False
     has_recoair = False
     has_uv = False
+    has_marvel = False
     
     for level in project_data.get('levels', []):
         for area in level.get('areas', []):
@@ -847,11 +849,15 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool]:
             # Check if area has RecoAir option
             if area.get('options', {}).get('recoair', False):
                 has_recoair = True
+            
+            # Check if area has MARVEL option
+            if area.get('options', {}).get('marvel', False):
+                has_marvel = True
     
     # Determine if project is RecoAir-only
     is_recoair_only = has_recoair and not has_canopies
     
-    return has_canopies, has_recoair, is_recoair_only, has_uv
+    return has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel
 
 def generate_single_document(project_data: Dict, template_path: str, output_filename: str, excel_file_path: str = None) -> str:
     """
@@ -919,7 +925,7 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
     """
     try:
         # Analyze project to determine what documents to generate
-        has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
+        has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
         
         project_number = project_data.get('project_number', 'unknown')
         date_str = format_date_for_filename(project_data.get('date', ''))
@@ -1151,6 +1157,7 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
         'total_sdu_price': 0,
         'total_sdu_subtotal': 0,  # New: total of all SDU subtotals
         'total_recoair_price': 0,
+        'total_marvel_price': 0,  # New: total of all MARVEL prices
         'total_uv_extra_over_cost': 0,  # New: total of all UV Extra Over costs
         'has_any_uv_extra_over': False,  # New: flag indicating if any area has UV Extra Over
         'areas': [],
@@ -1201,7 +1208,17 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
                 
                 # Add SDU data if this area has SDU
                 'has_sdu': area.get('options', {}).get('sdu', False),
-                'sdu': sdu_data_by_area.get(level_area_combined, {})
+                'sdu': sdu_data_by_area.get(level_area_combined, {}),
+                
+                # Add MARVEL data if this area has MARVEL
+                'has_marvel': area.get('options', {}).get('marvel', False),
+                'marvel_price': area.get('marvel_price', 0),
+                'marvel_pricing': area.get('marvel_pricing', {
+                    'factory_components': 0,
+                    'onsite_installation': 0,
+                    'commissioning': 0,
+                    'total_price': 0
+                })
             }
             
             # Calculate canopy and fire suppression totals for this area
@@ -1256,7 +1273,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
                 area_totals['delivery_installation_price'] + 
                 area_totals['commissioning_price'] +
                 area_totals['uvc_price'] +
-                sdu_total_for_area
+                sdu_total_for_area +
+                area_totals['marvel_price']
                 # Note: recoair_price excluded - RecoAir systems have separate quotation
             )
             
@@ -1274,6 +1292,7 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
             totals['total_sdu_price'] += area_totals['sdu_price']
             totals['total_sdu_subtotal'] += sdu_subtotal  # Add SDU subtotal to project totals
             totals['total_recoair_price'] += area_totals['recoair_price']
+            totals['total_marvel_price'] += area_totals['marvel_price']
             
             # Update UV Extra Over cost and flag
             if area.get('options', {}).get('uv_extra_over', False):
@@ -1293,7 +1312,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
         totals['total_delivery_installation'] + 
         totals['total_commissioning'] +
         totals['total_uvc_price'] +
-        sdu_total_for_project
+        sdu_total_for_project +
+        totals['total_marvel_price']
         # Note: total_recoair_price excluded - RecoAir systems have separate quotation
     )
     

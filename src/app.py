@@ -123,7 +123,7 @@ def word_generation_page():
             st.success("Successfully extracted project data from Excel!")
             
             # Analyze project to show what type it is
-            has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
+            has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
             
             # Show project type analysis
             if is_recoair_only:
@@ -625,7 +625,7 @@ def revision_page():
                     st.write("**Current Revision:**", current_revision)
                     
                     # Show project analysis
-                    has_canopies, has_recoair, is_recoair_only, has_uv = analyze_project_areas(project_data)
+                    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
                     st.write("**Has Canopies:**", "Yes" if has_canopies else "No")
                     st.write("**Has RecoAir:**", "Yes" if has_recoair else "No")
                     st.write("**Has UV Canopies:**", "Yes" if has_uv else "No")

@@ -2412,6 +2412,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 
                 # Check if area has UV canopies for UV Extra Over
                 uv_canopies = [canopy for canopy in area_canopies if canopy.get('model', '').upper().startswith('UV')]
+                non_uv_canopies = [canopy for canopy in area_canopies if not canopy.get('model', '').upper().startswith('UV')]
                 has_uv_canopies = len(uv_canopies) > 0
                 
                 current_canopy_sheet = None
@@ -2541,11 +2542,11 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 
                                 # Write MARVEL-specific metadata to MARVEL sheet (F columns for project name/location/date)
                                 write_marvel_metadata(marvel_sheet, project_data, template_version)
-                                # Set MARVEL sheet title in C1 (handle merged cells)
-                                try:
-                                    marvel_sheet['C1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
-                                except Exception as e:
-                                    print(f"Warning: Could not write title to C1 on MARVEL sheet: {str(e)}")
+                                                            # Set MARVEL sheet title in B1 (like other sheets)
+                            try:
+                                marvel_sheet['B1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
+                            except Exception as e:
+                                print(f"Warning: Could not write title to B1 on MARVEL sheet: {str(e)}")
                             else:
                                 print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")
                         
@@ -2583,8 +2584,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         
                         # Create UV Extra Over comparison sheets if enabled
                         if has_uv_extra_over and has_uv_canopies:
-                            # Create non-UV comparison sheet
-                            if len(canopy_sheets) >= 1:  # Need 1 more sheet for non-UV comparison
+                            # Create non-UV comparison sheet only if there are actual non-UV canopies
+                            if len(non_uv_canopies) > 0 and len(canopy_sheets) >= 1:  # Need 1 more sheet for non-UV comparison
                                 # Non-UV comparison sheet with standard naming
                                 non_uv_sheet_name = canopy_sheets.pop(0)
                                 non_uv_sheet = wb[non_uv_sheet_name]
@@ -2596,29 +2597,10 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 non_uv_sheet.sheet_properties.tabColor = tab_color  # Use same color as UV sheet
                                 
                                 # Set title in B1 for non-UV sheet
-                                non_uv_sheet['B1'] = f"{level_name} - {area_name} - NON-UV EQUIVALENT"
+                                non_uv_sheet['B1'] = f"{level_name} - {area_name} - NON-UV CANOPIES"
                                 write_project_metadata(non_uv_sheet, project_data, template_version)
                                 
-                                # Create non-UV equivalent canopies by converting UV models to non-UV
-                                non_uv_canopies = []
-                                for uv_canopy in uv_canopies:  # Only process UV canopies
-                                    non_uv_canopy = uv_canopy.copy()
-                                    original_model = uv_canopy.get('model', '').upper()
-                                    
-                                    # Convert UV models to their non-UV equivalents
-                                    if original_model.startswith('UV'):
-                                        # UVI -> KVI, UVF -> KVF
-                                        if original_model == 'UVI':
-                                            non_uv_canopy['model'] = 'KVI'
-                                        elif original_model == 'UVF':
-                                            non_uv_canopy['model'] = 'KVF'
-                                        else:
-                                            # For other UV models, replace UV with KV
-                                            non_uv_canopy['model'] = original_model.replace('UV', 'KV', 1)
-                                    
-                                    non_uv_canopies.append(non_uv_canopy)
-                                
-                                # Write non-UV equivalent canopies to the non-UV sheet
+                                # Write the actual existing non-UV canopies to the non-UV sheet
                                 for canopy_idx, non_uv_canopy in enumerate(non_uv_canopies):
                                     row_start = CANOPY_START_ROW + (canopy_idx * CANOPY_ROW_SPACING)
                                     write_canopy_data(non_uv_sheet, non_uv_canopy, row_start)
@@ -2630,6 +2612,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 
                                 # Note: UV Extra Over indication is handled through sheet naming convention
                                 # The "CANOPY (UV)" sheet name clearly indicates UV Extra Over is active
+                            elif len(non_uv_canopies) == 0:
+                                print(f"Info: No non-UV canopies found in area {area_name} for UV Extra Over comparison. Only creating UV canopy sheet.")
                         
                             else:
                                 print(f"Warning: Not enough CANOPY sheets in template for UV Extra Over comparison in area {area_name}")
@@ -2715,11 +2699,11 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             
                             # Write MARVEL-specific metadata to MARVEL sheet (F columns for project name/location/date)
                             write_marvel_metadata(marvel_sheet, project_data, template_version)
-                            # Set MARVEL sheet title in C1 (handle merged cells)
+                            # Set MARVEL sheet title in B1 (like other sheets)
                             try:
-                                marvel_sheet['C1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
+                                marvel_sheet['B1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
                             except Exception as e:
-                                print(f"Warning: Could not write title to C1 on MARVEL sheet: {str(e)}")
+                                print(f"Warning: Could not write title to B1 on MARVEL sheet: {str(e)}")
                         else:
                             print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")
                 
@@ -3300,12 +3284,92 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                 'recoair_flat_pack': flat_pack_data
                             })
         
+        # Read MARVEL pricing from MARVEL sheets
+        for sheet_name in wb.sheetnames:
+            if 'MARVEL - ' in sheet_name:
+                sheet = wb[sheet_name]
+                title_cell = sheet['B1'].value  # MARVEL sheets have title in B1 (fixed to match creation)
+                
+                if title_cell and ' - ' in title_cell and 'MARVEL SYSTEM' in title_cell:
+                    # Extract level and area from title like "Level 1 - Main Kitchen - MARVEL SYSTEM"
+                    title_parts = title_cell.split(' - ')
+                    if len(title_parts) >= 2:
+                        level_name = title_parts[0]
+                        area_name = title_parts[1]
+                        
+                        # Extract MARVEL pricing data using the specified cells
+                        try:
+                            # Factory components: J12+J23+J33+J44
+                            j12_value = sheet['J12'].value or 0
+                            j23_value = sheet['J23'].value or 0
+                            j33_value = sheet['J33'].value or 0
+                            j44_value = sheet['J44'].value or 0
+                            factory_components = j12_value + j23_value + j33_value + j44_value
+                            
+                            # Commissioning: J59+J60
+                            j59_value = sheet['J59'].value or 0
+                            j60_value = sheet['J60'].value or 0
+                            commissioning = j59_value + j60_value
+                            
+                            # Onsite installation: J53-(J59+J60)
+                            j53_value = sheet['J53'].value or 0
+                            onsite_installation = j53_value - commissioning
+                            
+                            # Total MARVEL price
+                            marvel_price = factory_components + onsite_installation + commissioning
+                            
+                            marvel_data = {
+                                'factory_components': factory_components,
+                                'onsite_installation': onsite_installation,
+                                'commissioning': commissioning,
+                                'total_price': marvel_price
+                            }
+                            
+                            print(f"✓ Read MARVEL pricing from {sheet_name}:")
+                            print(f"   Factory Components: £{factory_components:.2f}")
+                            print(f"   Onsite Installation: £{onsite_installation:.2f}")
+                            print(f"   Commissioning: £{commissioning:.2f}")
+                            print(f"   Total: £{marvel_price:.2f}")
+                            
+                        except Exception as e:
+                            print(f"Warning: Could not read MARVEL pricing from {sheet_name}: {str(e)}")
+                            marvel_data = {
+                                'factory_components': 0,
+                                'onsite_installation': 0,
+                                'commissioning': 0,
+                                'total_price': 0
+                            }
+                        
+                        # Find the area and add MARVEL data
+                        area_found = False
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area.update({
+                                        'marvel_price': marvel_data['total_price'],
+                                        'marvel_pricing': marvel_data
+                                    })
+                                    area_found = True
+                                    break
+                        
+                        # If area wasn't found, create it
+                        if not area_found:
+                            if level_name not in levels_data:
+                                levels_data[level_name] = []
+                            
+                            levels_data[level_name].append({
+                                'name': area_name,
+                                'canopies': [],
+                                'marvel_price': marvel_data['total_price'],
+                                'marvel_pricing': marvel_data
+                            })
+        
         # Read area-level options from sheets
         # Initialize all areas with default options first
         for level_name, areas in levels_data.items():
             for area in areas:
                 if 'options' not in area:
-                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False}
+                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False}
         
         # Check CANOPY sheets for area options written in rows 6-8
         for sheet_name in wb.sheetnames:
@@ -3395,6 +3459,26 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             for area in levels_data[level_name]:
                                 if area['name'] == area_name:
                                     area['options']['recoair'] = True
+                                    break
+        
+        # Check MARVEL sheets for MARVEL option
+        for sheet_name in wb.sheetnames:
+            if 'MARVEL - ' in sheet_name:
+                sheet = wb[sheet_name]
+                title_cell = sheet['B1'].value  # MARVEL sheets have title in B1 (fixed to match creation)
+                
+                if title_cell and ' - ' in title_cell and 'MARVEL SYSTEM' in title_cell:
+                    # Extract level and area from title like "Level 1 - Main Kitchen - MARVEL SYSTEM"
+                    title_parts = title_cell.split(' - ')
+                    if len(title_parts) >= 2:
+                        level_name = title_parts[0]
+                        area_name = title_parts[1]
+                        
+                        # Find the area and set MARVEL option to True
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['marvel'] = True
                                     break
         
         # Convert levels_data to the format expected by the system
@@ -3771,6 +3855,7 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         ebox_sheets = []
         sdu_sheets = []
         recoair_sheets = []
+        marvel_sheets = []
         other_sheets = []
         
         for sheet_name in wb.sheetnames:
@@ -3786,6 +3871,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
                     sdu_sheets.append(sheet_name)
                 elif 'RECOAIR - ' in sheet_name:
                     recoair_sheets.append(sheet_name)
+                elif 'MARVEL - ' in sheet_name:
+                    marvel_sheets.append(sheet_name)
                 elif sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData']:
                     other_sheets.append(sheet_name)
         
@@ -3847,6 +3934,17 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
             summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!K9"  # Cost reference
             current_row += 1
         
+        # MARVEL sheets
+        for sheet_name in marvel_sheets:
+            summary_sheet[f'A{current_row}'] = 'MARVEL'
+            summary_sheet[f'B{current_row}'] = sheet_name
+            safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!J9,0)"  # Price - MARVEL uses J9
+            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!G9,0)"  # Cost - MARVEL uses G9
+            summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!J9"  # Price reference
+            summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G9"  # Cost reference
+            current_row += 1
+        
         # OTHER sheets
         for sheet_name in other_sheets:
             summary_sheet[f'A{current_row}'] = 'OTHER'
@@ -3866,8 +3964,9 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'B{summary_row + 3}'] = 'EBOX TOTAL'
         summary_sheet[f'B{summary_row + 4}'] = 'SDU TOTAL'
         summary_sheet[f'B{summary_row + 5}'] = 'RECOAIR TOTAL'
-        summary_sheet[f'B{summary_row + 6}'] = 'OTHER TOTAL'
-        summary_sheet[f'B{summary_row + 7}'] = 'PROJECT TOTAL'
+        summary_sheet[f'B{summary_row + 6}'] = 'MARVEL TOTAL'
+        summary_sheet[f'B{summary_row + 7}'] = 'OTHER TOTAL'
+        summary_sheet[f'B{summary_row + 8}'] = 'PROJECT TOTAL'
         
         # Calculate totals using SUMIF formulas
         summary_sheet[f'C{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",C:C)'  # Sum all CANOPY sheet prices
@@ -3875,8 +3974,9 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'C{summary_row + 3}'] = f'=SUMIF(A:A,"EBOX",C:C)'  # Sum all EBOX sheet prices
         summary_sheet[f'C{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",C:C)'  # Sum all SDU sheet prices
         summary_sheet[f'C{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",C:C)'  # Sum all RECOAIR sheet prices
-        summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
-        summary_sheet[f'C{summary_row + 7}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}'  # Project price total
+        summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",C:C)'  # Sum all MARVEL sheet prices
+        summary_sheet[f'C{summary_row + 7}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
+        summary_sheet[f'C{summary_row + 8}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}'  # Project price total
         
         # Cost totals
         summary_sheet[f'D{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",D:D)'  # Sum all CANOPY sheet costs
@@ -3884,8 +3984,9 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'D{summary_row + 3}'] = f'=SUMIF(A:A,"EBOX",D:D)'  # Sum all EBOX sheet costs
         summary_sheet[f'D{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",D:D)'  # Sum all SDU sheet costs
         summary_sheet[f'D{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",D:D)'  # Sum all RECOAIR sheet costs
-        summary_sheet[f'D{summary_row + 6}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
-        summary_sheet[f'D{summary_row + 7}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}'  # Project cost total
+        summary_sheet[f'D{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",D:D)'  # Sum all MARVEL sheet costs
+        summary_sheet[f'D{summary_row + 7}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
+        summary_sheet[f'D{summary_row + 8}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}'  # Project cost total
         
         # Store the summary row positions for JOB TOTAL to reference
         summary_sheet['H1'] = 'Reference Cells for JOB TOTAL'
@@ -3894,15 +3995,17 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet['H4'] = f'EBOX_PRICE_TOTAL=C{summary_row + 3}'
         summary_sheet['H5'] = f'SDU_PRICE_TOTAL=C{summary_row + 4}'
         summary_sheet['H6'] = f'RECOAIR_PRICE_TOTAL=C{summary_row + 5}'
-        summary_sheet['H7'] = f'OTHER_PRICE_TOTAL=C{summary_row + 6}'
-        summary_sheet['H8'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 7}'
-        summary_sheet['H9'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
-        summary_sheet['H10'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
-        summary_sheet['H11'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
-        summary_sheet['H12'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
-        summary_sheet['H13'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
-        summary_sheet['H14'] = f'OTHER_COST_TOTAL=D{summary_row + 6}'
-        summary_sheet['H15'] = f'PROJECT_COST_TOTAL=D{summary_row + 7}'
+        summary_sheet['H7'] = f'MARVEL_PRICE_TOTAL=C{summary_row + 6}'
+        summary_sheet['H8'] = f'OTHER_PRICE_TOTAL=C{summary_row + 7}'
+        summary_sheet['H9'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 8}'
+        summary_sheet['H10'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
+        summary_sheet['H11'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
+        summary_sheet['H12'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
+        summary_sheet['H13'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
+        summary_sheet['H14'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
+        summary_sheet['H15'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
+        summary_sheet['H16'] = f'OTHER_COST_TOTAL=D{summary_row + 7}'
+        summary_sheet['H17'] = f'PROJECT_COST_TOTAL=D{summary_row + 8}'
         
         print(f"Created PRICING_SUMMARY sheet with {current_row - 2} individual sheet references")
         
@@ -3958,7 +4061,7 @@ def update_job_total_sheet(wb: Workbook) -> None:
             17: ('Fire Suppression', 'FIRE SUPP'),  # Row 17: Fire Suppression
             18: ('SDU', 'SDU'),                 # Row 18: SDU
             19: ('Vent Clg', 'OTHER'),          # Row 19: Vent Clg -> OTHER
-            20: ('MARVEL', 'OTHER'),            # Row 20: MARVEL -> OTHER
+            20: ('MARVEL', 'MARVEL'),           # Row 20: MARVEL
             21: ('Edge', 'EBOX'),               # Row 21: Edge -> EBOX
             22: ('Aerolys', 'OTHER'),           # Row 22: Aerolys -> OTHER
             23: ('Pollustop', 'OTHER'),         # Row 23: Pollustop -> OTHER
@@ -4752,14 +4855,15 @@ def write_marvel_metadata(sheet: Worksheet, project_data: Dict, template_version
             "project_name": "F3",  # differs
             "project_location": "F5",  # differs
             "date": "F7",  # differs
-            "revision": "O7",
+            "revision": "K7",  # MARVEL uses K7 for revision
         }
 
         for field, cell in marvel_cell_mappings.items():
             value = project_data.get(field)
             try:
                 if field == "revision":
-                    sheet[cell] = value or ""
+                    # For first revision (A), leave the cell empty; otherwise use the revision value
+                    sheet[cell] = "" if value == "A" else (value or "")
                 elif value:
                     if field == "estimator":
                         from utils.word import get_combined_initials
@@ -4781,7 +4885,8 @@ def write_marvel_metadata(sheet: Worksheet, project_data: Dict, template_version
                                 break
                     # Try writing again after unmerging
                     if field == "revision":
-                        sheet[cell] = value or ""
+                        # For first revision (A), leave the cell empty; otherwise use the revision value
+                        sheet[cell] = "" if value == "A" else (value or "")
                     elif value:
                         if field == "estimator":
                             from utils.word import get_combined_initials
