@@ -2553,13 +2553,13 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         # Write each canopy with proper spacing
                         fs_canopy_idx = 0  # Track fire suppression canopies separately
                         
-                        if has_uv_extra_over and has_uv_canopies:
-                            # UV Extra Over mode: Only write UV canopies to the main (UV) sheet
-                            for canopy_idx, canopy in enumerate(uv_canopies):  # Only UV canopies
+                        if has_uv_extra_over and len(non_uv_canopies) > 0:
+                            # UV Extra Over mode: Write all canopies to the main sheet (non-UV or all canopies if mixed)
+                            for canopy_idx, canopy in enumerate(area_canopies):
                                 row_start = CANOPY_START_ROW + (canopy_idx * CANOPY_ROW_SPACING)
                                 write_canopy_data(current_canopy_sheet, canopy, row_start)
                                 
-                                # If this UV canopy has fire suppression and fire suppression sheet exists, write to it
+                                # If this canopy has fire suppression and fire suppression sheet exists, write to it
                                 if canopy.get("options", {}).get("fire_suppression") and fs_sheet:
                                     fs_row_start = CANOPY_START_ROW + (fs_canopy_idx * CANOPY_ROW_SPACING)
                                     write_fire_suppression_canopy_data(fs_sheet, canopy, fs_row_start)
@@ -2582,44 +2582,62 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             # Add fire suppression specific dropdowns
                             add_fire_suppression_dropdowns(fs_sheet)
                         
-                        # Create UV Extra Over comparison sheets if enabled
-                        if has_uv_extra_over and has_uv_canopies:
-                            # Create non-UV comparison sheet only if there are actual non-UV canopies
-                            if len(non_uv_canopies) > 0 and len(canopy_sheets) >= 1:  # Need 1 more sheet for non-UV comparison
-                                # Non-UV comparison sheet with standard naming
-                                non_uv_sheet_name = canopy_sheets.pop(0)
-                                non_uv_sheet = wb[non_uv_sheet_name]
-                                non_uv_sheet.title = f"CANOPY - {level_name} ({area_number})"
-                                if len(non_uv_sheet.title) > 31:  # Excel sheet name limit
-                                    non_uv_sheet.title = f"CANOPY - L{level_number} ({area_number})"
+                        # Create UV Extra Over sheet if enabled and there are non-UV canopies to convert
+                        if has_uv_extra_over and len(non_uv_canopies) > 0:
+                            if len(canopy_sheets) >= 1:  # Need another sheet for UV Extra Over
+                                # Create UV Extra Over sheet with converted canopies
+                                uv_extra_over_sheet_name = canopy_sheets.pop(0)
+                                uv_extra_over_sheet = wb[uv_extra_over_sheet_name]
+                                uv_extra_over_sheet.title = f"CANOPY (UV) - {level_name} ({area_number})"
+                                if len(uv_extra_over_sheet.title) > 31:  # Excel sheet name limit
+                                    uv_extra_over_sheet.title = f"CANOPY (UV) - L{level_number} ({area_number})"
                                 
-                                non_uv_sheet.sheet_state = 'visible'
-                                non_uv_sheet.sheet_properties.tabColor = tab_color  # Use same color as UV sheet
+                                uv_extra_over_sheet.sheet_state = 'visible'
+                                uv_extra_over_sheet.sheet_properties.tabColor = tab_color  # Use same color as non-UV sheet
                                 
-                                # Set title in B1 for non-UV sheet
-                                non_uv_sheet['B1'] = f"{level_name} - {area_name} - NON-UV CANOPIES"
-                                write_project_metadata(non_uv_sheet, project_data, template_version)
+                                # Set title in B1 for UV Extra Over sheet
+                                uv_extra_over_sheet['B1'] = f"{level_name} - {area_name} - UV EXTRA OVER"
+                                write_project_metadata(uv_extra_over_sheet, project_data, template_version)
                                 
-                                # Write the actual existing non-UV canopies to the non-UV sheet
-                                for canopy_idx, non_uv_canopy in enumerate(non_uv_canopies):
+                                # Convert eligible non-UV canopies to UV equivalents
+                                uv_conversion_map = {
+                                    'KVF': 'UVF',
+                                    'KVI': 'UVI', 
+                                    'KVX': 'UVX',
+                                    'KVX-M': 'UVX-M'
+                                }
+                                
+                                uv_converted_canopies = []
+                                for non_uv_canopy in non_uv_canopies:
+                                    canopy_model = non_uv_canopy.get('model', '').upper()
+                                    
+                                    # Check if this canopy type can be converted to UV equivalent
+                                    if canopy_model in uv_conversion_map:
+                                        # Create UV equivalent with same configuration
+                                        uv_equivalent = non_uv_canopy.copy()  # Deep copy all properties
+                                        uv_equivalent['model'] = uv_conversion_map[canopy_model]  # Convert to UV model
+                                        
+                                        # Keep all other properties (dimensions, wall cladding, options, etc.)
+                                        uv_converted_canopies.append(uv_equivalent)
+                                        
+                                        print(f"   🔄 Converting {canopy_model} to {uv_conversion_map[canopy_model]} for UV Extra Over")
+                                    else:
+                                        print(f"   ⏭️  Skipping {canopy_model} - not eligible for UV conversion")
+                                
+                                # Write converted UV canopies to the UV Extra Over sheet
+                                for canopy_idx, uv_canopy in enumerate(uv_converted_canopies):
                                     row_start = CANOPY_START_ROW + (canopy_idx * CANOPY_ROW_SPACING)
-                                    write_canopy_data(non_uv_sheet, non_uv_canopy, row_start)
+                                    write_canopy_data(uv_extra_over_sheet, uv_canopy, row_start)
                                 
-                                add_dropdowns_to_sheet(wb, non_uv_sheet)
+                                add_dropdowns_to_sheet(wb, uv_extra_over_sheet)
                                 
-                                # UV Extra Over cost is now calculated dynamically in the hidden calculations sheet
-                                # No need to store it in individual cells anymore
+                                print(f"✅ Created UV Extra Over sheet with {len(uv_converted_canopies)} converted UV canopies")
                                 
-                                # Note: UV Extra Over indication is handled through sheet naming convention
-                                # The "CANOPY (UV)" sheet name clearly indicates UV Extra Over is active
-                            elif len(non_uv_canopies) == 0:
-                                print(f"Info: No non-UV canopies found in area {area_name} for UV Extra Over comparison. Only creating UV canopy sheet.")
-                        
                             else:
-                                print(f"Warning: Not enough CANOPY sheets in template for UV Extra Over comparison in area {area_name}")
+                                print(f"Warning: Not enough CANOPY sheets in template for UV Extra Over in area {area_name}")
                         
-                        # Remove the old UV comparison logic that created UV ONLY and NO UV sheets
-                        # This is replaced by the new naming convention above
+                        elif has_uv_extra_over and len(non_uv_canopies) == 0:
+                            print(f"Info: No non-UV canopies found in area {area_name} for UV Extra Over conversion.")
                         
                     else:
                         raise Exception(f"Not enough CANOPY sheets in template for area {area_name}")
@@ -3881,15 +3899,27 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         # Write individual sheet references
         current_row = 2
         
-        # CANOPY sheets
+        # CANOPY sheets - separate UV and non-UV sheets
         for sheet_name in canopy_sheets:
-            summary_sheet[f'A{current_row}'] = 'CANOPY'
-            summary_sheet[f'B{current_row}'] = sheet_name
-            safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
-            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!N9,0)"  # Price formula - consistent with other sheets
-            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!K9,0)"  # Cost formula
-            summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!N9"  # Price reference
-            summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!K9"  # Cost reference
+            # Check if this is a UV Extra Over sheet (exclude from job totals)
+            if 'CANOPY (UV) - ' in sheet_name:
+                summary_sheet[f'A{current_row}'] = 'UV_EXTRA_OVER'  # Special category for UV sheets
+                summary_sheet[f'B{current_row}'] = sheet_name
+                safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+                summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!N9,0)"  # Price formula
+                summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!K9,0)"  # Cost formula
+                summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!N9"  # Price reference
+                summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!K9"  # Cost reference
+                summary_sheet[f'G{current_row}'] = "EXCLUDED FROM JOB TOTAL"  # Note column
+            else:
+                # Regular canopy sheets (included in job totals)
+                summary_sheet[f'A{current_row}'] = 'CANOPY'
+                summary_sheet[f'B{current_row}'] = sheet_name
+                safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+                summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!N9,0)"  # Price formula
+                summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!K9,0)"  # Cost formula
+                summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!N9"  # Price reference
+                summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!K9"  # Cost reference
             current_row += 1
         
         # FIRE SUPP sheets
@@ -3968,7 +3998,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'B{summary_row + 5}'] = 'RECOAIR TOTAL'
         summary_sheet[f'B{summary_row + 6}'] = 'MARVEL TOTAL'
         summary_sheet[f'B{summary_row + 7}'] = 'OTHER TOTAL'
-        summary_sheet[f'B{summary_row + 8}'] = 'PROJECT TOTAL'
+        summary_sheet[f'B{summary_row + 8}'] = 'UV EXTRA OVER TOTAL'
+        summary_sheet[f'B{summary_row + 9}'] = 'PROJECT TOTAL'
         
         # Calculate totals using SUMIF formulas
         summary_sheet[f'C{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",C:C)'  # Sum all CANOPY sheet prices
@@ -3978,7 +4009,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'C{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",C:C)'  # Sum all RECOAIR sheet prices
         summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",C:C)'  # Sum all MARVEL sheet prices
         summary_sheet[f'C{summary_row + 7}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
-        summary_sheet[f'C{summary_row + 8}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}'  # Project price total
+        summary_sheet[f'C{summary_row + 8}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",C:C)'  # Sum all UV Extra Over sheet prices (tracked but excluded)
+        summary_sheet[f'C{summary_row + 9}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}'  # Project price total (excludes UV Extra Over)
         
         # Cost totals
         summary_sheet[f'D{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",D:D)'  # Sum all CANOPY sheet costs
@@ -3988,7 +4020,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'D{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",D:D)'  # Sum all RECOAIR sheet costs
         summary_sheet[f'D{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",D:D)'  # Sum all MARVEL sheet costs
         summary_sheet[f'D{summary_row + 7}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
-        summary_sheet[f'D{summary_row + 8}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}'  # Project cost total
+        summary_sheet[f'D{summary_row + 8}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",D:D)'  # Sum all UV Extra Over sheet costs (tracked but excluded)
+        summary_sheet[f'D{summary_row + 9}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}'  # Project cost total (excludes UV Extra Over)
         
         # Store the summary row positions for JOB TOTAL to reference
         summary_sheet['H1'] = 'Reference Cells for JOB TOTAL'
@@ -3999,15 +4032,17 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet['H6'] = f'RECOAIR_PRICE_TOTAL=C{summary_row + 5}'
         summary_sheet['H7'] = f'MARVEL_PRICE_TOTAL=C{summary_row + 6}'
         summary_sheet['H8'] = f'OTHER_PRICE_TOTAL=C{summary_row + 7}'
-        summary_sheet['H9'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 8}'
-        summary_sheet['H10'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
-        summary_sheet['H11'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
-        summary_sheet['H12'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
-        summary_sheet['H13'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
-        summary_sheet['H14'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
-        summary_sheet['H15'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
-        summary_sheet['H16'] = f'OTHER_COST_TOTAL=D{summary_row + 7}'
-        summary_sheet['H17'] = f'PROJECT_COST_TOTAL=D{summary_row + 8}'
+        summary_sheet['H9'] = f'UV_EXTRA_OVER_PRICE_TOTAL=C{summary_row + 8}'
+        summary_sheet['H10'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 9}'
+        summary_sheet['H11'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
+        summary_sheet['H12'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
+        summary_sheet['H13'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
+        summary_sheet['H14'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
+        summary_sheet['H15'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
+        summary_sheet['H16'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
+        summary_sheet['H17'] = f'OTHER_COST_TOTAL=D{summary_row + 7}'
+        summary_sheet['H18'] = f'UV_EXTRA_OVER_COST_TOTAL=D{summary_row + 8}'
+        summary_sheet['H19'] = f'PROJECT_COST_TOTAL=D{summary_row + 9}'
         
         print(f"Created PRICING_SUMMARY sheet with {current_row - 2} individual sheet references")
         
@@ -4048,7 +4083,7 @@ def update_job_total_sheet(wb: Workbook) -> None:
         
         # Read what categories actually exist from PRICING_SUMMARY
         categories = {}
-        for offset in range(1, 8):  # Check rows after SUMMARY TOTALS
+        for offset in range(1, 10):  # Check rows after SUMMARY TOTALS (increased to include UV EXTRA OVER and PROJECT)
             category_cell = pricing_summary[f'B{summary_row + offset}'].value
             if category_cell:
                 category_name = str(category_cell).replace(' TOTAL', '')
