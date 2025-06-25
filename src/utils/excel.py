@@ -2738,15 +2738,16 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 sheets_updated += 1
         print(f"📝 Added delivery location dropdowns to {sheets_updated} sheets")
         
-        # Hide any unused template sheets
+        # Delete only unused sheets for the specific systems we work with (CANOPY, FIRE SUPP, EBOX, SDU, RECOAIR, MARVEL)
         unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets
-        print(f"🔧 Hiding {len(unused_sheets)} unused template sheets...")
+        print(f"🗑️  Removing {len(unused_sheets)} unused system template sheets...")
         for sheet_name in unused_sheets:
             if sheet_name in wb.sheetnames:
-                wb[sheet_name].sheet_state = 'hidden'
-                print(f"   Hidden (unused list): {sheet_name}")
+                del wb[sheet_name]
+                print(f"   Deleted: {sheet_name}")
         
-        # Additional pass: hide any other leftover template sheets that are still visible
+        # Hide (don't delete) any other leftover template sheets that are still present
+        # This preserves sheets like SPIRAL DUCT, SUPPLY DUCT, etc. for potential future use
         allowed_visible_prefixes = (
             'CANOPY -', 'CANOPY (UV)', 'FIRE SUPP -', 'EBOX -', 'SDU -', 'RECOAIR -', 'MARVEL -',
             'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData'
@@ -2762,9 +2763,10 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 if not keep_visible:
                     sheet.sheet_state = 'hidden'
                     extra_hidden_count += 1
-                    print(f"   Hidden (extra pass): {sheet.title}")
+                    print(f"   Hidden: {sheet.title}")
+        
         if extra_hidden_count:
-            print(f"🔒 Additionally hid {extra_hidden_count} leftover template sheets that were still visible.")
+            print(f"🔒 Additionally hid {extra_hidden_count} other template sheets (preserved for future use).")
         
         # Create pricing summary sheet for dynamic pricing aggregation
         print("Creating PRICING_SUMMARY sheet...")
