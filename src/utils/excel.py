@@ -932,56 +932,16 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict, template_versio
     # Add cost sheet identifier to N2
     write_cost_sheet_identifier(sheet, sheet.title, template_version)
 
-def write_canopy_pricing_data(sheet: Worksheet, canopy: Dict, row_index: int):
-    """
-    Write canopy pricing data to the sheet at the specified locations.
-    
-    Args:
-        sheet (Worksheet): The worksheet to write to
-        canopy (Dict): Canopy specification data with pricing information
-        row_index (int): Starting row for this canopy's data (this is the model/config row)
-    """
-    try:
-        # Calculate pricing rows - canopy prices go in N12-N19 pattern (8 cells per canopy)
-        # For first canopy (row_index=14), ref_row=12, so pricing starts at N12
-        # For second canopy (row_index=31), ref_row=29, so pricing starts at N29
-        ref_row = row_index - 2  # Reference row (B12, B29, B46, etc.)
-        
-        # Write canopy pricing data to cells that feed into the template's subtotal formulas
-        # For first canopy (row_index=14, ref_row=12): use N14-N19 range
-        # For second canopy (row_index=31, ref_row=29): use N31-N36 range
-        
-        # Canopy base price goes in first cell of the subtotal range (N14, N31, N48, etc.)
-        canopy_price = canopy.get('canopy_price', 0)
-        if canopy_price:
-            try:
-                sheet[f"N{ref_row + 2}"] = canopy_price  # N14, N31, N48, etc. (feeds into N12 subtotal)
-                print(f"✓ Wrote canopy price {canopy_price} to N{ref_row + 2}")
-            except Exception as e:
-                print(f"Warning: Could not write canopy price to N{ref_row + 2}: {str(e)}")
-        
-        # Fire suppression price goes in second cell if applicable (N15, N32, N49, etc.)
-        fire_suppression_price = canopy.get('fire_suppression_price', 0)
-        if fire_suppression_price:
-            try:
-                sheet[f"N{ref_row + 3}"] = fire_suppression_price  # N15, N32, N49, etc.
-                print(f"✓ Wrote fire suppression price {fire_suppression_price} to N{ref_row + 3}")
-            except Exception as e:
-                print(f"Warning: Could not write fire suppression price to N{ref_row + 3}: {str(e)}")
-        
-        # Cladding price goes in the cell used by P12 formula for subtraction (N19, N36, N53, etc.)
-        cladding_price = canopy.get('cladding_price', 0)
-        if cladding_price:
-            try:
-                sheet[f"N{ref_row + 7}"] = cladding_price  # N19, N36, N53, etc. (used in P12=N12-N19 formula)
-                print(f"✓ Wrote cladding price {cladding_price} to N{ref_row + 7}")
-            except Exception as e:
-                print(f"Warning: Could not write cladding price to N{ref_row + 7}: {str(e)}")
-        
-        # Reserve remaining cells in the range for future use (N16-N18, N33-N35, etc.)
-        
-    except Exception as e:
-        print(f"Warning: Failed to write canopy pricing data: {str(e)}")
+# DEPRECATED: This function was overwriting Excel template formulas with hard-coded values
+# The Excel template has built-in formulas in N14, N15, N19, N31, N32, N36, etc. that calculate
+# prices automatically using VLOOKUP formulas. We should NOT overwrite these formulas.
+#
+# def write_canopy_pricing_data(sheet: Worksheet, canopy: Dict, row_index: int):
+#     """
+#     [DEPRECATED] Write canopy pricing data to the sheet at the specified locations.
+#     This function was overwriting Excel template pricing formulas and has been disabled.
+#     """
+#     pass
 
 def write_area_delivery_install_pricing(sheet: Worksheet, area: Dict):
     """
@@ -1042,8 +1002,7 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
             except Exception as e:
                 print(f"Warning: Could not write reference number to B{ref_row}: {str(e)}")
         
-        # Write pricing data for this canopy
-        write_canopy_pricing_data(sheet, canopy, row_index)
+        # Note: Do not write pricing data - let Excel template formulas calculate prices automatically
         
         # Configuration and Model on same row
         configuration = canopy.get("configuration", "")
@@ -2764,27 +2723,31 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 del wb[sheet_name]
                 print(f"   Deleted: {sheet_name}")
         
-        # Hide (don't delete) any other leftover template sheets that are still present
-        # This preserves sheets like SPIRAL DUCT, SUPPLY DUCT, etc. for potential future use
+        # Hide ALL template sheets except the ones we actually use
+        # Only keep visible: used system sheets and essential management sheets
         allowed_visible_prefixes = (
             'CANOPY -', 'CANOPY (UV)', 'FIRE SUPP -', 'EBOX -', 'SDU -', 'RECOAIR -', 'MARVEL -',
-            'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData'
+            'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData', 'Lists'
         )
+        
         extra_hidden_count = 0
         for sheet in wb.worksheets:
             if sheet.sheet_state == 'visible':
                 keep_visible = False
+                
+                # Check if it starts with an allowed prefix (used system sheets or management)
                 for prefix in allowed_visible_prefixes:
-                    if sheet.title.startswith(prefix):
+                    if sheet.title.startswith(prefix) or sheet.title == prefix:
                         keep_visible = True
                         break
+                
                 if not keep_visible:
                     sheet.sheet_state = 'hidden'
                     extra_hidden_count += 1
                     print(f"   Hidden: {sheet.title}")
         
         if extra_hidden_count:
-            print(f"🔒 Additionally hid {extra_hidden_count} other template sheets (preserved for future use).")
+            print(f"🔒 Hidden {extra_hidden_count} unused template sheets (preserved for future use).")
         
         # Create pricing summary sheet for dynamic pricing aggregation
         print("Creating PRICING_SUMMARY sheet...")
@@ -3014,9 +2977,9 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             'canopies': []
                         })
         
-        # Second pass: Read canopy data from CANOPY sheets
+        # Second pass: Read canopy data from CANOPY sheets (exclude UV Extra Over sheets)
         for sheet_name in wb.sheetnames:
-            if 'CANOPY - ' in sheet_name or 'CANOPY (UV) - ' in sheet_name:
+            if 'CANOPY - ' in sheet_name and 'CANOPY (UV) - ' not in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value
                 
@@ -3171,9 +3134,9 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                             canopy['fire_suppression_system_type'] = fs_unit['system_type']  # Add system type
                                             break
         
-        # Read area-level pricing data (delivery & installation, commissioning)
+        # Read area-level pricing data (delivery & installation, commissioning) from non-UV sheets only
         for sheet_name in wb.sheetnames:
-            if 'CANOPY - ' in sheet_name or 'CANOPY (UV) - ' in sheet_name:
+            if 'CANOPY - ' in sheet_name and 'CANOPY (UV) - ' not in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value
                 
@@ -3859,7 +3822,7 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
             wb.remove(wb[sheet_name])  # Remove existing sheet to recreate
         
         summary_sheet = wb.create_sheet(sheet_name)
-        summary_sheet.sheet_state = 'hidden'  # Hide the sheet
+        # Keep PRICING_SUMMARY visible for easier access
         
         # Set up headers
         summary_sheet['A1'] = 'Sheet Type'

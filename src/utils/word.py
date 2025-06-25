@@ -264,13 +264,13 @@ def format_extract_static(value) -> str:
 
 def format_mua_volume(value) -> str:
     """
-    Format MUA volume keeping the original value as-is without rounding.
+    Format MUA volume rounded to 2 decimal places.
     
     Args:
         value: MUA volume value to format
         
     Returns:
-        str: Original MUA volume value or "-" if empty
+        str: MUA volume rounded to 2 decimal places or "-" if empty
     """
     if not value:
         return "-"
@@ -282,8 +282,19 @@ def format_mua_volume(value) -> str:
     if str_value == "" or str_value == "-":
         return "-"
     
-    # Return the original value as-is without any rounding
-    return str_value
+    # Try to convert to float and round to 2 decimal places
+    try:
+        float_value = float(str_value)
+        # Round to 2 decimal places and format
+        rounded_value = round(float_value, 2)
+        # Format to avoid unnecessary trailing zeros (e.g., 1.50 becomes 1.5, 1.00 becomes 1)
+        if rounded_value == int(rounded_value):
+            return str(int(rounded_value))
+        else:
+            return f"{rounded_value:.2f}".rstrip('0').rstrip('.')
+    except (ValueError, TypeError):
+        # If conversion fails, return the original value
+        return str_value
 
 def get_combined_initials(sales_contact_name: str, estimator_name: str) -> str:
     """
