@@ -4252,26 +4252,47 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
         else:
             electrical_services['distribution_board'] = distribution_value if distribution_value > 0 else 0
         
-        # If distribution board has a value, check C40-C47 for single phase switched spur
-        if electrical_services['distribution_board'] > 0:
-            for row in range(40, 48):  # C40 to C47
-                cell_value = sheet[f'C{row}'].value
-                if cell_value and str(cell_value).strip() not in ['', '0', '-']:
-                    try:
-                        electrical_services['single_phase_switched_spur'] = int(float(str(cell_value).strip()))
-                        break  # Take the first non-zero value found
-                    except (ValueError, TypeError):
-                        continue
-        else:
-            # If no distribution board value, check C49-C56 for three phase socket outlet
-            for row in range(49, 57):  # C49 to C56
-                cell_value = sheet[f'C{row}'].value
-                if cell_value and str(cell_value).strip() not in ['', '0', '-']:
-                    try:
-                        electrical_services['three_phase_socket_outlet'] = int(float(str(cell_value).strip()))
-                        break  # Take the first non-zero value found
-                    except (ValueError, TypeError):
-                        continue
+        # Count single phase and three phase socket outlets based on dropdown selections
+        single_phase_count = 0
+        three_phase_count = 0
+        
+        # Check D40-D47 for ISO/OUTLET (NO MCB) options and their quantities in C40-C47
+        for row in range(40, 48):  # D40 to D47 and C40 to C47
+            dropdown_value = sheet[f'D{row}'].value
+            quantity_value = sheet[f'C{row}'].value
+            
+            if dropdown_value and quantity_value:
+                dropdown_str = str(dropdown_value).strip()
+                try:
+                    quantity = int(float(str(quantity_value).strip()))
+                    if quantity > 0:
+                        if '1-PH' in dropdown_str:
+                            single_phase_count += quantity
+                        elif '3-PH' in dropdown_str:
+                            three_phase_count += quantity
+                except (ValueError, TypeError):
+                    continue
+        
+        # Check D49-D56 for ISO/OUTLET (MCB) options and their quantities in C49-C56
+        for row in range(49, 57):  # D49 to D56 and C49 to C56
+            dropdown_value = sheet[f'D{row}'].value
+            quantity_value = sheet[f'C{row}'].value
+            
+            if dropdown_value and quantity_value:
+                dropdown_str = str(dropdown_value).strip()
+                try:
+                    quantity = int(float(str(quantity_value).strip()))
+                    if quantity > 0:
+                        if '1-PH' in dropdown_str:
+                            single_phase_count += quantity
+                        elif '3-PH' in dropdown_str:
+                            three_phase_count += quantity
+                except (ValueError, TypeError):
+                    continue
+        
+        # Store the totals
+        electrical_services['single_phase_switched_spur'] = single_phase_count
+        electrical_services['three_phase_socket_outlet'] = three_phase_count
         
         # Switched socket outlet value at C65
         switched_socket_value = sheet['C65'].value

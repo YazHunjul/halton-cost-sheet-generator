@@ -1603,18 +1603,37 @@ def populate_session_state_from_uploaded_data(extracted_data):
         
         # Store template information if available in the extracted data
         if extracted_data.get('template_used'):
-            # If we know which template was used, preserve that choice
-            st.session_state.selected_template = extracted_data['template_used']
-            # Update the template path based on the extracted template info
+            # Map short template versions to full template names
+            template_version_mapping = {
+                'R19.2': "Cost Sheet R19.2 Jun 2025",
+                'R19.1': "Cost Sheet R19.1 May 2025", 
+                'R18.1': "Cost Sheet R18.1 (Legacy)",
+                # Also handle full names in case they're already correct
+                "Cost Sheet R19.2 Jun 2025": "Cost Sheet R19.2 Jun 2025",
+                "Cost Sheet R19.1 May 2025": "Cost Sheet R19.1 May 2025",
+                "Cost Sheet R18.1 (Legacy)": "Cost Sheet R18.1 (Legacy)"
+            }
+            
             template_options = {
                 "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
                 "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
                 "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
             }
-            st.session_state.template_path = template_options.get(
-                extracted_data['template_used'], 
-                "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx"  # Default to 19.2
-            )
+            
+            # Map the extracted template to the correct full name
+            extracted_template = extracted_data['template_used']
+            mapped_template = template_version_mapping.get(extracted_template, "Cost Sheet R19.2 Jun 2025")
+            
+            # Only set if the mapped template exists in current options
+            if mapped_template in template_options:
+                st.session_state.selected_template = mapped_template
+                st.session_state.template_path = template_options[mapped_template]
+                print(f"✅ Mapped template '{extracted_template}' to '{mapped_template}'")
+            else:
+                # Fallback to default
+                st.session_state.selected_template = "Cost Sheet R19.2 Jun 2025"
+                st.session_state.template_path = template_options["Cost Sheet R19.2 Jun 2025"]
+                print(f"⚠️ Template '{extracted_template}' not recognized, using default")
         
         print(f"✅ Session state populated with uploaded data:")
         print(f"   - Project: {extracted_data.get('project_name', 'N/A')}")
@@ -1657,10 +1676,17 @@ def main():
         if "selected_template" not in st.session_state:
             st.session_state.selected_template = "Cost Sheet R19.2 Jun 2025"  # Default to 19.2
         
+        # Ensure the selected template is in the available options
+        template_keys = list(template_options.keys())
+        if st.session_state.selected_template not in template_keys:
+            # If the session template is not available, default to the first option
+            st.session_state.selected_template = template_keys[0]
+            st.warning(f"⚠️ Previous template version not available. Defaulted to {template_keys[0]}")
+        
         selected_template = st.selectbox(
             "Choose Cost Sheet Template:",
-            options=list(template_options.keys()),
-            index=list(template_options.keys()).index(st.session_state.selected_template),
+            options=template_keys,
+            index=template_keys.index(st.session_state.selected_template),
             key="template_selector",
             help="Select which version of the cost sheet template to use for this project"
         )
