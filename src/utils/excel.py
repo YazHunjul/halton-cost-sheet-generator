@@ -1812,23 +1812,29 @@ def add_fire_suppression_dropdowns(sheet: Worksheet):
             "3 TANK",
             "3 TANK DISTANCE",
             "4 TANK",
+            "4 TANK DISTANCE",
             "5 TANK",
-            "6 TANK"
+            "5 TANK DISTANCE",
+            "6 TANK",
+            "6 TANK DISTANCE"
         ]
         
-        # Create data validations with proper formula length checking
+        # Create data validations - use hidden cells for long lists to avoid Excel 255 char limit
         def create_validation(options):
             formula = ",".join(options)
-            if len(formula) > 255:  # Excel formula limit
-                truncated_options = []
-                current_length = 0
-                for opt in options:
-                    if current_length + len(opt) + 1 > 250:
-                        break
-                    truncated_options.append(opt)
-                    current_length += len(opt) + 1
-                formula = ",".join(truncated_options)
-            return DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+            if len(formula) > 255:  # Excel formula limit - use hidden cells approach
+                # Write options to hidden cells
+                start_row = 500
+                for i, option in enumerate(options):
+                    cell_ref = f"AA{start_row + i}"
+                    sheet[cell_ref] = option
+                
+                # Create range reference for validation
+                end_row = start_row + len(options) - 1
+                range_ref = f"$AA${start_row}:$AA${end_row}"
+                return DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            else:
+                return DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
         
         system_dv = create_validation(system_types)
         tank_dv = create_validation(tank_sizes)
@@ -4925,3 +4931,4 @@ def write_marvel_metadata(sheet: Worksheet, project_data: Dict, template_version
         write_cost_sheet_identifier(sheet, sheet.title, template_version)
     except Exception as e:
         print(f"Warning: Could not write MARVEL metadata: {str(e)}")
+

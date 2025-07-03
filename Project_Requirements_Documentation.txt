@@ -1,0 +1,268 @@
+# PROJECT REQUIREMENTS DOCUMENTATION
+# Halton Commercial Kitchen Ventilation Cost Sheet & Quotation System
+
+## 1. EXECUTIVE SUMMARY
+
+The business requires a comprehensive digital solution to streamline the quotation process for commercial kitchen ventilation systems. Currently, the process involves manual creation of cost sheets and quotation documents, which is time-consuming, error-prone, and lacks consistency. 
+
+The solution must automate the generation of professional Excel cost sheets and Word quotation documents for Halton commercial kitchen canopy projects, including specialized systems like RecoAir air handling units, fire suppression systems, and UV-C sanitization equipment.
+
+## 2. BUSINESS CONTEXT
+
+### 2.1 Industry Background
+- Commercial kitchen ventilation is a specialized sector requiring precise technical specifications
+- Projects involve complex multi-level building structures with multiple kitchen areas
+- Each project requires detailed cost breakdowns and professional quotations for clients
+- Regulatory compliance and safety systems (fire suppression) are critical components
+- Projects can include various configurations: wall-mounted, island, corner canopies
+
+### 2.2 Current Business Process Challenges
+- Manual creation of cost sheets leads to calculation errors
+- Inconsistent formatting across quotations
+- Time-intensive document preparation process
+- Difficulty maintaining updated pricing information
+- Complex project structures are hard to manage manually
+- Revision tracking and version control issues
+
+## 3. FUNCTIONAL REQUIREMENTS
+
+### 3.1 Project Management Module
+
+#### 3.1.1 Project Information Management
+- Capture comprehensive project metadata including:
+  - Customer and company information
+  - Project name, number, and location
+  - Sales contact and estimator assignments
+  - Delivery location with distance calculations
+  - Date tracking and revision management
+
+#### 3.1.2 Project Structure Definition
+- Support multi-level building structures (floors/levels)
+- Allow multiple areas per level (kitchens, service areas)
+- Enable complex canopy configurations per area
+- Support various canopy types: Wall, Island, Single, Double, Corner
+- Handle specialized equipment integration (UV-C, SDU, RecoAir)
+
+#### 3.1.3 System Options Management
+- Fire suppression system integration
+- UV-C sanitization system options
+- Supply Diffusion Units (SDU) configuration
+- RecoAir air handling system specifications
+- Wall cladding requirements with dimensions and positioning
+
+### 3.2 Cost Sheet Generation Module
+
+#### 3.2.1 Excel Cost Sheet Requirements
+- Generate professional Excel workbooks with multiple worksheets
+- Create separate sheets for each area and system type
+- Include the following sheet types:
+  - CANOPY sheets for standard ventilation equipment
+  - FIRE SUPP sheets for fire suppression systems
+  - EDGE BOX sheets for edge-mounted configurations
+  - RECOAIR sheets for air handling systems
+  - JOB TOTAL summary sheet with pricing calculations
+
+#### 3.2.2 Business Logic Implementation
+- Apply model-specific calculation rules:
+  - KVI models (without 'F'): Set MUA volume and supply static to "-"
+  - CMWF/CMWI models: Set extract static to "-"
+  - Models with 'F': Include full volume and static data
+- Automatic pricing calculations and summations
+- Data validation with dropdown menus for consistent data entry
+- Professional formatting with color-coded tabs by area
+
+#### 3.2.3 Template Management
+- Support multiple template versions (R19.1, R19.2, etc.)
+- Maintain backward compatibility with existing templates
+- Handle template evolution and version migration
+- Remove external links to prevent security warnings
+
+### 3.3 Quotation Document Generation Module
+
+#### 3.3.1 Word Document Generation
+- Create professional quotation documents from cost sheet data
+- Support multiple document types:
+  - Standard Halton canopy quotations
+  - RecoAir-specific quotations
+  - Combined quotations for mixed projects
+- Generate multiple documents as ZIP files when applicable
+
+#### 3.3.2 Data Transformation Rules
+- Apply business-specific formatting rules:
+  - Convert empty values to "-"
+  - Standardize lighting types (LED STRIP L12 inc DALI → LED STRIP)
+  - Remove units from static pressure values (150 Pa → 150)
+  - Round MUA volumes to 1 decimal place
+  - Handle "LIGHT SELECTION" as empty value
+
+#### 3.3.3 Fire Suppression Integration
+- Automatically detect fire suppression requirements
+- Include fire suppression sections based on sheet existence
+- Display tank quantities or "TBD" for undefined quantities
+- Support multiple fire suppression system types (NOBEL, AMAREX, Ansul R102)
+
+### 3.4 Feature Flag System
+
+#### 3.4.1 Modular System Display
+- Control visibility of systems not ready for production
+- Currently enabled systems:
+  - Canopy Systems
+  - RecoAir Systems
+  - Fire Suppression
+  - UV-C Systems
+  - SDU (Supply Diffusion Units)
+  - Wall Cladding
+
+#### 3.4.2 Future Systems (Hidden)
+- Kitchen Extract System
+- Kitchen Make-Up Air System
+- M.A.R.V.E.L. System (DCKV)
+- Cyclocell Cassette Ceiling
+- Reactaway Unit
+- Dishwasher Extract
+- Gas Interlocking
+- Pollustop Unit
+
+### 3.5 Data Import/Export Module
+
+#### 3.5.1 Excel Import Capabilities
+- Read existing cost sheet files to extract project data
+- Parse complex multi-sheet workbooks
+- Extract pricing information and project structure
+- Handle various data formats and validation
+
+#### 3.5.2 Document Export Features
+- Generate files with standardized naming conventions:
+  - Excel: "Project Number Cost Sheet Date.xlsx"
+  - Main Quotations: "Project Number Quotation Date.docx"
+  - RecoAir Quotations: "Project Number RecoAir Quotation Date.docx"
+  - Multiple Documents: "Project Number Quotations Date.zip"
+- Date format: DDMMYYYY (e.g., 15012025 for 15/01/2025)
+
+### 3.6 User Interface Requirements
+
+#### 3.6.1 User Experience
+- Intuitive multi-step project creation workflow
+- Real-time validation and error checking
+- Progress saving and session management
+- Professional document preview capabilities
+- Quick download access for generated documents
+
+#### 3.6.2 Navigation and Workflow
+- Step-by-step project creation process:
+  1. Project Information Entry
+  2. Project Structure Definition
+  3. Canopy Configuration
+  4. Review and Generation
+- Easy navigation between steps
+- Data persistence across sessions
+
+## 4. BUSINESS RULES AND CONSTRAINTS
+
+### 4.1 Pricing Logic
+- Automatic calculation of delivery costs based on distance
+- Installation pricing based on project complexity
+- Fire suppression pricing integration
+- VAT calculations and net/gross price handling
+
+### 4.2 Data Validation Rules
+- Valid canopy model enforcement (KVF, UVF, CMWF, CMWI, KVI, UVI, CXW, etc.)
+- Required field validation
+- Dropdown menu constraints for consistent data entry
+- Business logic validation (e.g., fire suppression compatibility)
+
+### 4.3 Document Standards
+- Professional formatting requirements
+- Corporate branding compliance
+- Standardized terminology and descriptions
+- Consistent pricing presentation
+
+## 5. INTEGRATION REQUIREMENTS
+
+### 5.1 Business Data Integration
+- Sales contact database with phone numbers
+- Estimator information and roles
+- Company address directory
+- Delivery location database with distances
+- Valid product model catalogs
+
+### 5.2 Template Integration
+- Excel template management system
+- Word document template system with dynamic content
+- Template versioning and update management
+- Custom template creation capabilities
+
+## 6. PERFORMANCE REQUIREMENTS
+
+### 6.1 Document Generation Speed
+- Excel cost sheets must generate within 10 seconds
+- Word quotations must generate within 15 seconds
+- Multiple document packages within 30 seconds
+
+### 6.2 File Size Management
+- Excel files optimized for email transmission
+- Word documents under 5MB for easy sharing
+- ZIP files efficiently compressed
+
+## 7. SECURITY AND COMPLIANCE
+
+### 7.1 Data Security
+- Secure handling of customer and project information
+- No external link dependencies in generated documents
+- Safe file handling and temporary file cleanup
+
+### 7.2 Business Compliance
+- Accurate pricing calculations
+- Audit trail for project revisions
+- Professional document standards compliance
+
+## 8. SCALABILITY REQUIREMENTS
+
+### 8.1 System Growth
+- Support for additional canopy models
+- New system type integration capability
+- Template format evolution support
+- User base expansion readiness
+
+### 8.2 Feature Expansion
+- Modular architecture for new features
+- Feature flag system for controlled rollouts
+- Integration capability for future systems
+
+## 9. DEPLOYMENT REQUIREMENTS
+
+### 9.1 User Access
+- Web-based application accessible from standard browsers
+- No local software installation required
+- Cross-platform compatibility (Windows, Mac, mobile)
+
+### 9.2 Maintenance
+- Easy template updates without system downtime
+- Feature flag management interface
+- Error monitoring and logging capabilities
+
+## 10. SUCCESS CRITERIA
+
+### 10.1 Business Impact
+- 80% reduction in quotation preparation time
+- 95% reduction in calculation errors
+- 100% formatting consistency across documents
+- Improved customer response times
+
+### 10.2 User Adoption
+- Intuitive interface requiring minimal training
+- High user satisfaction ratings
+- Successful replacement of manual processes
+- Positive impact on sales efficiency
+
+## 11. TECHNICAL CONSIDERATIONS
+
+The solution should:
+- Be maintainable and extensible
+- Handle complex business logic reliably
+- Provide excellent user experience
+- Scale with business growth
+- Integrate seamlessly with existing business processes
+- Support future feature additions through modular design
+
+This system will transform a manual, error-prone process into an automated, reliable, and efficient quotation generation platform, significantly improving business operations and customer service quality. 
