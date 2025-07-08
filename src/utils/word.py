@@ -566,14 +566,17 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 
                 # Only add to fire suppression items if this specific canopy has fire suppression
                 if tank_quantity > 0 or fire_suppression_price > 0:
+                    # Use the actual fire suppression reference number if available, otherwise fall back to canopy reference
+                    fs_reference = canopy.get('fire_suppression_reference_number', canopy.get('reference_number', ''))
+                    
                     fire_suppression_item = {
-                        'item_number': canopy.get('reference_number', ''),
+                        'item_number': fs_reference,  # Use fire suppression reference (e.g., "1.01a") instead of canopy reference ("1.01")
                         'system_description': get_fire_suppression_system_description(canopy.get('fire_suppression_system_type', '')),
                         'fire_suppression_system_type': canopy.get('fire_suppression_system_type', ''),  # Add raw system type
                         'manual_release': '1no station',
                         'tank_quantity': tank_quantity if tank_quantity > 0 else 'TBD',  # Show TBD if not specified
                         'price': fire_suppression_price,  # Fire suppression price (includes base + commissioning share + delivery share)
-                        'canopy_ref': canopy.get('reference_number', ''),
+                        'canopy_ref': canopy.get('reference_number', ''),  # Keep original canopy reference for internal tracking
                         'level_name': level_name,
                         'area_name': area_name,
                         'level_area_combined': level_area_combined

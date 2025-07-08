@@ -3139,6 +3139,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                             canopy['fire_suppression_tank_quantity'] = fs_unit['tank_quantity']
                                             canopy['fire_suppression_price'] = total_fs_price
                                             canopy['fire_suppression_system_type'] = fs_unit['system_type']  # Add system type
+                                            canopy['fire_suppression_reference_number'] = fs_unit['ref_number']  # Store the actual fire suppression reference
                                             print(f"✅ Matched fire suppression: Canopy '{canopy['reference_number']}' ↔ Fire Supp '{fs_unit['ref_number']}'")
                                             break
         
