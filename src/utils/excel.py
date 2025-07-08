@@ -48,7 +48,7 @@ CELL_MAPPINGS = {
 CANOPY_ROW_SPACING = 17
 
 # Starting row for canopy data
-CANOPY_START_ROW = 14  # First canopy starts at row 14
+CANOPY_START_ROW = 14
 
 # Tab color mapping for different levels
 TAB_COLORS = [
@@ -3134,10 +3134,12 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             for level_areas in levels_data.get(level_name, []):
                                 if level_areas['name'] == area_name:
                                     for canopy in level_areas['canopies']:
-                                        if canopy['reference_number'] == fs_unit['ref_number']:
+                                        # Use flexible reference matching instead of exact match
+                                        if references_match(canopy['reference_number'], fs_unit['ref_number']):
                                             canopy['fire_suppression_tank_quantity'] = fs_unit['tank_quantity']
                                             canopy['fire_suppression_price'] = total_fs_price
                                             canopy['fire_suppression_system_type'] = fs_unit['system_type']  # Add system type
+                                            print(f"✅ Matched fire suppression: Canopy '{canopy['reference_number']}' ↔ Fire Supp '{fs_unit['ref_number']}'")
                                             break
         
         # Read area-level pricing data (delivery & installation, commissioning) from non-UV sheets only
@@ -4931,4 +4933,68 @@ def write_marvel_metadata(sheet: Worksheet, project_data: Dict, template_version
         write_cost_sheet_identifier(sheet, sheet.title, template_version)
     except Exception as e:
         print(f"Warning: Could not write MARVEL metadata: {str(e)}")
+
+def normalize_reference_number(ref_num: str) -> str:
+    """
+    Normalize a reference number for matching by removing variations that don't affect identity.
+    
+    Args:
+        ref_num (str): The reference number to normalize
+        
+    Returns:
+        str: Normalized reference number
+    """
+    if not ref_num:
+        return ""
+    
+    # Convert to string and strip whitespace
+    ref_str = str(ref_num).strip()
+    
+    # Convert to uppercase for case-insensitive matching
+    ref_str = ref_str.upper()
+    
+    # Remove trailing letters that are just variants (e.g., "1.01A" -> "1.01")
+    # This handles cases where fire suppression sheets have "1.01a" but canopy sheets have "1.01"
+    import re
+    # Match pattern: base number (digits, dots, hyphens) + optional trailing letters
+    match = re.match(r'^([0-9\.\-]+)', ref_str)
+    if match:
+        return match.group(1)
+    
+    return ref_str
+
+def references_match(canopy_ref: str, fire_supp_ref: str) -> bool:
+    """
+    Check if two reference numbers should be considered a match.
+    Handles variations like "1.01" matching "1.01a", "1.01A", etc.
+    
+    Args:
+        canopy_ref (str): Reference number from canopy sheet
+        fire_supp_ref (str): Reference number from fire suppression sheet
+        
+    Returns:
+        bool: True if the references should be considered a match
+    """
+    if not canopy_ref or not fire_supp_ref:
+        return False
+    
+    # Normalize both references
+    normalized_canopy = normalize_reference_number(canopy_ref)
+    normalized_fire_supp = normalize_reference_number(fire_supp_ref)
+    
+    # Check if normalized versions match
+    if normalized_canopy == normalized_fire_supp:
+        return True
+    
+    # Additional flexible matching logic
+    # Handle cases where one might have extra characters
+    canopy_clean = str(canopy_ref).strip().upper()
+    fire_supp_clean = str(fire_supp_ref).strip().upper()
+    
+    # Check if one is a prefix of the other (e.g., "1.01" matches "1.01A")
+    if (canopy_clean and fire_supp_clean and 
+        (canopy_clean.startswith(fire_supp_clean) or fire_supp_clean.startswith(canopy_clean))):
+        return True
+    
+    return False
 
