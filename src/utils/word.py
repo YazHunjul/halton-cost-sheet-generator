@@ -563,11 +563,28 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 # Only include canopies that actually have fire suppression
                 tank_quantity = canopy.get('fire_suppression_tank_quantity', 0)
                 fire_suppression_price = canopy.get('fire_suppression_price', 0)
+                has_fire_suppression_option = canopy.get('options', {}).get('fire_suppression', False)
+                has_fire_suppression_reference = canopy.get('fire_suppression_reference_number', None)
                 
                 # Only add to fire suppression items if this specific canopy has fire suppression
-                if tank_quantity > 0 or fire_suppression_price > 0:
+                # Check multiple conditions to ensure we catch all fire suppression items:
+                # 1. Tank quantity > 0 (standard case)
+                # 2. Fire suppression price > 0 (pricing exists)
+                # 3. Fire suppression option is enabled (flag is set)
+                # 4. Fire suppression reference number exists (reference was changed)
+                if (tank_quantity > 0 or 
+                    fire_suppression_price > 0 or 
+                    has_fire_suppression_option or 
+                    has_fire_suppression_reference):
+                    
                     # Use the actual fire suppression reference number if available, otherwise fall back to canopy reference
                     fs_reference = canopy.get('fire_suppression_reference_number', canopy.get('reference_number', ''))
+                    
+                    # Debug logging for fire suppression inclusion (uncomment for debugging)
+                    # canopy_ref = canopy.get('reference_number', '')
+                    # print(f"🔥 Including fire suppression for canopy {canopy_ref} -> {fs_reference}")
+                    # print(f"   Tank quantity: {tank_quantity}, Price: £{fire_suppression_price}")
+                    # print(f"   Option flag: {has_fire_suppression_option}, Has ref: {bool(has_fire_suppression_reference)}")
                     
                     fire_suppression_item = {
                         'item_number': fs_reference,  # Use fire suppression reference (e.g., "1.01a") instead of canopy reference ("1.01")

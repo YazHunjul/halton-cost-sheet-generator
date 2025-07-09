@@ -812,7 +812,7 @@ def step1_project_information():
     company_mode = st.radio(
         "Company Selection *",
         options=["Select from list", "Enter custom company"],
-        index=0 if project_data.get("company_mode", "Select from list") == "Select from list" else 1,
+        index=1 if project_data.get("company_mode", "Enter custom company") == "Enter custom company" else 0,
         key="company_mode_input",
         help="Choose whether to select from predefined companies or enter a custom company"
     )
@@ -1592,7 +1592,7 @@ def populate_session_state_from_uploaded_data(extracted_data):
             'sales_contact': extracted_data.get('sales_contact', ''),
             'delivery_location': extracted_data.get('delivery_location', ''),
             'revision': extracted_data.get('revision', ''),
-            'company_mode': 'Select from list' if is_predefined_company else 'Enter custom company',
+            'company_mode': 'Enter custom company' if not is_predefined_company else 'Select from list',
             'custom_company_name': company_name if not is_predefined_company else '',
             'custom_company_address': extracted_data.get('address', '') if not is_predefined_company else ''
         }

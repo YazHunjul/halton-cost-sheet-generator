@@ -978,6 +978,42 @@ def write_area_delivery_install_pricing(sheet: Worksheet, area: Dict):
         except Exception as e:
             print(f"Warning: Could not update P182 formula: {str(e)}")
         
+        # WRITE PRESERVED AREA-LEVEL MANUAL INPUT FIELDS
+        # Delivery number (C183)
+        delivery_number = area.get('delivery_number', '')
+        if delivery_number:
+            try:
+                sheet['C183'] = delivery_number
+                print(f"✓ Wrote delivery number '{delivery_number}' to C183")
+            except Exception as e:
+                print(f"Warning: Could not write delivery number to C183: {str(e)}")
+        
+        # Access equipment entries
+        access_equipment_1 = area.get('access_equipment_1', '')
+        if access_equipment_1:
+            try:
+                sheet['D184'] = access_equipment_1
+                print(f"✓ Wrote access equipment 1 '{access_equipment_1}' to D184")
+            except Exception as e:
+                print(f"Warning: Could not write access equipment 1 to D184: {str(e)}")
+        
+        access_equipment_2 = area.get('access_equipment_2', '')
+        if access_equipment_2:
+            try:
+                sheet['D185'] = access_equipment_2
+                print(f"✓ Wrote access equipment 2 '{access_equipment_2}' to D185")
+            except Exception as e:
+                print(f"Warning: Could not write access equipment 2 to D185: {str(e)}")
+        
+        # Testing and commissioning description
+        testing_commissioning_description = area.get('testing_commissioning_description', '')
+        if testing_commissioning_description:
+            try:
+                sheet['C193'] = testing_commissioning_description
+                print(f"✓ Wrote T&C description '{testing_commissioning_description}' to C193")
+            except Exception as e:
+                print(f"Warning: Could not write T&C description to C193: {str(e)}")
+        
         # Reserve remaining cells in N184-N192 for future area-level pricing
         
     except Exception as e:
@@ -1080,6 +1116,45 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
                 sheet[f"H{row_index}"] = sections
             except Exception as e:
                 print(f"Warning: Could not write sections to H{row_index}: {str(e)}")
+        
+        # WRITE PRESERVED MANUAL INPUT FIELDS
+        # Light inputs in D15 (base_row + 1)
+        light_inputs = canopy.get("light_inputs", "")
+        if light_inputs:
+            try:
+                sheet[f"D{row_index + 1}"] = light_inputs
+            except Exception as e:
+                print(f"Warning: Could not write light inputs to D{row_index + 1}: {str(e)}")
+        
+        # Special works entries (C16, C17, C18)
+        special_works_1 = canopy.get("special_works_1", "")
+        if special_works_1:
+            try:
+                sheet[f"C{row_index + 2}"] = special_works_1
+            except Exception as e:
+                print(f"Warning: Could not write special works 1 to C{row_index + 2}: {str(e)}")
+        
+        special_works_2 = canopy.get("special_works_2", "")
+        if special_works_2:
+            try:
+                sheet[f"C{row_index + 3}"] = special_works_2
+            except Exception as e:
+                print(f"Warning: Could not write special works 2 to C{row_index + 3}: {str(e)}")
+        
+        special_works_3 = canopy.get("special_works_3", "")
+        if special_works_3:
+            try:
+                sheet[f"C{row_index + 4}"] = special_works_3
+            except Exception as e:
+                print(f"Warning: Could not write special works 3 to C{row_index + 4}: {str(e)}")
+        
+        # Quantity override in D18 (if different from default 1)
+        quantity_override = canopy.get("quantity_override", "")
+        if quantity_override and str(quantity_override).strip() not in ['', '1']:
+            try:
+                sheet[f"D{row_index + 4}"] = quantity_override
+            except Exception as e:
+                print(f"Warning: Could not write quantity override to D{row_index + 4}: {str(e)}")
         
         # Options (only fire suppression at canopy level now)
         options_row = row_index + 4
@@ -3018,12 +3093,23 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     'configuration': sheet[f'C{base_row}'].value or "",
                                     'model': model,
                                     
-                                                                    # Additional specification data (convert dimensions to integers to avoid .0 display)
-                                'length': int(float(sheet[f'F{base_row}'].value)) if sheet[f'F{base_row}'].value and str(sheet[f'F{base_row}'].value).strip() not in ['', '-'] else "",
-                                'width': int(float(sheet[f'E{base_row}'].value)) if sheet[f'E{base_row}'].value and str(sheet[f'E{base_row}'].value).strip() not in ['', '-'] else "",
-                                'height': int(float(sheet[f'G{base_row}'].value)) if sheet[f'G{base_row}'].value and str(sheet[f'G{base_row}'].value).strip() not in ['', '-'] else "",
-                                'sections': int(float(sheet[f'H{base_row}'].value)) if sheet[f'H{base_row}'].value and str(sheet[f'H{base_row}'].value).strip() not in ['', '-'] else "",
+                                    # Additional specification data (convert dimensions to integers to avoid .0 display)
+                                    'length': int(float(sheet[f'F{base_row}'].value)) if sheet[f'F{base_row}'].value and str(sheet[f'F{base_row}'].value).strip() not in ['', '-'] else "",
+                                    'width': int(float(sheet[f'E{base_row}'].value)) if sheet[f'E{base_row}'].value and str(sheet[f'E{base_row}'].value).strip() not in ['', '-'] else "",
+                                    'height': int(float(sheet[f'G{base_row}'].value)) if sheet[f'G{base_row}'].value and str(sheet[f'G{base_row}'].value).strip() not in ['', '-'] else "",
+                                    'sections': int(float(sheet[f'H{base_row}'].value)) if sheet[f'H{base_row}'].value and str(sheet[f'H{base_row}'].value).strip() not in ['', '-'] else "",
                                     'lighting_type': sheet[f'C{base_row + 1}'].value or "",  # C15 (base_row + 1)
+                                    
+                                    # PRESERVE MANUAL INPUT CELLS - These are commonly edited by users
+                                    'light_inputs': sheet[f'D{base_row + 1}'].value or "",  # D15 - Light inputs (commonly manually entered)
+                                    'special_works_1': sheet[f'C{base_row + 2}'].value or "",  # C16 - Special works line 1
+                                    'special_works_2': sheet[f'C{base_row + 3}'].value or "",  # C17 - Special works line 2  
+                                    'special_works_3': sheet[f'C{base_row + 4}'].value or "",  # C18 - Special works line 3
+                                    'quantity_override': sheet[f'D{base_row + 4}'].value or "",  # D18 - Quantity (sometimes manually changed)
+                                    
+                                    # Additional manual input preservation
+                                    'extract_volume_manual': sheet[f'I{base_row}'].value or "",  # I14 - Extract volume (sometimes manually entered)
+                                    'supply_static_manual': sheet[f'L{base_row}'].value or "",  # L14 - Supply static (sometimes manually entered)
                                     
                                     # Volume and static data (if available in your template)
                                     'extract_volume': sheet[f'I{base_row}'].value or "",
@@ -3044,7 +3130,12 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     'wall_cladding': read_wall_cladding_from_canopy(sheet, base_row),
                                     
                                     # Read wall cladding price from Excel (N19, N36, N53, etc.)
-                                    'cladding_price': sheet[f'N{ref_row + 7}'].value or 0  # N19, N36, N53, etc. (ref_row + 7)
+                                    'cladding_price': sheet[f'N{ref_row + 7}'].value or 0,  # N19, N36, N53, etc. (ref_row + 7)
+                                    
+                                    # Initialize options (fire suppression will be set to True later if data exists)
+                                    'options': {
+                                        'fire_suppression': False  # Will be updated to True if fire suppression data is found
+                                    }
                                 }
                                 
                                 # Add CWS/HWS data for CMWF and CMWI canopies
@@ -3140,7 +3231,15 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                             canopy['fire_suppression_price'] = total_fs_price
                                             canopy['fire_suppression_system_type'] = fs_unit['system_type']  # Add system type
                                             canopy['fire_suppression_reference_number'] = fs_unit['ref_number']  # Store the actual fire suppression reference
+                                            
+                                            # Set the fire suppression option flag for form compatibility
+                                            if 'options' not in canopy:
+                                                canopy['options'] = {}
+                                            canopy['options']['fire_suppression'] = True
+                                            
                                             print(f"✅ Matched fire suppression: Canopy '{canopy['reference_number']}' ↔ Fire Supp '{fs_unit['ref_number']}'")
+                                            # print(f"   📊 Tank quantity: {fs_unit['tank_quantity']}, Price: £{total_fs_price}")
+                                            # print(f"   🔗 Fire suppression reference stored: '{fs_unit['ref_number']}'")
                                             break
         
         # Read area-level pricing data (delivery & installation, commissioning) from non-UV sheets only
@@ -3159,14 +3258,32 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         delivery_installation_price = _calculate_net_delivery_price(sheet)
                         commissioning_price = sheet['N193'].value or 0
                         
-                        # Find the area and add pricing data
+                        # PRESERVE AREA-LEVEL MANUAL INPUT CELLS
+                        # Read delivery number (commonly on the left of delivery location)
+                        delivery_number = sheet['C183'].value or ""  # C183 - Common location for delivery number
+                        delivery_location_value = sheet['D183'].value or ""  # D183 - Delivery location
+                        
+                        # Read access equipment entries (commonly used fields)
+                        access_equipment_1 = sheet['D184'].value or ""  # D184 - Access equipment 1
+                        access_equipment_2 = sheet['D185'].value or ""  # D185 - Access equipment 2
+                        
+                        # Read testing and commissioning entries
+                        testing_commissioning_description = sheet['C193'].value or ""  # C193 - T&C description
+                        
+                        # Find the area and add pricing data + manual inputs
                         area_found = False
                         if level_name in levels_data:
                             for area in levels_data[level_name]:
                                 if area['name'] == area_name:
                                     area.update({
                                         'delivery_installation_price': delivery_installation_price,
-                                        'commissioning_price': commissioning_price
+                                        'commissioning_price': commissioning_price,
+                                        # Preserve manual inputs
+                                        'delivery_number': delivery_number,
+                                        'delivery_location_value': delivery_location_value,
+                                        'access_equipment_1': access_equipment_1,
+                                        'access_equipment_2': access_equipment_2,
+                                        'testing_commissioning_description': testing_commissioning_description
                                     })
                                     area_found = True
                                     break
@@ -4985,6 +5102,7 @@ def references_match(canopy_ref: str, fire_supp_ref: str) -> bool:
     
     # Check if normalized versions match
     if normalized_canopy == normalized_fire_supp:
+        # print(f"🔗 Reference match (normalized): '{canopy_ref}' ({normalized_canopy}) ↔ '{fire_supp_ref}' ({normalized_fire_supp})")
         return True
     
     # Additional flexible matching logic
@@ -4995,6 +5113,7 @@ def references_match(canopy_ref: str, fire_supp_ref: str) -> bool:
     # Check if one is a prefix of the other (e.g., "1.01" matches "1.01A")
     if (canopy_clean and fire_supp_clean and 
         (canopy_clean.startswith(fire_supp_clean) or fire_supp_clean.startswith(canopy_clean))):
+        # print(f"🔗 Reference match (prefix): '{canopy_ref}' ↔ '{fire_supp_ref}'")
         return True
     
     return False
