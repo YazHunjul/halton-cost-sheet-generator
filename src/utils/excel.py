@@ -38,10 +38,10 @@ CELL_MAPPINGS = {
     "project_number": "C3",  # Job No
     "company": "C5",         # Company (changed from customer)
     "estimator": "C7",       # Sales Manager / Estimator Initials
-    "project_name": "G3",    # Project Name
-    "project_location": "G5",        # Project Location (was "location")
-    "date": "G7",           # Date
-    "revision": "O7",       # Revision
+    "project_name": "G3",    # Project Name (changed from F3)
+    "project_location": "G5",  # Project Location (changed from F5)
+    "date": "G7",             # Date (changed from F7)
+    "revision": "K7",         # Revision
 }
 
 # Row spacing for canopy entries
@@ -292,60 +292,43 @@ def _calculate_net_canopy_price(sheet: Worksheet, ref_row: int) -> float:
 
 def _calculate_net_delivery_price(sheet: Worksheet) -> float:
     """
-    Calculate net delivery price by reading from P182 formula result,
-    or manually calculating if formula result is not available.
+    Calculate net delivery & installation price by reading from N182 and subtracting N193.
     
     Excel structure:
-    - N183-N197: Individual delivery components (we write to N183)
-    - N193: Commissioning price (subtracted from total)
     - N182: =SUBTOTAL(9,N183:N197) (TOTAL delivery price including all components)
-    - P182: =N182-N193 (NET delivery price = total delivery minus commissioning)
+    - N193: Commissioning price
+    - Net Delivery & Installation = N182 - N193
     
     Args:
         sheet (Worksheet): The worksheet to read from
     
     Returns:
-        float: Net delivery price (delivery total minus testing/commissioning)
+        float: Net delivery & installation price (N182 minus N193)
     """
     try:
-        # Try to read the calculated value from P182 (preferred method)
-        p182_value = sheet['P182'].value
-        if p182_value and isinstance(p182_value, (int, float)):
-            return float(p182_value)
-        
-        # If P182 formula result not available, try N182 minus N193
-        n182_value = sheet['N182'].value
-        if n182_value and isinstance(n182_value, (int, float)):
-            delivery_total = float(n182_value)
-            # Subtract commissioning price from N193
-            commissioning_price = sheet['N193'].value or 0
-            if isinstance(commissioning_price, (int, float)):
-                commissioning_price = float(commissioning_price)
-            else:
-                commissioning_price = 0
-            return delivery_total - commissioning_price
-        
-        # If N182 formula not evaluated, manually calculate the SUBTOTAL(9,N183:N197)
-        # But EXCLUDE N193 (commissioning) from the delivery total, as it should not be part of delivery costs
-        print(f"Warning: N182 formula not evaluated, manually calculating SUBTOTAL")
-        delivery_total = 0
-        commissioning_row = 193  # N193 should be excluded from delivery total
-        for row in range(183, 198):  # N183 to N197 (SUBTOTAL range)
-            if row == commissioning_row:
-                continue  # Skip N193 as it's commissioning, not delivery
-            cell_value = sheet[f'N{row}'].value
-            if cell_value and isinstance(cell_value, (int, float)):
-                delivery_total += float(cell_value)
-        
-        # Subtract commissioning price from N193 to get net delivery
+        # Read commissioning price from N193 first
         commissioning_price = sheet['N193'].value or 0
         if isinstance(commissioning_price, (int, float)):
             commissioning_price = float(commissioning_price)
         else:
             commissioning_price = 0
         
+        # Read total delivery price from N182
+        n182_value = sheet['N182'].value
+        if n182_value and isinstance(n182_value, (int, float)):
+            delivery_total = float(n182_value)
+        else:
+            # If N182 formula not evaluated, manually calculate the SUBTOTAL(9,N183:N197)
+            # This includes ALL items in the range (including N193 commissioning)
+            print(f"Warning: N182 formula not evaluated, manually calculating SUBTOTAL")
+            delivery_total = 0
+            for row in range(183, 198):  # N183 to N197 (SUBTOTAL range)
+                cell_value = sheet[f'N{row}'].value
+                if cell_value and isinstance(cell_value, (int, float)):
+                    delivery_total += float(cell_value)
+        
+        # Calculate net delivery & installation (N182 - N193)
         net_delivery = delivery_total - commissioning_price
-        print(f"Manual calculation: Total delivery {delivery_total} - Commissioning {commissioning_price} = Net {net_delivery}")
         return net_delivery
         
     except Exception as e:
@@ -869,6 +852,17 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict, template_versio
         project_data (Dict): Project metadata
         template_version (str, optional): Template version to use for cost sheet identifier
     """
+    # Define cell mappings
+    CELL_MAPPINGS = {
+        "project_number": "C3",    # Job No
+        "company": "C5",           # Company (changed from customer)
+        "estimator": "C7",         # Sales Manager / Estimator Initials
+        "project_name": "G3",      # Project Name (changed from F3)
+        "project_location": "G5",  # Project Location (changed from F5)
+        "date": "G7",             # Date (changed from F7)
+        "revision": "K7",         # Revision
+    }
+    
     for field, cell in CELL_MAPPINGS.items():
         value = project_data.get(field)
         
@@ -952,17 +946,10 @@ def write_area_delivery_install_pricing(sheet: Worksheet, area: Dict):
         area (Dict): Area data containing delivery and installation pricing
     """
     try:
-        # Write delivery prices to cells that feed into N182 subtotal (N183-N197 range)
-        # Delivery and installation price goes in N183 (feeds into N182 subtotal)
-        delivery_installation_price = area.get('delivery_installation_price', 0)
-        if delivery_installation_price:
-            try:
-                sheet['N183'] = delivery_installation_price
-                print(f"✓ Wrote delivery/installation price {delivery_installation_price} to N183")
-            except Exception as e:
-                print(f"Warning: Could not write delivery/installation price to N183: {str(e)}")
+        # DO NOT write to N182 - it contains a SUBTOTAL formula that calculates everything
+        # N182 = SUBTOTAL(9,N183:N197) - this is managed by Excel formulas
         
-        # Commissioning price goes in N193 (used by P182=N182-N193 formula for subtraction)
+        # Commissioning price goes in N193
         commissioning_price = area.get('commissioning_price', 0)
         if commissioning_price:
             try:
@@ -971,12 +958,17 @@ def write_area_delivery_install_pricing(sheet: Worksheet, area: Dict):
             except Exception as e:
                 print(f"Warning: Could not write commissioning price to N193: {str(e)}")
         
-        # Update P182 formula to subtract N193 (delivery & install = total delivery - test & commission)
-        try:
-            sheet['P182'] = '=N182-N193'
-            print(f"✓ Updated P182 formula to =N182-N193")
-        except Exception as e:
-            print(f"Warning: Could not update P182 formula: {str(e)}")
+        # Note: We read delivery & installation as N182-N193 directly in code
+        # P182 is not needed since we calculate N182-N193 programmatically
+        
+        # Write delivery and installation items to feed into N182 subtotal (N183-N197 range)
+        delivery_installation_price = area.get('delivery_installation_price', 0)
+        if delivery_installation_price:
+            try:
+                # sheet['N183'] = delivery_installation_price
+                print(f"✓ Wrote delivery/installation price {delivery_installation_price} to N183 (feeds into N182 subtotal)")
+            except Exception as e:
+                print(f"Warning: Could not write delivery/installation price to N183: {str(e)}")
         
         # WRITE PRESERVED AREA-LEVEL MANUAL INPUT FIELDS
         # Delivery number (C183)
@@ -1013,8 +1005,6 @@ def write_area_delivery_install_pricing(sheet: Worksheet, area: Dict):
                 print(f"✓ Wrote T&C description '{testing_commissioning_description}' to C193")
             except Exception as e:
                 print(f"Warning: Could not write T&C description to C193: {str(e)}")
-        
-        # Reserve remaining cells in N184-N192 for future area-level pricing
         
     except Exception as e:
         print(f"Warning: Failed to write area delivery/install pricing: {str(e)}")
@@ -2128,7 +2118,8 @@ def add_sdu_dropdowns(sheet: Worksheet):
 
 def organize_sheets_by_area(wb: Workbook):
     """
-    Organize sheets by area grouping: JOB TOTAL first, then all sheets for each area together
+    Organize sheets by area grouping: JOB TOTAL first, then if contract option enabled:
+    CONTRACT, EXTRACT DUCT, SUPPLY DUCT, SPIRAL DUCT, then all sheets for each area together
     (CANOPY, CANOPY (UV), FIRE SUPP, EBOX, RECOAIR, SDU for area 1, then area 2, etc.)
     
     Args:
@@ -2137,12 +2128,15 @@ def organize_sheets_by_area(wb: Workbook):
     try:
         # Categorize all sheets
         job_total_sheets = []
+        contract_sheets = []
         area_sheets = {}  # Dictionary to group sheets by area
         misc_sheets = []
         
         for sheet_name in wb.sheetnames:
             if 'JOB TOTAL' in sheet_name:
                 job_total_sheets.append(sheet_name)
+            elif sheet_name in ['CONTRACT', 'EXTRACT DUCT', 'SUPPLY DUCT', 'SPIRAL DUCT']:
+                contract_sheets.append(sheet_name)
             elif any(sys_type in sheet_name for sys_type in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU']):
                 # Extract area identifier for grouping
                 if ' - ' in sheet_name and '(' in sheet_name and ')' in sheet_name:
@@ -2201,9 +2195,16 @@ def organize_sheets_by_area(wb: Workbook):
         
         sorted_areas = sorted(area_sheets.keys(), key=get_area_sort_key)
         
-        # Create final ordered list: JOB TOTAL → AREA 1 SHEETS → AREA 2 SHEETS → ... → MISC
+        # Create final ordered list: JOB TOTAL → CONTRACT SHEETS → AREA 1 SHEETS → AREA 2 SHEETS → ... → MISC
         ordered_sheets = []
         ordered_sheets.extend(job_total_sheets)  # JOB TOTAL first
+        
+        # Add contract sheets after JOB TOTAL in specific order
+        contract_names = ['CONTRACT', 'EXTRACT DUCT', 'SUPPLY DUCT', 'SPIRAL DUCT']  # Updated order
+        for name in contract_names:
+            # Find exact sheet name in current workbook
+            if name in wb.sheetnames:
+                ordered_sheets.append(name)
         
         # Add all sheets for each area in order
         for area_id in sorted_areas:
@@ -2390,6 +2391,11 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         sdu_sheets = [sheet for sheet in all_sheets if 'SDU' in sheet and 'CANOPY' not in sheet and 'FIRE' not in sheet]
         # MARVEL template sheets (for UV grease recovery option)
         marvel_sheets = [sheet for sheet in all_sheets if 'MARVEL' in sheet]
+        # Contract template sheets - handle exact matches and numbered variants
+        contract_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'CONTRACT' or sheet.startswith('CONTRACT')]
+        spiral_duct_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'SPIRAL DUCT' or sheet.startswith('SPIRAL DUCT')]
+        supply_duct_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'SUPPLY DUCT' or sheet.startswith('SUPPLY DUCT')]
+        extract_duct_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'EXTRACT DUCT' or sheet.startswith('EXTRACT DUCT')]
         
         # Hide the Lists sheet if it exists
         if 'Lists' in wb.sheetnames:
@@ -2403,6 +2409,212 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         
         # Write company and estimator data to hidden sheet
         write_company_data_to_hidden_sheet(wb, project_data)
+        
+        # Track created contract sheet names for organization
+        created_contract_sheets = []
+        
+        # Create contract sheets if contract option is enabled
+        if project_data.get('contract_option', False):
+            print("🔨 Contract option enabled - creating contract sheets")
+            
+            # Create Contract sheet
+            contract_actual_name = None
+            if contract_sheets:
+                contract_sheet_name = contract_sheets.pop(0)
+                contract_sheet = wb[contract_sheet_name]
+                print(f"Original contract sheet name: {contract_sheet_name}")
+                
+                # Try to rename the sheet, handle conflicts
+                try:
+                    # If a sheet named "CONTRACT" already exists, remove it first
+                    if "CONTRACT" in wb.sheetnames and wb["CONTRACT"] != contract_sheet:
+                        wb.remove(wb["CONTRACT"])
+                        print("Removed existing CONTRACT sheet")
+                    
+                    contract_sheet.title = "CONTRACT"
+                    contract_actual_name = "CONTRACT"
+                    print(f"✓ Successfully renamed to: {contract_actual_name}")
+                except Exception as e:
+                    # If renaming fails, keep the original name
+                    contract_actual_name = contract_sheet_name
+                    print(f"Warning: Could not rename contract sheet to CONTRACT, keeping name: {contract_actual_name}. Error: {str(e)}")
+                
+                contract_sheet.sheet_state = 'visible'
+                
+                # Write basic project metadata to contract sheet
+                write_project_metadata(contract_sheet, project_data, template_version)
+                created_contract_sheets.append(contract_actual_name)
+                print(f"✓ Created contract sheet with name: {contract_actual_name}")
+                
+                # Add dropdowns and fix column alignment
+                try:
+                    # Add delivery location dropdown (D57) using the same options as canopy sheets
+                    from config.business_data import DELIVERY_LOCATIONS
+                    # Write delivery locations to hidden cells and reference them
+                    start_row = 400  # Use row 400+ to avoid conflicts
+                    for i, location in enumerate(DELIVERY_LOCATIONS):
+                        try:
+                            contract_sheet[f'AB{start_row + i}'] = location  # Use column AB (hidden area)
+                        except:
+                            pass  # If we can't write, continue
+                    
+                    # Create a validation that references the range
+                    range_ref = f'$AB${start_row}:$AB${start_row + len(DELIVERY_LOCATIONS) - 1}'
+                    delivery_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+                    contract_sheet.add_data_validation(delivery_dv)
+                    delivery_dv.add('D57:D57')
+                    
+                    # Add plant selection dropdown (D58) using the same options as canopy sheets
+                    plant_options = [
+                        "",  # Empty option
+                        "SL10 GENIE",
+                        "EXTENSION FORKS",
+                        "2.5M COMBI LADDER",
+                        "1.5M PODIUM",
+                        "3M TOWER",
+                        "COMBI LADDER",
+                        "PECO LIFT",
+                        "3M YOUNGMAN BOARD",
+                        "GS1930 SCISSOR LIFT",
+                        "4-6 SHERASCOPIC",
+                        "7-9 SHERASCOPIC"
+                    ]
+                    
+                    # Create validation for plant selection
+                    formula = ",".join(plant_options)
+                    plant_dv = DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+                    contract_sheet.add_data_validation(plant_dv)
+                    plant_dv.add('D58:D58')
+                    
+                    # Move second column data from F to G for Canopies section
+                    # First, identify the range of rows that need to be moved
+                    start_row = 1  # Start from the first row
+                    end_row = 100  # Go through all potential rows
+                    
+                    # Move data from column F to G
+                    for row in range(start_row, end_row + 1):
+                        cell_f = contract_sheet[f'F{row}']
+                        cell_g = contract_sheet[f'G{row}']
+                        if cell_f.value is not None:
+                            cell_g.value = cell_f.value
+                            cell_f.value = None
+                            # Copy formatting if needed
+                            if cell_f.has_style:
+                                cell_g._style = cell_f._style
+                    
+                    print("✓ Added dropdowns and fixed column alignment in contract sheet")
+                except Exception as e:
+                    print(f"Warning: Could not add dropdowns or fix alignment in contract sheet: {str(e)}")
+            else:
+                print(f"Warning: No CONTRACT template sheet found")
+            
+            # Create Spiral Duct sheet
+            spiral_duct_actual_name = None
+            if spiral_duct_sheets:
+                spiral_duct_sheet_name = spiral_duct_sheets.pop(0)
+                spiral_duct_sheet = wb[spiral_duct_sheet_name]
+                print(f"Original spiral duct sheet name: {spiral_duct_sheet_name}")
+                
+                try:
+                    if "SPIRAL DUCT" in wb.sheetnames and wb["SPIRAL DUCT"] != spiral_duct_sheet:
+                        wb.remove(wb["SPIRAL DUCT"])
+                        print("Removed existing SPIRAL DUCT sheet")
+                    
+                    spiral_duct_sheet.title = "SPIRAL DUCT"
+                    spiral_duct_actual_name = "SPIRAL DUCT"
+                    print(f"✓ Successfully renamed to: {spiral_duct_actual_name}")
+                except Exception as e:
+                    spiral_duct_actual_name = spiral_duct_sheet_name
+                    print(f"Warning: Could not rename spiral duct sheet, keeping name: {spiral_duct_actual_name}. Error: {str(e)}")
+                
+                spiral_duct_sheet.sheet_state = 'visible'
+                created_contract_sheets.append(spiral_duct_actual_name)
+                print(f"✓ Created spiral duct sheet with name: {spiral_duct_actual_name}")
+            else:
+                print(f"Warning: No SPIRAL DUCT template sheet found")
+            
+            # Create Supply Duct sheet
+            supply_duct_actual_name = None
+            if supply_duct_sheets:
+                supply_duct_sheet_name = supply_duct_sheets.pop(0)
+                supply_duct_sheet = wb[supply_duct_sheet_name]
+                print(f"Original supply duct sheet name: {supply_duct_sheet_name}")
+                
+                try:
+                    if "SUPPLY DUCT" in wb.sheetnames and wb["SUPPLY DUCT"] != supply_duct_sheet:
+                        wb.remove(wb["SUPPLY DUCT"])
+                        print("Removed existing SUPPLY DUCT sheet")
+                    
+                    supply_duct_sheet.title = "SUPPLY DUCT"
+                    supply_duct_actual_name = "SUPPLY DUCT"
+                    print(f"✓ Successfully renamed to: {supply_duct_actual_name}")
+                except Exception as e:
+                    supply_duct_actual_name = supply_duct_sheet_name
+                    print(f"Warning: Could not rename supply duct sheet, keeping name: {supply_duct_actual_name}. Error: {str(e)}")
+                
+                supply_duct_sheet.sheet_state = 'visible'
+                created_contract_sheets.append(supply_duct_actual_name)
+                print(f"✓ Created supply duct sheet with name: {supply_duct_actual_name}")
+            else:
+                print(f"Warning: No SUPPLY DUCT template sheet found")
+            
+            # Create Extract Duct sheet
+            extract_duct_actual_name = None
+            if extract_duct_sheets:
+                extract_duct_sheet_name = extract_duct_sheets.pop(0)
+                extract_duct_sheet = wb[extract_duct_sheet_name]
+                print(f"Original extract duct sheet name: {extract_duct_sheet_name}")
+                
+                try:
+                    if "EXTRACT DUCT" in wb.sheetnames and wb["EXTRACT DUCT"] != extract_duct_sheet:
+                        wb.remove(wb["EXTRACT DUCT"])
+                        print("Removed existing EXTRACT DUCT sheet")
+                    
+                    extract_duct_sheet.title = "EXTRACT DUCT"
+                    extract_duct_actual_name = "EXTRACT DUCT"
+                    print(f"✓ Successfully renamed to: {extract_duct_actual_name}")
+                except Exception as e:
+                    extract_duct_actual_name = extract_duct_sheet_name
+                    print(f"Warning: Could not rename extract duct sheet, keeping name: {extract_duct_actual_name}. Error: {str(e)}")
+                
+                extract_duct_sheet.sheet_state = 'visible'
+                created_contract_sheets.append(extract_duct_actual_name)
+                print(f"✓ Created extract duct sheet with name: {extract_duct_actual_name}")
+            else:
+                print(f"Warning: No EXTRACT DUCT template sheet found")
+            
+            # Add formulas and conditional values to CONTRACT sheet after all duct sheets are created
+            if contract_actual_name and contract_actual_name in wb.sheetnames:
+                contract_sheet = wb[contract_actual_name]
+                print(f"Adding formulas to contract sheet: {contract_actual_name}")
+                
+                try:
+                    # Add formulas to reference duct sheet totals using actual sheet names
+                    if extract_duct_actual_name and extract_duct_actual_name in wb.sheetnames:
+                        # Extract Duct System
+                        contract_sheet['F16'] = f"='{extract_duct_actual_name}'!V5"  # Total price
+                        contract_sheet['C16'] = f"=IF('{extract_duct_actual_name}'!V5>0,1,0)"  # Conditional value
+                        # Keep extract system price in M12 (no change needed)
+                        print(f"✓ Added extract duct formulas referencing: {extract_duct_actual_name}")
+                    
+                    if supply_duct_actual_name and supply_duct_actual_name in wb.sheetnames:
+                        # Supply Duct System
+                        contract_sheet['F30'] = f"='{supply_duct_actual_name}'!V5"  # Total price
+                        contract_sheet['C30'] = f"=IF('{supply_duct_actual_name}'!V5>0,1,0)"  # Conditional value
+                        # Keep supply system price in N12 (no change needed)
+                        print(f"✓ Added supply duct formulas referencing: {supply_duct_actual_name}")
+                    
+                    if spiral_duct_actual_name and spiral_duct_actual_name in wb.sheetnames:
+                        # Spiral Duct System
+                        contract_sheet['F37'] = f"='{spiral_duct_actual_name}'!V5"  # Total price
+                        contract_sheet['C37'] = f"=IF('{spiral_duct_actual_name}'!V5>0,1,0)"  # Conditional value
+                        print(f"✓ Added spiral duct formulas referencing: {spiral_duct_actual_name}")
+                    
+                    print(f"✓ Successfully added all duct sheet references and conditional values to {contract_actual_name} sheet")
+                except Exception as e:
+                    print(f"Warning: Could not add duct references to {contract_actual_name} sheet: {str(e)}")
+                    import traceback
+                    print(f"Full error: {traceback.format_exc()}")
         
         # Counters for sheet numbering
         recoair_sheet_count = 0
@@ -2770,10 +2982,16 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         # Write project metadata to any other visible sheets that might exist
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
+            # Check if sheet name starts with duct names (to handle cases like "SPIRAL DUCT1", "EXTRACT DUCT1", etc.)
+            is_duct_sheet = (sheet_name.startswith('SPIRAL DUCT') or 
+                           sheet_name.startswith('SUPPLY DUCT') or 
+                           sheet_name.startswith('EXTRACT DUCT'))
+            
             if (sheet.sheet_state == 'visible' and 
                 not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL')) and 
+                not is_duct_sheet and
                 sheet_name not in ['Lists', 'JOB TOTAL']):
-                # Write metadata to any other visible sheets (excluding EBOX, RECOAIR, SDU, and MARVEL which have their own metadata)
+                # Write metadata to any other visible sheets (excluding EBOX, RECOAIR, SDU, MARVEL, and duct sheets which don't need metadata)
                 try:
                     write_project_metadata(sheet, project_data, template_version)
                 except Exception as e:
@@ -2796,8 +3014,17 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 sheets_updated += 1
         print(f"📝 Added delivery location dropdowns to {sheets_updated} sheets")
         
-        # Delete only unused sheets for the specific systems we work with (CANOPY, FIRE SUPP, EBOX, SDU, RECOAIR, MARVEL)
-        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets
+        # Delete only unused sheets for the specific systems we work with (CANOPY, FIRE SUPP, EBOX, SDU, RECOAIR, MARVEL, CONTRACT)
+        # Exclude the actually created contract sheets from deletion
+        created_contract_sheet_names = []
+        if project_data.get('contract_option', False):
+            created_contract_sheet_names = ['CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']
+        
+        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets + contract_sheets + spiral_duct_sheets + supply_duct_sheets + extract_duct_sheets
+        
+        # Filter out the created contract sheets from the deletion list
+        unused_sheets = [sheet for sheet in unused_sheets if sheet not in created_contract_sheet_names]
+        
         print(f"🗑️  Removing {len(unused_sheets)} unused system template sheets...")
         for sheet_name in unused_sheets:
             if sheet_name in wb.sheetnames:
@@ -2808,7 +3035,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         # Only keep visible: used system sheets and essential management sheets
         allowed_visible_prefixes = (
             'CANOPY -', 'CANOPY (UV)', 'FIRE SUPP -', 'EBOX -', 'SDU -', 'RECOAIR -', 'MARVEL -',
-            'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData', 'Lists'
+            'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData', 'Lists',
+            'CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT'
         )
         
         extra_hidden_count = 0
@@ -2980,7 +3208,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
         else:
             project_data['date'] = ""
             
-        project_data['revision'] = data_sheet['O7'].value or ""  # Revision from O7, leave blank if not set
+        project_data['revision'] = data_sheet['K7'].value or ""  # Revision from K7, leave blank if not set
         
         # Read company and estimator data from hidden ProjectData sheet
         if 'ProjectData' in wb.sheetnames:
@@ -3254,9 +3482,14 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         level_name = level_area[0]
                         area_name = level_area[1]
                         
-                        # Read area-level pricing - calculate net delivery price (delivery total minus testing/commissioning)
-                        delivery_installation_price = _calculate_net_delivery_price(sheet)
+                        # Read area-level pricing
+                        # Get total delivery price from N182 and commissioning from N193
+                        n182_total_delivery = sheet['N182'].value or 0
                         commissioning_price = sheet['N193'].value or 0
+                        
+                        # Calculate net delivery & installation price (N182 - N193)
+                        # This is what goes to Word document as "delivery_installation_price"
+                        delivery_installation_price = n182_total_delivery - commissioning_price
                         
                         # PRESERVE AREA-LEVEL MANUAL INPUT CELLS
                         # Read delivery number (commonly on the left of delivery location)
@@ -3589,6 +3822,21 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                 if area['name'] == area_name:
                                     area['options']['marvel'] = True
                                     break
+        
+        # Check for contract sheets to set contract option (handle exact matches and numbered variants)
+        contract_sheet_names = ['CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']
+        has_contract_sheets = False
+        for sheet_name in wb.sheetnames:
+            for contract_name in contract_sheet_names:
+                if sheet_name == contract_name or (sheet_name.startswith(contract_name) and len(sheet_name) <= len(contract_name) + 2):
+                    has_contract_sheets = True
+                    break
+            if has_contract_sheets:
+                break
+        project_data['contract_option'] = has_contract_sheets
+        
+        if has_contract_sheets:
+            print(f"🔨 Detected contract sheets in Excel file, setting contract option to True")
         
         # Convert levels_data to the format expected by the system
         project_data['levels'] = []
@@ -4157,6 +4405,9 @@ def update_job_total_sheet(wb: Workbook) -> None:
         
         job_total_sheet = wb['JOB TOTAL']
         pricing_summary = wb['PRICING_SUMMARY']
+        
+        # Clear D17 (other costs) - we don't want to include this
+        job_total_sheet['D17'] = 0
         
         # Find the summary totals section
         summary_row = None
@@ -4991,64 +5242,27 @@ def add_plant_selection_dropdown_to_fire_supp(sheet: Worksheet):
 
 def write_marvel_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None):
     """
-    Write project metadata to a MARVEL sheet (grease recovery system).
-    MARVEL sheets use column F instead of G for name/location/date.
+    Write project metadata to MARVEL sheet with specific cell mappings.
+    
+    Args:
+        sheet (Worksheet): The MARVEL worksheet to write to
+        project_data (Dict): Project metadata
     """
     try:
+        # MARVEL-specific cell mappings (F columns for project name/location/date)
         marvel_cell_mappings = {
-            "project_number": "C3",
-            "company": "C5",
-            "estimator": "C7",
-            "project_name": "F3",  # differs
-            "project_location": "F5",  # differs
-            "date": "F7",  # differs
-            "revision": "K7",  # MARVEL uses K7 for revision
+            "project_number": "C3",  # Job No
+            "company": "C5",         # Company (changed from customer)
+            "estimator": "C7",       # Sales Manager / Estimator Initials
+            "project_name": "F3",    # Project Name (stays in F3 for MARVEL)
+            "project_location": "F5", # Project Location (stays in F5 for MARVEL)
+            "date": "F7",            # Date (stays in F7 for MARVEL)
+            "revision": "K7",        # Revision
         }
-
-        for field, cell in marvel_cell_mappings.items():
-            value = project_data.get(field)
-            try:
-                if field == "revision":
-                    # For first revision (A), leave the cell empty; otherwise use the revision value
-                    sheet[cell] = "" if value == "A" else (value or "")
-                elif value:
-                    if field == "estimator":
-                        from utils.word import get_combined_initials
-                        value = get_combined_initials(project_data.get('sales_contact',''), value)
-                    elif field != "date":
-                        value = str(value).title()
-                    elif field == "date" and not value:
-                        value = get_current_date()
-                    sheet[cell] = value
-            except Exception as e:
-                # Handle merged cells like other metadata functions
-                print(f"Warning: Could not write {field} to MARVEL cell {cell}: {str(e)}")
-                try:
-                    # Try to unmerge the cell and write
-                    if hasattr(sheet, 'merged_cells'):
-                        for merged_range in list(sheet.merged_cells.ranges):
-                            if cell in merged_range:
-                                sheet.unmerge_cells(str(merged_range))
-                                break
-                    # Try writing again after unmerging
-                    if field == "revision":
-                        # For first revision (A), leave the cell empty; otherwise use the revision value
-                        sheet[cell] = "" if value == "A" else (value or "")
-                    elif value:
-                        if field == "estimator":
-                            from utils.word import get_combined_initials
-                            value = get_combined_initials(project_data.get('sales_contact',''), value)
-                        elif field != "date":
-                            value = str(value).title()
-                        elif field == "date" and not value:
-                            value = get_current_date()
-                        sheet[cell] = value
-                except Exception as e2:
-                    print(f"Warning: Still could not write {field} to MARVEL cell {cell} after unmerging: {str(e2)}")
-                    continue
-
-        # Cost sheet identifier in N2 (same as others)
-        write_cost_sheet_identifier(sheet, sheet.title, template_version)
+        
+        # Write project metadata using MARVEL-specific mappings
+        write_metadata_with_mappings(sheet, project_data, marvel_cell_mappings, template_version)
+        
     except Exception as e:
         print(f"Warning: Could not write MARVEL metadata: {str(e)}")
 
@@ -5117,4 +5331,63 @@ def references_match(canopy_ref: str, fire_supp_ref: str) -> bool:
         return True
     
     return False
+
+def write_metadata_with_mappings(sheet: Worksheet, project_data: Dict, cell_mappings: Dict, template_version: str = None):
+    """
+    Write project metadata to a sheet using custom cell mappings.
+    
+    Args:
+        sheet (Worksheet): The worksheet to write to
+        project_data (Dict): Project metadata
+        cell_mappings (Dict): Dictionary mapping field names to cell references
+        template_version (str, optional): Template version for cost sheet identifier
+    """
+    try:
+        for field, cell in cell_mappings.items():
+            value = project_data.get(field)
+            try:
+                if field == "revision":
+                    # For first revision (A), leave the cell empty; otherwise use the revision value
+                    sheet[cell] = "" if value == "A" else (value or "")
+                elif value:
+                    if field == "estimator":
+                        from utils.word import get_combined_initials
+                        value = get_combined_initials(project_data.get('sales_contact',''), value)
+                    elif field != "date":
+                        value = str(value).title()
+                    elif field == "date" and not value:
+                        value = get_current_date()
+                    sheet[cell] = value
+            except Exception as e:
+                # Handle merged cells
+                print(f"Warning: Could not write {field} to cell {cell}: {str(e)}")
+                try:
+                    # Try to unmerge the cell and write
+                    if hasattr(sheet, 'merged_cells'):
+                        for merged_range in list(sheet.merged_cells.ranges):
+                            if cell in merged_range:
+                                sheet.unmerge_cells(str(merged_range))
+                                break
+                    # Try writing again after unmerging
+                    if field == "revision":
+                        # For first revision (A), leave the cell empty; otherwise use the revision value
+                        sheet[cell] = "" if value == "A" else (value or "")
+                    elif value:
+                        if field == "estimator":
+                            from utils.word import get_combined_initials
+                            value = get_combined_initials(project_data.get('sales_contact',''), value)
+                        elif field != "date":
+                            value = str(value).title()
+                        elif field == "date" and not value:
+                            value = get_current_date()
+                        sheet[cell] = value
+                except Exception as e2:
+                    print(f"Warning: Still could not write {field} to cell {cell} after unmerging: {str(e2)}")
+                    continue
+        
+        # Cost sheet identifier in N2 (same as others)
+        write_cost_sheet_identifier(sheet, sheet.title, template_version)
+        
+    except Exception as e:
+        print(f"Warning: Could not write metadata with mappings: {str(e)}")
 

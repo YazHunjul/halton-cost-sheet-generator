@@ -10,6 +10,7 @@ from docxtpl import DocxTemplate
 from config.business_data import SALES_CONTACTS, ESTIMATORS
 from config.constants import is_feature_enabled
 import streamlit as st
+from openpyxl import load_workbook # Added for contract data extraction
 # Template path for Word documents
 WORD_TEMPLATE_PATH = "templates/word/Halton Quote Feb 2024.docx"
 RECOAIR_TEMPLATE_PATH = "templates/word/Halton RECO Quotation Jan 2025 (2).docx"
@@ -417,26 +418,170 @@ def normalize_area_object(area: Dict) -> Dict:
 
 def prepare_template_context(project_data: Dict, excel_file_path: str = None) -> Dict:
     """
-    Prepare the context dictionary for Jinja template rendering.
+    Prepare the template context for Word document generation.
     
     Args:
-        project_data (Dict): Project data from Excel
+        project_data (Dict): Project data
+        excel_file_path (str, optional): Path to Excel file to extract detailed data
         
     Returns:
-        Dict: Context dictionary for template rendering
+        Dict: Template context with all required data
     """
-    # Get full estimator name (not initials)
-    estimator = project_data.get('estimator', '')
-    estimator_rank = project_data.get('estimator_rank', 'Estimator')
-    
-    # Get sales contact info
-    sales_contact = get_sales_contact_info(estimator, project_data)
-    
-    # Prepare all canopies data with level-area combinations
+    # Initialize lists for tracking items across all areas
     all_canopies = []
+    wall_cladding_items = []
+    fire_suppression_items = []
     enhanced_levels = []
-    wall_cladding_items = []  # Collect all wall cladding data
-    fire_suppression_items = []  # Collect all fire suppression data
+    
+    # Initialize contract data
+    contract_data = {
+        'has_extract_system': False,
+        'has_supply_system': False,
+        'extract_system_price': 0,
+        'supply_system_price': 0,
+        'extract_system_total': 0,  # New: total including all costs
+        'supply_system_total': 0,   # New: total including all costs
+        'contract_total_price': 0,
+        'delivery_location': '',  # D57 in Contract
+        'plant_selection': '',    # D58 in Contract
+        'extract_installation_price': 0,
+        'supply_installation_price': 0,
+        'extract_delivery_price': 0,
+        'supply_delivery_price': 0,
+        'extract_commissioning_price': 0,
+        'supply_commissioning_price': 0,
+        'total_installation_price': 0,  # C72
+        'total_commissioning_price': 0, # J66
+        'total_delivery_base': 0,       # J56
+    }
+    
+    # Get sales contact information
+    sales_contact = get_sales_contact_info(
+        project_data.get('estimator', ''),  # Pass estimator name for backward compatibility
+        project_data  # Pass full project data to use sales_contact if available
+    )
+    
+    # Get estimator information
+    estimator = project_data.get('estimator', '')
+    estimator_rank = project_data.get('estimator_rank', 'Estimator')  # Default to 'Estimator' if not specified
+    
+    # Check if contract sheets exist and read their data
+    if excel_file_path and os.path.exists(excel_file_path):
+        try:
+            wb = load_workbook(excel_file_path, data_only=True)  # Use data_only=True to read values
+            # Look for CONTRACT sheet (exact match or numbered variant)
+            contract_sheet = None
+            for sheet_name in wb.sheetnames:
+                if (sheet_name == 'CONTRACT' or 
+                    (sheet_name.startswith('CONTRACT') and 
+                     (sheet_name.replace('CONTRACT', '').strip() == '' or 
+                      sheet_name.replace('CONTRACT', '').strip().isdigit()))):
+                    contract_sheet = wb[sheet_name]
+                    print(f"Found contract sheet: {sheet_name}")
+                    break
+                
+                # Reopen workbook in data_only mode to read values
+                wb = load_workbook(excel_file_path, data_only=True)
+                contract_sheet = wb['CONTRACT']
+                
+                # Get installation, delivery, and commissioning prices first
+                total_installation = float(contract_sheet['C72'].value or 0)
+                total_commissioning = float(contract_sheet['J66'].value or 0)
+                total_delivery_base = float(contract_sheet['J56'].value or 0)
+                
+                contract_data['total_installation_price'] = total_installation
+                contract_data['total_commissioning_price'] = total_commissioning
+                contract_data['total_delivery_base'] = total_delivery_base
+                
+                # Calculate actual delivery price (J56 - C72 - J66)
+                total_delivery = total_delivery_base - total_installation - total_commissioning
+                
+                # Check M12 for extract system price
+                extract_total = contract_sheet['M12'].value
+                if extract_total and isinstance(extract_total, (int, float)) and extract_total > 0:
+                    contract_data['has_extract_system'] = True
+                    # Store the base price from M12
+                    contract_data['extract_system_price'] = float(extract_total)
+                
+                # Check N12 for supply system price
+                supply_total = contract_sheet['N12'].value
+                if supply_total and isinstance(supply_total, (int, float)) and supply_total > 0:
+                    contract_data['has_supply_system'] = True
+                    # Store the base price from N12
+                    contract_data['supply_system_price'] = float(supply_total)
+                
+                # Split costs between extract and supply if both exist
+                if contract_data['has_extract_system'] and contract_data['has_supply_system']:
+                    # Calculate ratio based on base system prices
+                    total_systems = contract_data['extract_system_price'] + contract_data['supply_system_price']
+                    if total_systems > 0:
+                        extract_ratio = contract_data['extract_system_price'] / total_systems
+                        supply_ratio = contract_data['supply_system_price'] / total_systems
+                        
+                        # Split installation
+                        contract_data['extract_installation_price'] = total_installation * extract_ratio
+                        contract_data['supply_installation_price'] = total_installation * supply_ratio
+                        
+                        # Split delivery
+                        contract_data['extract_delivery_price'] = total_delivery * extract_ratio
+                        contract_data['supply_delivery_price'] = total_delivery * supply_ratio
+                        
+                        # Split commissioning
+                        contract_data['extract_commissioning_price'] = total_commissioning * extract_ratio
+                        contract_data['supply_commissioning_price'] = total_commissioning * supply_ratio
+                        
+                        # Calculate total including all costs
+                        contract_data['extract_system_total'] = (
+                            contract_data['extract_system_price'] +
+                            contract_data['extract_installation_price'] +
+                            contract_data['extract_delivery_price'] +
+                            contract_data['extract_commissioning_price']
+                        )
+                        contract_data['supply_system_total'] = (
+                            contract_data['supply_system_price'] +
+                            contract_data['supply_installation_price'] +
+                            contract_data['supply_delivery_price'] +
+                            contract_data['supply_commissioning_price']
+                        )
+                elif contract_data['has_extract_system']:
+                    # All costs go to extract system
+                    contract_data['extract_installation_price'] = total_installation
+                    contract_data['extract_delivery_price'] = total_delivery
+                    contract_data['extract_commissioning_price'] = total_commissioning
+                    # Calculate total including all costs
+                    contract_data['extract_system_total'] = (
+                        contract_data['extract_system_price'] +
+                        contract_data['extract_installation_price'] +
+                        contract_data['extract_delivery_price'] +
+                        contract_data['extract_commissioning_price']
+                    )
+                elif contract_data['has_supply_system']:
+                    # All costs go to supply system
+                    contract_data['supply_installation_price'] = total_installation
+                    contract_data['supply_delivery_price'] = total_delivery
+                    contract_data['supply_commissioning_price'] = total_commissioning
+                    # Calculate total including all costs
+                    contract_data['supply_system_total'] = (
+                        contract_data['supply_system_price'] +
+                        contract_data['supply_installation_price'] +
+                        contract_data['supply_delivery_price'] +
+                        contract_data['supply_commissioning_price']
+                    )
+                
+                # Get contract total from J9
+                contract_total = contract_sheet['J9'].value
+                if contract_total and isinstance(contract_total, (int, float)) and contract_total > 0:
+                    contract_data['contract_total_price'] = float(contract_total)
+                    print(f"Found contract total price: {contract_data['contract_total_price']}")
+                
+                # Get delivery location and plant selection
+                delivery_location = contract_sheet['D57'].value
+                plant_selection = contract_sheet['D58'].value
+                contract_data['delivery_location'] = str(delivery_location) if delivery_location else ''
+                contract_data['plant_selection'] = str(plant_selection) if plant_selection else ''
+                
+        except Exception as e:
+            print(f"Warning: Could not read contract data: {str(e)}")
     
     # Check if fire suppression sheets exist by looking for any areas with fire suppression data
     has_fire_suppression_sheets = False
@@ -790,6 +935,29 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'recoair_job_totals': recoair_pricing_data['job_totals'],  # RecoAir job totals
         'format_currency': format_currency,  # Make currency formatter available in templates
         'format_current': format_currency,  # Alias for format_currency (for template compatibility)
+        
+        # Contract system data
+        'has_contract_system': contract_data['has_extract_system'] or contract_data['has_supply_system'],
+        'has_extract_system': contract_data['has_extract_system'],
+        'has_supply_system': contract_data['has_supply_system'],
+        'extract_system_price': contract_data['extract_system_price'],  # System price excluding costs
+        'supply_system_price': contract_data['supply_system_price'],    # System price excluding costs
+        'extract_system_total': contract_data['extract_system_total'],  # Total including all costs
+        'supply_system_total': contract_data['supply_system_total'],    # Total including all costs
+        'contract_total_price': contract_data['contract_total_price'],
+        
+        # New contract data fields
+        'contract_delivery_location': contract_data['delivery_location'],
+        'contract_plant_selection': contract_data['plant_selection'],
+        'extract_installation_price': contract_data['extract_installation_price'],
+        'supply_installation_price': contract_data['supply_installation_price'],
+        'extract_delivery_price': contract_data['extract_delivery_price'],
+        'supply_delivery_price': contract_data['supply_delivery_price'],
+        'extract_commissioning_price': contract_data['extract_commissioning_price'],
+        'supply_commissioning_price': contract_data['supply_commissioning_price'],
+        'total_installation_price': contract_data['total_installation_price'],
+        'total_commissioning_price': contract_data['total_commissioning_price'],
+        'total_delivery_base': contract_data['total_delivery_base'],
         
         # Individual pricing totals for template compatibility
         'total_canopy_price': pricing_totals.get('total_canopy_price', 0),
@@ -1192,7 +1360,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
         'total_uv_extra_over_cost': 0,  # New: total of all UV Extra Over costs
         'has_any_uv_extra_over': False,  # New: flag indicating if any area has UV Extra Over
         'areas': [],
-        'project_total': 0
+        'project_total': 0,
+        'contract_total_price': 0  # Add contract total price to totals
     }
     
     # Collect SDU data once for all areas
@@ -1201,6 +1370,25 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
     for sdu_area in sdu_areas:
         key = sdu_area['level_area_combined']
         sdu_data_by_area[key] = sdu_area
+    
+    # Get contract total from Excel if available
+    if excel_file_path and os.path.exists(excel_file_path):
+        try:
+            wb = load_workbook(excel_file_path, data_only=True)
+            # Look for CONTRACT sheet (exact match or numbered variant like CONTRACT1)
+            contract_sheet = None
+            for sheet_name in wb.sheetnames:
+                if sheet_name == 'CONTRACT' or sheet_name.startswith('CONTRACT') and len(sheet_name) <= 10:  # Handle CONTRACT1, CONTRACT2, etc.
+                    contract_sheet = wb[sheet_name]
+                    break
+            
+            if contract_sheet:
+                # Get contract total from J9
+                contract_total = contract_sheet['J9'].value
+                if contract_total and float(contract_total) > 0:
+                    totals['contract_total_price'] = float(contract_total)
+        except Exception as e:
+            print(f"Warning: Could not read contract total: {str(e)}")
     
     for level in project_data.get('levels', []):
         for area in level.get('areas', []):
@@ -1336,7 +1524,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
     # Use SDU subtotal if available, otherwise fall back to SDU price
     sdu_total_for_project = totals['total_sdu_subtotal'] if totals['total_sdu_subtotal'] > 0 else totals['total_sdu_price']
     
-    totals['project_total'] = (
+    # Calculate base project total (without contract total)
+    base_project_total = (
         totals['total_canopy_price'] + 
         totals['total_fire_suppression_price'] + 
         totals['total_cladding_price'] +
@@ -1347,6 +1536,35 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
         totals['total_marvel_price']
         # Note: total_recoair_price excluded - RecoAir systems have separate quotation
     )
+    
+    # Add contract system totals to project total
+    # Note: We use extract_system_total and supply_system_total which include all costs
+    contract_systems_total = 0
+    if excel_file_path and os.path.exists(excel_file_path):
+        try:
+            wb = load_workbook(excel_file_path, data_only=True)
+            # Look for CONTRACT sheet
+            contract_sheet = None
+            for sheet_name in wb.sheetnames:
+                if sheet_name == 'CONTRACT' or sheet_name.startswith('CONTRACT') and len(sheet_name) <= 10:
+                    contract_sheet = wb[sheet_name]
+                    break
+            
+            if contract_sheet:
+                # Get extract system total from M12
+                extract_total = contract_sheet['M12'].value
+                if extract_total and isinstance(extract_total, (int, float)) and extract_total > 0:
+                    contract_systems_total += float(extract_total)
+                
+                # Get supply system total from N12
+                supply_total = contract_sheet['N12'].value
+                if supply_total and isinstance(supply_total, (int, float)) and supply_total > 0:
+                    contract_systems_total += float(supply_total)
+        except Exception as e:
+            print(f"Warning: Could not read contract system totals: {str(e)}")
+    
+    # Add contract systems total to project total
+    totals['project_total'] = base_project_total + contract_systems_total
     
     return totals
 

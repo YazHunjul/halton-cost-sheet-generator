@@ -993,6 +993,25 @@ def step1_project_information():
                                 key="revision",
                                 on_change=update_revision)
     
+    # Project-level options
+    st.markdown("---")
+    st.subheader("Project Options")
+    
+    # Initialize contract option in session state
+    if "contract_option_state" not in st.session_state:
+        st.session_state.contract_option_state = project_data.get('contract_option', False)
+    
+    def update_contract_option():
+        st.session_state.contract_option_state = st.session_state.contract_option
+    
+    contract_option = st.checkbox(
+        "Include Contract Sheets",
+        value=st.session_state.contract_option_state,
+        key="contract_option",
+        help="Include Contract, Spiral Duct, Supply Duct, and Extract Duct tabs in the Excel file",
+        on_change=update_contract_option
+    )
+    
     # Determine final company name and address based on mode
     if company_mode == "Select from list":
         final_company_name = company
@@ -1020,7 +1039,9 @@ def step1_project_information():
         # Store the selection mode and custom fields for form persistence
         'company_mode': company_mode,
         'custom_company_name': st.session_state.get('custom_company_name_state', ''),
-        'custom_company_address': st.session_state.get('custom_company_address_state', '')
+        'custom_company_address': st.session_state.get('custom_company_address_state', ''),
+        # Project-level options
+        'contract_option': st.session_state.contract_option_state
     }
     
     # Validation
@@ -1459,6 +1480,7 @@ def step4_review_and_generate():
         st.write("**Sales Contact:**", st.session_state.project_info.get('sales_contact'))
         st.write("**Delivery Location:**", st.session_state.project_info.get('delivery_location'))
         st.write("**Revision:**", st.session_state.project_info.get('revision') or 'Initial Version')
+        st.write("**Contract Sheets:**", "Yes" if st.session_state.project_info.get('contract_option', False) else "No")
     
     # Structure summary
     st.subheader("Project Structure")
@@ -1594,7 +1616,8 @@ def populate_session_state_from_uploaded_data(extracted_data):
             'revision': extracted_data.get('revision', ''),
             'company_mode': 'Enter custom company' if not is_predefined_company else 'Select from list',
             'custom_company_name': company_name if not is_predefined_company else '',
-            'custom_company_address': extracted_data.get('address', '') if not is_predefined_company else ''
+            'custom_company_address': extracted_data.get('address', '') if not is_predefined_company else '',
+            'contract_option': extracted_data.get('contract_option', False)
         }
         
         # Populate levels and areas structure
