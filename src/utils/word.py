@@ -479,11 +479,9 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                     contract_sheet = wb[sheet_name]
                     print(f"Found contract sheet: {sheet_name}")
                     break
-                
-                # Reopen workbook in data_only mode to read values
-                wb = load_workbook(excel_file_path, data_only=True)
-                contract_sheet = wb['CONTRACT']
-                
+            
+            # Process contract data if a contract sheet was found
+            if contract_sheet:
                 # Get installation, delivery, and commissioning prices first
                 total_installation = float(contract_sheet['C72'].value or 0)
                 total_commissioning = float(contract_sheet['J66'].value or 0)
