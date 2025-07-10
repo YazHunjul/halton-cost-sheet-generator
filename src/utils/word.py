@@ -456,7 +456,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'supply_commissioning_price': 0,
         'total_installation_price': 0,  # C72
         'total_commissioning_price': 0, # J66
-        'total_delivery_base': 0,       # J56
+        'total_delivery_base': 0,       # J57
     }
     
     init_time = time.time()
@@ -514,16 +514,20 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 
                 # Get installation, delivery, and commissioning prices first
                 print(f"      📊 Reading pricing data from cells...")
-                total_installation = float(contract_sheet['C72'].value or 0)
+                c72_value = float(contract_sheet['C72'].value or 0)
+                c57_value = float(contract_sheet['J57'].value or 0)
                 total_commissioning = float(contract_sheet['J66'].value or 0)
-                total_delivery_base = float(contract_sheet['J56'].value or 0)
+                total_delivery_base = float(contract_sheet['J57'].value or 0)  # Changed from J56 to J57
+                
+                # Calculate installation price as C72 - C57
+                total_installation = c72_value - c57_value
+                
+                # Delivery price should be C57
+                total_delivery = c57_value
                 
                 contract_data['total_installation_price'] = total_installation
                 contract_data['total_commissioning_price'] = total_commissioning
                 contract_data['total_delivery_base'] = total_delivery_base
-                
-                # Calculate actual delivery price (J56 - C72 - J66)
-                total_delivery = total_delivery_base - total_installation - total_commissioning
                 
                 print(f"      💰 Processing extract/supply system pricing...")
                 # Check M12 for extract system price
@@ -543,37 +547,33 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 print(f"      🧮 Calculating cost splits...")
                 # Split costs between extract and supply if both exist
                 if contract_data['has_extract_system'] and contract_data['has_supply_system']:
-                    # Calculate ratio based on base system prices
-                    total_systems = contract_data['extract_system_price'] + contract_data['supply_system_price']
-                    if total_systems > 0:
-                        extract_ratio = contract_data['extract_system_price'] / total_systems
-                        supply_ratio = contract_data['supply_system_price'] / total_systems
-                        
-                        # Split installation
-                        contract_data['extract_installation_price'] = total_installation * extract_ratio
-                        contract_data['supply_installation_price'] = total_installation * supply_ratio
-                        
-                        # Split delivery
-                        contract_data['extract_delivery_price'] = total_delivery * extract_ratio
-                        contract_data['supply_delivery_price'] = total_delivery * supply_ratio
-                        
-                        # Split commissioning
-                        contract_data['extract_commissioning_price'] = total_commissioning * extract_ratio
-                        contract_data['supply_commissioning_price'] = total_commissioning * supply_ratio
-                        
-                        # Calculate total including all costs
-                        contract_data['extract_system_total'] = (
-                            contract_data['extract_system_price'] +
-                            contract_data['extract_installation_price'] +
-                            contract_data['extract_delivery_price'] +
-                            contract_data['extract_commissioning_price']
-                        )
-                        contract_data['supply_system_total'] = (
-                            contract_data['supply_system_price'] +
-                            contract_data['supply_installation_price'] +
-                            contract_data['supply_delivery_price'] +
-                            contract_data['supply_commissioning_price']
-                        )
+                    # Equal distribution of delivery, installation, and commissioning (divided by 2)
+                    
+                    # Split installation equally (divide by 2)
+                    contract_data['extract_installation_price'] = total_installation / 2
+                    contract_data['supply_installation_price'] = total_installation / 2
+                    
+                    # Split delivery equally (divide by 2)
+                    contract_data['extract_delivery_price'] = total_delivery / 2
+                    contract_data['supply_delivery_price'] = total_delivery / 2
+                    
+                    # Split commissioning equally (divide by 2)
+                    contract_data['extract_commissioning_price'] = total_commissioning / 2
+                    contract_data['supply_commissioning_price'] = total_commissioning / 2
+                    
+                    # Calculate total including all costs
+                    contract_data['extract_system_total'] = (
+                        contract_data['extract_system_price'] +
+                        contract_data['extract_installation_price'] +
+                        contract_data['extract_delivery_price'] +
+                        contract_data['extract_commissioning_price']
+                    )
+                    contract_data['supply_system_total'] = (
+                        contract_data['supply_system_price'] +
+                        contract_data['supply_installation_price'] +
+                        contract_data['supply_delivery_price'] +
+                        contract_data['supply_commissioning_price']
+                    )
                 elif contract_data['has_extract_system']:
                     # All costs go to extract system
                     contract_data['extract_installation_price'] = total_installation
