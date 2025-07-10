@@ -20,7 +20,7 @@ FEATURE_FLAGS = {
     "marvel_system": False,  # M.A.R.V.E.L. System (DCKV)
     
     # Ceiling systems
-    "cyclocell_cassette_ceiling": False,
+    "cyclocell_cassette_ceiling": True,  # Changed from False to True
     
     # Additional equipment
     "reactaway_unit": False,

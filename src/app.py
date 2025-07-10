@@ -123,7 +123,7 @@ def word_generation_page():
             st.success("Successfully extracted project data from Excel!")
             
             # Analyze project to show what type it is
-            has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
+            has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg = analyze_project_areas(project_data)
             
             # Show project type analysis
             if is_recoair_only:
@@ -625,7 +625,7 @@ def revision_page():
                     st.write("**Current Revision:**", current_revision)
                     
                     # Show project analysis
-                    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
+                    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg = analyze_project_areas(project_data)
                     st.write("**Has Canopies:**", "Yes" if has_canopies else "No")
                     st.write("**Has RecoAir:**", "Yes" if has_recoair else "No")
                     st.write("**Has UV Canopies:**", "Yes" if has_uv else "No")
@@ -1106,7 +1106,14 @@ def step2_project_structure():
                     st.session_state.levels[level_idx]['areas'].append({
                         "name": f"Area {len(level['areas']) + 1}",
                         "canopies": [],
-                        "options": {"uvc": False, "sdu": False, "recoair": False, "marvel": False, "uv_extra_over": False}
+                        "options": {
+                            "uvc": False, 
+                            "sdu": False, 
+                            "recoair": False, 
+                            "marvel": False, 
+                            "uv_extra_over": False,
+                            "vent_clg": False
+                        }
                     })
                     st.rerun()
             
@@ -1144,7 +1151,8 @@ def step2_project_structure():
                                 'sdu': st.session_state.get(f"{area_key}_sdu", False),
                                 'recoair': st.session_state.get(f"{area_key}_recoair", False),
                                 'marvel': st.session_state.get(f"{area_key}_marvel", False),
-                                'uv_extra_over': st.session_state.get(f"{area_key}_uv_extra_over", False)
+                                'uv_extra_over': st.session_state.get(f"{area_key}_uv_extra_over", False),
+                                'vent_clg': st.session_state.get(f"{area_key}_vent_clg", False)
                             }
                         
                         uvc = st.checkbox("UV-C", 
@@ -1172,13 +1180,20 @@ def step2_project_structure():
                                                   help="Calculate additional cost for UV functionality",
                                                   on_change=update_area_options)
                         
+                        vent_clg = st.checkbox("VENT CLG", 
+                                            value=area['options'].get('vent_clg', False), 
+                                            key=f"{area_key}_vent_clg",
+                                            help="Toggle if Ventilated Ceiling is needed for this area",
+                                            on_change=update_area_options)
+                        
                         # Update options immediately
                         st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
                             'uvc': uvc,
                             'sdu': sdu,
                             'recoair': recoair,
                             'marvel': marvel,
-                            'uv_extra_over': uv_extra_over
+                            'uv_extra_over': uv_extra_over,
+                            'vent_clg': vent_clg
                         }
                     
                     with col3:

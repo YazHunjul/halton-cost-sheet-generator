@@ -155,10 +155,10 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
         help="Enter the area name (e.g., Kitchen, Storage)"
     )
     
-    # Area-level options (UV-C, SDU, RecoAir)
+    # Area-level options (UV-C, SDU, RecoAir, VENT CLG)
     if area_name:
         st.markdown("**Area Options**")
-        opt_col1, opt_col2, opt_col3 = st.columns(3)
+        opt_col1, opt_col2, opt_col3, opt_col4 = st.columns(4)
         
         existing_options = st.session_state[area_key].get("options", {})
         
@@ -197,13 +197,26 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
                 key=recoair_key,
                 help="Toggle if RecoAir is needed for this area"
             )
+        
+        with opt_col4:
+            vent_clg_key = f"area_vent_clg_{level_idx}_{area_idx}"
+            # Initialize VENT CLG toggle in session state if not present
+            if vent_clg_key not in st.session_state:
+                st.session_state[vent_clg_key] = existing_options.get("vent_clg", False)
+            
+            vent_clg = st.toggle(
+                "VENT CLG",
+                key=vent_clg_key,
+                help="Toggle if Ventilated Ceiling is needed for this area"
+            )
     
     area_data = {
         "name": area_name,
         "options": {
             "uvc": uvc if area_name else False,
             "sdu": sdu if area_name else False,
-            "recoair": recoair if area_name else False
+            "recoair": recoair if area_name else False,
+            "vent_clg": vent_clg if area_name else False
         },
         "canopies": []
     }

@@ -364,7 +364,7 @@ def read_wall_cladding_from_canopy(sheet: Worksheet, base_row: int) -> Dict:
             # Convert position string to list (handle "and" separator)
             if position_str and str(position_str).strip():
                 # Split by "and" and clean up each position
-                position_list = [pos.strip() for pos in str(position_str).split(" and ")]
+                position_list = [pos.strip().lower() for pos in str(position_str).split(" and ")]
                 # Filter out empty strings
                 position_list = [pos for pos in position_list if pos]
             else:
@@ -786,6 +786,111 @@ def read_recoair_data_from_sheet(sheet: Worksheet) -> Dict:
             }
         }
 
+def read_vent_clg_data_from_sheet(sheet: Worksheet) -> Dict:
+    """
+    Read VENT CLG (Ventilated Ceiling) data from a VENT CLG sheet.
+    
+    Args:
+        sheet (Worksheet): The VENT CLG worksheet to read from
+        
+    Returns:
+        Dict: VENT CLG data including item number, coverage, unit price, delivery/install, and commissioning
+    """
+    vent_clg_data = {}
+    sheet_name = sheet.title
+    
+    try:
+        # Get item number from B12
+        item_number = sheet['B12'].value or ""
+        
+        # Get square metre coverage from C37
+        coverage_valid, coverage, coverage_error = validate_cell_data(
+            sheet_name, 'C37', sheet['C37'].value, 'number', 'Square Metre Coverage (C37)'
+        )
+        if not coverage_valid:
+            add_validation_error(coverage_error)
+            coverage = 0
+        
+        # Get unit price from J13 as specified by user
+        unit_price_valid, unit_price, unit_price_error = validate_cell_data(
+            sheet_name, 'J13', sheet['J13'].value, 'number', 'Unit Price (J13)'
+        )
+        if not unit_price_valid:
+            add_validation_error(unit_price_error)
+            unit_price = 0
+        
+        # Get total cost from G10 as specified by user
+        total_cost_valid, total_cost, total_cost_error = validate_cell_data(
+            sheet_name, 'G10', sheet['G10'].value, 'number', 'Total Cost (G10)'
+        )
+        if not total_cost_valid:
+            add_validation_error(total_cost_error)
+            total_cost = 0
+        
+        # Get total selling price from J10 as specified by user
+        total_price_valid, total_price, total_price_error = validate_cell_data(
+            sheet_name, 'J10', sheet['J10'].value, 'number', 'Total Selling Price (J10)'
+        )
+        if not total_price_valid:
+            add_validation_error(total_price_error)
+            total_price = 0
+        
+        # Get delivery total from J43
+        j43_valid, j43_value, j43_error = validate_cell_data(
+            sheet_name, 'J43', sheet['J43'].value, 'number', 'Delivery Total (J43)'
+        )
+        if not j43_valid:
+            add_validation_error(j43_error)
+            j43_value = 0
+        
+        # Get commissioning price from J55
+        j55_valid, j55_value, j55_error = validate_cell_data(
+            sheet_name, 'J55', sheet['J55'].value, 'number', 'Commissioning (J55)'
+        )
+        if not j55_valid:
+            add_validation_error(j55_error)
+            j55_value = 0
+        
+        # Calculate delivery and installation price (J43 - J55)
+        delivery_installation_price = j43_value - j55_value if j43_value >= j55_value else 0
+        commissioning_price = j55_value
+        
+        vent_clg_data = {
+            'item_number': str(item_number).strip() if item_number else "",
+            'coverage_sqm': coverage,
+            'unit_price': unit_price,
+            'delivery_installation_price': delivery_installation_price,
+            'commissioning_price': commissioning_price,
+            'total_price': total_price,
+            'total_cost': total_cost,  # Add total cost from G10
+            'sheet_name': sheet_name
+        }
+        
+        print(f"✓ Read VENT CLG data from {sheet_name}:")
+        print(f"   Item Number: {vent_clg_data['item_number']}")
+        print(f"   Coverage: {coverage} m²")
+        print(f"   Unit Price (J13): £{unit_price:.2f}")
+        print(f"   Delivery & Installation (J43-J55): £{delivery_installation_price:.2f}")
+        print(f"   Commissioning (J55): £{commissioning_price:.2f}")
+        print(f"   Total Cost (G10): £{total_cost:.2f}")
+        print(f"   Total Selling Price (J10): £{total_price:.2f}")
+        
+        return vent_clg_data
+        
+    except Exception as e:
+        print(f"Error reading VENT CLG data from {sheet_name}: {str(e)}")
+        add_validation_error(f"Failed to read VENT CLG data from {sheet_name}: {str(e)}")
+        return {
+            'item_number': "",
+            'coverage_sqm': 0,
+            'unit_price': 0,              # Unit price from J13
+            'delivery_installation_price': 0,  # J43 - J55
+            'commissioning_price': 0,     # J55
+            'total_price': 0,             # Total price from J10
+            'total_cost': 0,              # Total cost from G10
+            'sheet_name': sheet_name
+        }
+
 def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str, template_version: str = None):
     """
     Write cost sheet identifier to N2 of each sheet.
@@ -832,6 +937,8 @@ def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str, template_vers
                 sheet_type = "RECOAIR"
             elif "MARVEL" in sheet_name:
                 sheet_type = "MARVEL"
+            elif "VENT CLG" in sheet_name:
+                sheet_type = "VENT CLG"
             else:
                 sheet_type = "SYSTEM"  # Default fallback
             
@@ -1345,24 +1452,24 @@ def add_dropdowns_to_sheet(wb: Workbook, sheet: Worksheet, start_row: int = 12):
         wall_cladding_position_options = [
             "",  # Empty option
             # Single positions
-            "Rear",
-            "Left", 
-            "Right",
-            "Front",
+            "rear",
+            "left", 
+            "right",
+            "front",
             # Two-position combinations
-            "Rear and Left",
-            "Rear and Right", 
-            "Rear and Front",
-            "Left and Right",
-            "Left and Front",
-            "Right and Front",
+            "rear and left",
+            "rear and right", 
+            "rear and front",
+            "left and right",
+            "left and front",
+            "right and front",
             # Three-position combinations
-            "Rear and Left and Right",
-            "Rear and Left and Front",
-            "Rear and Right and Front",
-            "Left and Right and Front",
+            "rear and left and right",
+            "rear and left and front",
+            "rear and right and front",
+            "left and right and front",
             # All sides
-            "All Sides"
+            "all sides"
         ]
         
         # CMWF/CMWI panel options for wash canopies
@@ -1836,6 +1943,117 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict, template_version: s
     except Exception as e:
         print(f"Warning: Could not write SDU metadata: {str(e)}")
 
+
+def write_vent_clg_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None):
+    """
+    Write VENT CLG-specific metadata to the VENT CLG sheet.
+    
+    Args:
+        sheet (Worksheet): The VENT CLG worksheet
+        project_data (Dict): Project data containing metadata
+        template_version (str): Version of the template being used
+    """
+    try:
+        # Use C column for basic project info as specified by user
+        cell_mappings = {
+            "project_number": "C3",  # Job No
+            "company": "C5",         # Customer
+            "estimator": "C7",       # Sales Manager / Estimator
+            "project_name": "C3",    # Project Name (same as job number)
+            "project_location": "C5", # Project Location (same as customer)
+            "date": "C7",            # Date (same as estimator)
+            "revision": "K7",        # Revision
+        }
+        
+        # Helper function to safely write to cells
+        def write_to_cell_safe(sheet, cell_ref, value):
+            try:
+                sheet[cell_ref] = value
+            except Exception as e:
+                print(f"Warning: Could not write to cell {cell_ref} in write_vent_clg_metadata: {str(e)}")
+        
+        # Write project metadata using the mappings
+        write_to_cell_safe(sheet, cell_mappings["project_number"], project_data.get("project_number", ""))
+        write_to_cell_safe(sheet, cell_mappings["company"], project_data.get("company", ""))
+        write_to_cell_safe(sheet, cell_mappings["estimator"], project_data.get("estimator", ""))
+        write_to_cell_safe(sheet, cell_mappings["project_name"], project_data.get("project_name", ""))
+        write_to_cell_safe(sheet, cell_mappings["project_location"], project_data.get("project_location", ""))
+        write_to_cell_safe(sheet, cell_mappings["date"], project_data.get("date", ""))
+        write_to_cell_safe(sheet, cell_mappings["revision"], project_data.get("revision", ""))
+        
+        # Write additional VENT CLG-specific metadata with default values
+        # Do NOT overwrite D44 for vent sealing tabs - leave delivery location as is
+        write_to_cell_safe(sheet, "D45", project_data.get("plant_selection", "PLANT SELECTION (weekly)"))    # Plant selection dropdown
+        
+        # Add cost sheet identifier to N2
+        write_cost_sheet_identifier(sheet, sheet.title, template_version)
+        
+    except Exception as e:
+        print(f"Error writing VENT CLG metadata: {str(e)}")
+
+
+def add_vent_clg_dropdowns(sheet: Worksheet):
+    """
+    Add VENT CLG-specific dropdowns to the VENT CLG sheet.
+    Note: Delivery location dropdown is handled by add_delivery_location_dropdown_to_sheet()
+    
+    Args:
+        sheet (Worksheet): The VENT CLG worksheet
+    """
+    try:
+        # Plant selection options for VENT CLG sheets
+        plant_selection_options = [
+            "",
+            "SL10 GENIE",
+            "EXTENSION FORKS",
+            "2.5M COMBI LADDER",
+            "1.5M PODIUM",
+            "3M TOWER",
+            "COMBI LADDER",
+            "PECO LIFT",
+            "3M YOUNGMAN BOARD",
+            "GS1930 SCISSOR LIFT",
+            "4-6 SHERASCOPIC",
+            "7-9 SHERASCOPIC"
+        ]
+        
+        def create_validation(options):
+            """Create validation with proper formatting, handling Excel's 255-character formula limit"""
+            formula = ",".join(options)
+            if len(formula) > 255:  # Excel formula limit - use hidden cells approach
+                # Write options to hidden cells
+                start_row = 600  # Use row 600+ to avoid conflicts with other hidden data
+                for i, option in enumerate(options):
+                    try:
+                        sheet[f'AD{start_row + i}'] = option  # Use column AD (hidden area)
+                    except:
+                        pass  # If we can't write, continue
+                
+                # Create range reference for validation
+                end_row = start_row + len(options) - 1
+                range_ref = f'$AD${start_row}:$AD${end_row}'
+                return DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            else:
+                return DataValidation(type="list", formula1=f'"{formula}"', allow_blank=True)
+        
+        # Create plant selection validation
+        plant_selection_dv = create_validation(plant_selection_options)
+        
+        # Add validation to sheet
+        sheet.add_data_validation(plant_selection_dv)
+        
+        # Apply dropdown to plant selection cell
+        plant_selection_dv.add('D45')  # Plant selection dropdown
+        
+        # Set default value for plant selection
+        sheet['D45'] = "PLANT SELECTION (weekly)"
+        
+        print(f"✅ Added VENT CLG plant selection dropdown to D45")
+        
+    except Exception as e:
+        print(f"Warning: Could not add VENT CLG dropdowns: {str(e)}")
+
+
 def add_fire_suppression_dropdowns(sheet: Worksheet):
     """
     Add specific dropdowns for fire suppression sheets.
@@ -2137,7 +2355,7 @@ def organize_sheets_by_area(wb: Workbook):
                 job_total_sheets.append(sheet_name)
             elif sheet_name in ['CONTRACT', 'EXTRACT DUCT', 'SUPPLY DUCT', 'SPIRAL DUCT']:
                 contract_sheets.append(sheet_name)
-            elif any(sys_type in sheet_name for sys_type in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU']):
+            elif any(sys_type in sheet_name for sys_type in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG']):
                 # Extract area identifier for grouping
                 if ' - ' in sheet_name and '(' in sheet_name and ')' in sheet_name:
                     parts = sheet_name.split(' - ', 1)
@@ -2166,9 +2384,13 @@ def organize_sheets_by_area(wb: Workbook):
             elif 'RECOAIR' in sheet_name:
                 return 4  # RecoAir fifth
             elif 'SDU' in sheet_name:
-                return 5  # SDU last
+                return 5  # SDU sixth
+            elif 'MARVEL' in sheet_name:
+                return 6  # MARVEL seventh
+            elif 'VENT CLG' in sheet_name:
+                return 7  # VENT CLG eighth
             else:
-                return 6  # Any other system types
+                return 8  # Any other system types
         
         # Sort sheets within each area
         for area_id in area_sheets:
@@ -2317,6 +2539,8 @@ def add_delivery_location_dropdown_to_sheet(sheet: Worksheet, selected_delivery_
             cell = "E37"
         elif "MARVEL" in sheet_name:
             cell = "D54"  # MARVEL sheets use D54 for delivery location
+        elif "VENT CLG" in sheet_name:
+            cell = "D44"  # VENT CLG sheets use D44 for delivery location
         elif "FIRE" in sheet_name and "SUPP" in sheet_name:
             cell = "D183"
         elif "CANOPY" in sheet_name:
@@ -2350,6 +2574,9 @@ def add_delivery_location_dropdown_to_sheet(sheet: Worksheet, selected_delivery_
             # Set the selected value if provided and not "Select..."
             if selected_delivery_location and selected_delivery_location != "Select...":
                 sheet[cell] = selected_delivery_location
+            elif not selected_delivery_location and "VENT CLG" in sheet_name:
+                # Set default for VENT CLG sheets when no delivery location is provided
+                sheet[cell] = "SELECT LOCATION..."
             
             print(f"📍 Added delivery location dropdown to {cell} on {sheet.title}")
             if selected_delivery_location and selected_delivery_location != "Select...":
@@ -2391,6 +2618,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         sdu_sheets = [sheet for sheet in all_sheets if 'SDU' in sheet and 'CANOPY' not in sheet and 'FIRE' not in sheet]
         # MARVEL template sheets (for UV grease recovery option)
         marvel_sheets = [sheet for sheet in all_sheets if 'MARVEL' in sheet]
+        # VENT CLG template sheets (for ventilated ceiling systems)
+        vent_clg_sheets = [sheet for sheet in all_sheets if 'VENT CLG' in sheet or 'VENTILATED CEILING' in sheet]
         # Contract template sheets - handle exact matches and numbered variants
         contract_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'CONTRACT' or sheet.startswith('CONTRACT')]
         spiral_duct_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'SPIRAL DUCT' or sheet.startswith('SPIRAL DUCT')]
@@ -2659,6 +2888,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 # Check if area has Marvel system (area-level option)
                 has_marvel = area.get("options", {}).get("marvel", False)
                 
+                # Check if area has VENT CLG system (area-level option)
+                has_vent_clg = area.get("options", {}).get("vent_clg", False)
+                
                 # Check if area has UV Extra Over option
                 has_uv_extra_over = area.get("options", {}).get("uv_extra_over", False)
                 
@@ -2672,6 +2904,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 ebox_sheet = None
                 sdu_sheet = None
                 recoair_sheet = None
+                vent_clg_sheet = None
                 uv_extra_over_sheet = None  # For UV Extra Over comparison
                 
                 # Process canopy sheet if canopies exist for this area
@@ -2782,6 +3015,26 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             else:
                                 print(f"Warning: Not enough RECOAIR sheets in template for RecoAir system in area {area_name}")
                         
+                        # Create VENT CLG sheet if VENT CLG is selected for this area
+                        if has_vent_clg:
+                            if vent_clg_sheets:
+                                vent_clg_sheet_name = vent_clg_sheets.pop(0)
+                                vent_clg_sheet = wb[vent_clg_sheet_name]
+                                new_vent_clg_name = f"VENT CLG - {level_name} ({area_number})"
+                                vent_clg_sheet.title = new_vent_clg_name
+                                vent_clg_sheet.sheet_state = 'visible'
+                                vent_clg_sheet.sheet_properties.tabColor = tab_color
+                                
+                                # Write VENT CLG-specific metadata to VENT CLG sheet (C/G columns)
+                                write_vent_clg_metadata(vent_clg_sheet, project_data, template_version)
+                                # Set VENT CLG sheet title in B1
+                                vent_clg_sheet['B1'] = f"{level_name} - {area_name} - VENT CLG SYSTEM"
+                                
+                                # Add VENT CLG specific dropdowns
+                                add_vent_clg_dropdowns(vent_clg_sheet)
+                            else:
+                                print(f"Warning: Not enough VENT CLG sheets in template for VENT CLG system in area {area_name}")
+                        
                         # Create MARVEL sheet if Marvel is selected for this area
                         if has_marvel:
                             if marvel_sheets:
@@ -2794,11 +3047,11 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 
                                 # Write MARVEL-specific metadata to MARVEL sheet (F columns for project name/location/date)
                                 write_marvel_metadata(marvel_sheet, project_data, template_version)
-                                                            # Set MARVEL sheet title in B1 (like other sheets)
-                            try:
-                                marvel_sheet['B1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
-                            except Exception as e:
-                                print(f"Warning: Could not write title to B1 on MARVEL sheet: {str(e)}")
+                                # Set MARVEL sheet title in B1 (like other sheets)
+                                try:
+                                    marvel_sheet['B1'] = f"{level_name} - {area_name} - MARVEL SYSTEM"
+                                except Exception as e:
+                                    print(f"Warning: Could not write title to B1 on MARVEL sheet: {str(e)}")
                             else:
                                 print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")
                         
@@ -2895,7 +3148,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         raise Exception(f"Not enough CANOPY sheets in template for area {area_name}")
                 
                 # Handle case where UV-C, SDU, RecoAir, and/or Marvel are selected but no canopies exist (edge case)
-                elif (has_uvc or has_sdu or has_recoair or has_marvel) and not area_canopies:
+                elif (has_uvc or has_sdu or has_recoair or has_marvel or has_vent_clg) and not area_canopies:
                     # Create EBOX sheet if UV-C is selected
                     if has_uvc:
                         if edge_box_sheets:
@@ -2975,7 +3228,27 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             except Exception as e:
                                 print(f"Warning: Could not write title to B1 on MARVEL sheet: {str(e)}")
                         else:
-                            print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")
+                            print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")                    
+                    # Create VENT CLG sheet if VENT CLG is selected
+                    if has_vent_clg:
+                        if vent_clg_sheets:
+                            vent_clg_sheet_name = vent_clg_sheets.pop(0)
+                            vent_clg_sheet = wb[vent_clg_sheet_name]
+                            new_vent_clg_name = f"VENT CLG - {level_name} ({area_number})"
+                            vent_clg_sheet.title = new_vent_clg_name
+                            vent_clg_sheet.sheet_state = 'visible'
+                            vent_clg_sheet.sheet_properties.tabColor = tab_color
+                            
+                            # Write VENT CLG-specific metadata to VENT CLG sheet (C/G columns)
+                            write_vent_clg_metadata(vent_clg_sheet, project_data, template_version)
+                            # Set VENT CLG sheet title in B1
+                            vent_clg_sheet['B1'] = f"{level_name} - {area_name} - VENT CLG SYSTEM"
+                            
+                            # Add VENT CLG specific dropdowns
+                            add_vent_clg_dropdowns(vent_clg_sheet)
+                        else:
+                            print(f"Warning: Not enough VENT CLG sheets in template for VENT CLG system in area {area_name}")
+
                 
                 area_count += 1
         
@@ -2988,7 +3261,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                            sheet_name.startswith('EXTRACT DUCT'))
             
             if (sheet.sheet_state == 'visible' and 
-                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL')) and 
+                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG')) and 
                 not is_duct_sheet and
                 sheet_name not in ['Lists', 'JOB TOTAL']):
                 # Write metadata to any other visible sheets (excluding EBOX, RECOAIR, SDU, MARVEL, and duct sheets which don't need metadata)
@@ -3009,7 +3282,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
             sheet = wb[sheet_name]
             if (sheet.sheet_state == 'visible' and 
                 sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData'] and
-                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL'])):
+                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG'])):
                 add_delivery_location_dropdown_to_sheet(sheet, delivery_location)
                 sheets_updated += 1
         print(f"📝 Added delivery location dropdowns to {sheets_updated} sheets")
@@ -3020,7 +3293,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         if project_data.get('contract_option', False):
             created_contract_sheet_names = ['CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']
         
-        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets + contract_sheets + spiral_duct_sheets + supply_duct_sheets + extract_duct_sheets
+        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets + vent_clg_sheets + contract_sheets + spiral_duct_sheets + supply_duct_sheets + extract_duct_sheets
         
         # Filter out the created contract sheets from the deletion list
         unused_sheets = [sheet for sheet in unused_sheets if sheet not in created_contract_sheet_names]
@@ -3034,7 +3307,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         # Hide ALL template sheets except the ones we actually use
         # Only keep visible: used system sheets and essential management sheets
         allowed_visible_prefixes = (
-            'CANOPY -', 'CANOPY (UV)', 'FIRE SUPP -', 'EBOX -', 'SDU -', 'RECOAIR -', 'MARVEL -',
+            'CANOPY -', 'CANOPY (UV)', 'FIRE SUPP -', 'EBOX -', 'SDU -', 'RECOAIR -', 'MARVEL -', 'VENT CLG -',
             'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData', 'Lists',
             'CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT'
         )
@@ -3706,12 +3979,53 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                 'marvel_pricing': marvel_data
                             })
         
+        # Read VENT CLG pricing from VENT CLG sheets
+        for sheet_name in wb.sheetnames:
+            if 'VENT CLG - ' in sheet_name:
+                sheet = wb[sheet_name]
+                title_cell = sheet['B1'].value  # VENT CLG sheets have title in B1 (to match creation)
+                
+                if title_cell and ' - ' in title_cell and 'VENT CLG SYSTEM' in title_cell:
+                    # Extract level and area from title like "Level 1 - Main Kitchen - VENT CLG SYSTEM"
+                    title_parts = title_cell.split(' - ')
+                    if len(title_parts) >= 2:
+                        level_name = title_parts[0]
+                        area_name = title_parts[1]
+                        
+                        # Read VENT CLG data from this sheet
+                        vent_clg_data = read_vent_clg_data_from_sheet(sheet)
+                        
+                        # Find the area and add VENT CLG data
+                        area_found = False
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area.update({
+                                        'vent_clg_price': vent_clg_data['total_price'],
+                                        'vent_clg_cost': vent_clg_data['total_cost'],  # Add cost tracking
+                                        'vent_clg_detailed_pricing': vent_clg_data
+                                    })
+                                    area_found = True
+                                    break
+                        
+                        # If area wasn't found, create it (this shouldn't happen if first pass worked correctly)
+                        if not area_found:
+                            if level_name not in levels_data:
+                                levels_data[level_name] = []
+                            
+                            levels_data[level_name].append({
+                                'name': area_name,
+                                'canopies': [],
+                                'vent_clg_price': vent_clg_data['total_price'],
+                                'vent_clg_detailed_pricing': vent_clg_data
+                            })
+        
         # Read area-level options from sheets
         # Initialize all areas with default options first
         for level_name, areas in levels_data.items():
             for area in areas:
                 if 'options' not in area:
-                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False}
+                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False, 'vent_clg': False}
         
         # Check CANOPY sheets for area options written in rows 6-8
         for sheet_name in wb.sheetnames:
@@ -3821,6 +4135,26 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             for area in levels_data[level_name]:
                                 if area['name'] == area_name:
                                     area['options']['marvel'] = True
+                                    break
+        
+        # Check VENT CLG sheets for VENT CLG option
+        for sheet_name in wb.sheetnames:
+            if 'VENT CLG - ' in sheet_name:
+                sheet = wb[sheet_name]
+                title_cell = sheet['B1'].value  # VENT CLG sheets have title in B1
+                
+                if title_cell and ' - ' in title_cell and 'VENT CLG SYSTEM' in title_cell:
+                    # Extract level and area from title like "Level 1 - Main Kitchen - VENT CLG SYSTEM"
+                    title_parts = title_cell.split(' - ')
+                    if len(title_parts) >= 2:
+                        level_name = title_parts[0]
+                        area_name = title_parts[1]
+                        
+                        # Find the area and set VENT CLG option to True
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['vent_clg'] = True
                                     break
         
         # Check for contract sheets to set contract option (handle exact matches and numbered variants)
@@ -4213,6 +4547,7 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         sdu_sheets = []
         recoair_sheets = []
         marvel_sheets = []
+        vent_clg_sheets = []
         other_sheets = []
         
         for sheet_name in wb.sheetnames:
@@ -4230,6 +4565,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
                     recoair_sheets.append(sheet_name)
                 elif 'MARVEL - ' in sheet_name:
                     marvel_sheets.append(sheet_name)
+                elif 'VENT CLG - ' in sheet_name:
+                    vent_clg_sheets.append(sheet_name)  # VENT CLG gets its own category
                 elif sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData']:
                     other_sheets.append(sheet_name)
         
@@ -4314,6 +4651,17 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
             summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G9"  # Cost reference
             current_row += 1
         
+        # VENT CLG sheets
+        for sheet_name in vent_clg_sheets:
+            summary_sheet[f'A{current_row}'] = 'VENT CLG'
+            summary_sheet[f'B{current_row}'] = sheet_name
+            safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!J10,0)"  # Price - VENT CLG uses J10
+            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!G10,0)"  # Cost - VENT CLG uses G10
+            summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!J10"  # Price reference
+            summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G10"  # Cost reference
+            current_row += 1
+        
         # OTHER sheets
         for sheet_name in other_sheets:
             summary_sheet[f'A{current_row}'] = 'OTHER'
@@ -4334,9 +4682,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'B{summary_row + 4}'] = 'SDU TOTAL'
         summary_sheet[f'B{summary_row + 5}'] = 'RECOAIR TOTAL'
         summary_sheet[f'B{summary_row + 6}'] = 'MARVEL TOTAL'
-        summary_sheet[f'B{summary_row + 7}'] = 'OTHER TOTAL'
-        summary_sheet[f'B{summary_row + 8}'] = 'UV EXTRA OVER TOTAL'
-        summary_sheet[f'B{summary_row + 9}'] = 'PROJECT TOTAL'
+        summary_sheet[f'B{summary_row + 7}'] = 'VENT CLG TOTAL'
+        summary_sheet[f'B{summary_row + 8}'] = 'OTHER TOTAL'
+        summary_sheet[f'B{summary_row + 9}'] = 'UV EXTRA OVER TOTAL'
+        summary_sheet[f'B{summary_row + 10}'] = 'PROJECT TOTAL'
         
         # Calculate totals using SUMIF formulas
         summary_sheet[f'C{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",C:C)'  # Sum all CANOPY sheet prices
@@ -4345,9 +4694,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'C{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",C:C)'  # Sum all SDU sheet prices
         summary_sheet[f'C{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",C:C)'  # Sum all RECOAIR sheet prices
         summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",C:C)'  # Sum all MARVEL sheet prices
-        summary_sheet[f'C{summary_row + 7}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
-        summary_sheet[f'C{summary_row + 8}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",C:C)'  # Sum all UV Extra Over sheet prices (tracked but excluded)
-        summary_sheet[f'C{summary_row + 9}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}'  # Project price total (excludes UV Extra Over)
+        summary_sheet[f'C{summary_row + 7}'] = f'=SUMIF(A:A,"VENT CLG",C:C)'  # Sum all VENT CLG sheet prices
+        summary_sheet[f'C{summary_row + 8}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
+        summary_sheet[f'C{summary_row + 9}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",C:C)'  # Sum all UV Extra Over sheet prices (tracked but excluded)
+        summary_sheet[f'C{summary_row + 10}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}+C{summary_row + 8}'  # Project price total (excludes UV Extra Over)
         
         # Cost totals
         summary_sheet[f'D{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",D:D)'  # Sum all CANOPY sheet costs
@@ -4356,9 +4706,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'D{summary_row + 4}'] = f'=SUMIF(A:A,"SDU",D:D)'  # Sum all SDU sheet costs
         summary_sheet[f'D{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",D:D)'  # Sum all RECOAIR sheet costs
         summary_sheet[f'D{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",D:D)'  # Sum all MARVEL sheet costs
-        summary_sheet[f'D{summary_row + 7}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
-        summary_sheet[f'D{summary_row + 8}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",D:D)'  # Sum all UV Extra Over sheet costs (tracked but excluded)
-        summary_sheet[f'D{summary_row + 9}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}'  # Project cost total (excludes UV Extra Over)
+        summary_sheet[f'D{summary_row + 7}'] = f'=SUMIF(A:A,"VENT CLG",D:D)'  # Sum all VENT CLG sheet costs
+        summary_sheet[f'D{summary_row + 8}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
+        summary_sheet[f'D{summary_row + 9}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",D:D)'  # Sum all UV Extra Over sheet costs (tracked but excluded)
+        summary_sheet[f'D{summary_row + 10}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}+D{summary_row + 8}'  # Project cost total (excludes UV Extra Over)
         
         # Store the summary row positions for JOB TOTAL to reference
         summary_sheet['H1'] = 'Reference Cells for JOB TOTAL'
@@ -4368,18 +4719,20 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet['H5'] = f'SDU_PRICE_TOTAL=C{summary_row + 4}'
         summary_sheet['H6'] = f'RECOAIR_PRICE_TOTAL=C{summary_row + 5}'
         summary_sheet['H7'] = f'MARVEL_PRICE_TOTAL=C{summary_row + 6}'
-        summary_sheet['H8'] = f'OTHER_PRICE_TOTAL=C{summary_row + 7}'
-        summary_sheet['H9'] = f'UV_EXTRA_OVER_PRICE_TOTAL=C{summary_row + 8}'
-        summary_sheet['H10'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 9}'
-        summary_sheet['H11'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
-        summary_sheet['H12'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
-        summary_sheet['H13'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
-        summary_sheet['H14'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
-        summary_sheet['H15'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
-        summary_sheet['H16'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
-        summary_sheet['H17'] = f'OTHER_COST_TOTAL=D{summary_row + 7}'
-        summary_sheet['H18'] = f'UV_EXTRA_OVER_COST_TOTAL=D{summary_row + 8}'
-        summary_sheet['H19'] = f'PROJECT_COST_TOTAL=D{summary_row + 9}'
+        summary_sheet['H8'] = f'VENT_CLG_PRICE_TOTAL=C{summary_row + 7}'
+        summary_sheet['H9'] = f'OTHER_PRICE_TOTAL=C{summary_row + 8}'
+        summary_sheet['H10'] = f'UV_EXTRA_OVER_PRICE_TOTAL=C{summary_row + 9}'
+        summary_sheet['H11'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 10}'
+        summary_sheet['H12'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
+        summary_sheet['H13'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
+        summary_sheet['H14'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
+        summary_sheet['H15'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
+        summary_sheet['H16'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
+        summary_sheet['H17'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
+        summary_sheet['H18'] = f'VENT_CLG_COST_TOTAL=D{summary_row + 7}'
+        summary_sheet['H19'] = f'OTHER_COST_TOTAL=D{summary_row + 8}'
+        summary_sheet['H20'] = f'UV_EXTRA_OVER_COST_TOTAL=D{summary_row + 9}'
+        summary_sheet['H21'] = f'PROJECT_COST_TOTAL=D{summary_row + 10}'
         
         print(f"Created PRICING_SUMMARY sheet with {current_row - 2} individual sheet references")
         
@@ -4433,17 +4786,16 @@ def update_job_total_sheet(wb: Workbook) -> None:
                 }
         
         # Map Job Total categories to PRICING_SUMMARY categories and clear all first
+        # Only include active/used systems - exclude unused items like Aerolys, Pollustop, Reactaway
         job_total_mapping = {
             16: ('Canopy', 'CANOPY'),           # Row 16: Canopy
             17: ('Fire Suppression', 'FIRE SUPP'),  # Row 17: Fire Suppression
             18: ('SDU', 'SDU'),                 # Row 18: SDU
-            19: ('Vent Clg', 'OTHER'),          # Row 19: Vent Clg -> OTHER
+            19: ('Vent Clg', 'VENT CLG'),       # Row 19: Vent Clg -> VENT CLG (dedicated category)
             20: ('MARVEL', 'MARVEL'),           # Row 20: MARVEL
             21: ('Edge', 'EBOX'),               # Row 21: Edge -> EBOX
-            22: ('Aerolys', 'OTHER'),           # Row 22: Aerolys -> OTHER
-            23: ('Pollustop', 'OTHER'),         # Row 23: Pollustop -> OTHER
             24: ('Reco', 'RECOAIR'),            # Row 24: Reco -> RECOAIR
-            25: ('Reactaway', 'OTHER'),         # Row 25: Reactaway -> OTHER
+            # Rows 22 (Aerolys), 23 (Pollustop), 25 (Reactaway) intentionally excluded - these are unused systems
         }
         
         # Clear all Job Total cells first

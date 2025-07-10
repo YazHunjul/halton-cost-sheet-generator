@@ -409,7 +409,7 @@ def normalize_area_object(area: Dict) -> Dict:
     if not isinstance(normalized['options'], dict):
         normalized['options'] = {}
     
-    option_defaults = {'uvc': False, 'sdu': False, 'recoair': False}
+    option_defaults = {'uvc': False, 'sdu': False, 'recoair': False, 'vent_clg': False}
     for key, default_value in option_defaults.items():
         if key not in normalized['options']:
             normalized['options'][key] = default_value
@@ -427,6 +427,10 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     Returns:
         Dict: Template context with all required data
     """
+    import time
+    start_time = time.time()
+    print(f"🚀 Starting template context preparation...")
+    
     # Initialize lists for tracking items across all areas
     all_canopies = []
     wall_cladding_items = []
@@ -455,6 +459,9 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'total_delivery_base': 0,       # J56
     }
     
+    init_time = time.time()
+    print(f"   ✅ Initialization complete: {init_time - start_time:.3f}s")
+    
     # Get sales contact information
     sales_contact = get_sales_contact_info(
         project_data.get('estimator', ''),  # Pass estimator name for backward compatibility
@@ -463,26 +470,50 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     
     # Get estimator information
     estimator = project_data.get('estimator', '')
-    estimator_rank = project_data.get('estimator_rank', 'Estimator')  # Default to 'Estimator' if not specified
+    estimator_rank = project_data.get('estimator_rank', 'Estimator')
     
-    # Check if contract sheets exist and read their data
+    contact_time = time.time()
+    print(f"   ✅ Sales contact info retrieved: {contact_time - init_time:.3f}s")
+    
+    # Load Excel workbook once and reuse it for all operations
+    cached_wb = None
+    wb_load_time = 0
+    contract_start = time.time()  # Initialize contract_start for all paths
+    
     if excel_file_path and os.path.exists(excel_file_path):
+        print(f"🔍 Starting contract sheet processing...")
+        print(f"   📖 Loading Excel workbook: {excel_file_path}")
+        wb_load_start = time.time()
+        
         try:
-            wb = load_workbook(excel_file_path, data_only=True)  # Use data_only=True to read values
+            cached_wb = load_workbook(excel_file_path, data_only=True)  # Use data_only=True to read values
+            wb_load_time = time.time() - wb_load_start
+            print(f"   ✅ Workbook loaded: {wb_load_time:.3f}s")
+            
             # Look for CONTRACT sheet (exact match or numbered variant)
+            sheet_search_start = time.time()
             contract_sheet = None
-            for sheet_name in wb.sheetnames:
+            print(f"   🔍 Searching for CONTRACT sheet in {len(cached_wb.sheetnames)} sheets...")
+            
+            for sheet_name in cached_wb.sheetnames:
                 if (sheet_name == 'CONTRACT' or 
                     (sheet_name.startswith('CONTRACT') and 
                      (sheet_name.replace('CONTRACT', '').strip() == '' or 
                       sheet_name.replace('CONTRACT', '').strip().isdigit()))):
-                    contract_sheet = wb[sheet_name]
-                    print(f"Found contract sheet: {sheet_name}")
+                    contract_sheet = cached_wb[sheet_name]
+                    print(f"   ✅ Found contract sheet: {sheet_name}")
                     break
+            
+            sheet_search_time = time.time() - sheet_search_start
+            print(f"   ✅ Sheet search complete: {sheet_search_time:.3f}s")
             
             # Process contract data if a contract sheet was found
             if contract_sheet:
+                print(f"   🔨 Processing contract data...")
+                contract_process_start = time.time()
+                
                 # Get installation, delivery, and commissioning prices first
+                print(f"      📊 Reading pricing data from cells...")
                 total_installation = float(contract_sheet['C72'].value or 0)
                 total_commissioning = float(contract_sheet['J66'].value or 0)
                 total_delivery_base = float(contract_sheet['J56'].value or 0)
@@ -494,6 +525,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 # Calculate actual delivery price (J56 - C72 - J66)
                 total_delivery = total_delivery_base - total_installation - total_commissioning
                 
+                print(f"      💰 Processing extract/supply system pricing...")
                 # Check M12 for extract system price
                 extract_total = contract_sheet['M12'].value
                 if extract_total and isinstance(extract_total, (int, float)) and extract_total > 0:
@@ -508,6 +540,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                     # Store the base price from N12
                     contract_data['supply_system_price'] = float(supply_total)
                 
+                print(f"      🧮 Calculating cost splits...")
                 # Split costs between extract and supply if both exist
                 if contract_data['has_extract_system'] and contract_data['has_supply_system']:
                     # Calculate ratio based on base system prices
@@ -566,6 +599,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                         contract_data['supply_commissioning_price']
                     )
                 
+                print(f"      📋 Reading additional contract data...")
                 # Get contract total from J9
                 contract_total = contract_sheet['J9'].value
                 if contract_total and isinstance(contract_total, (int, float)) and contract_total > 0:
@@ -578,11 +612,30 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 contract_data['delivery_location'] = str(delivery_location) if delivery_location else ''
                 contract_data['plant_selection'] = str(plant_selection) if plant_selection else ''
                 
+                contract_process_time = time.time() - contract_process_start
+                print(f"   ✅ Contract processing complete: {contract_process_time:.3f}s")
+            else:
+                print(f"   ℹ️  No CONTRACT sheet found")
+                
         except Exception as e:
-            print(f"Warning: Could not read contract data: {str(e)}")
+            print(f"   ❌ Contract processing error: {str(e)}")
+            cached_wb = None
+        
+        contract_time = time.time()
+        total_contract_time = contract_time - contract_start
+        print(f"🔍 Contract processing complete: {total_contract_time:.3f}s")
+    else:
+        print(f"   ℹ️  No Excel file provided for contract processing")
+        contract_time = time.time()
+        total_contract_time = contract_time - contract_start
     
     # Check if fire suppression sheets exist by looking for any areas with fire suppression data
+    fire_supp_start = time.time()
+    print(f"🔥 Processing fire suppression data...")
     has_fire_suppression_sheets = False
+    
+    levels_start = time.time()
+    print(f"🏢 Processing levels and areas data...")
     
     for level in project_data.get('levels', []):
         level_name = level.get('level_name', '')
@@ -666,107 +719,66 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 
                 # Check for wall cladding on this canopy
                 wall_cladding = canopy.get('wall_cladding', {})
+                
+                # Initialize position_str for use later (even if no cladding)
+                position = wall_cladding.get('position', [])
+                if isinstance(position, list):
+                    position_str = ', '.join(position) if position else 'No positions'
+                else:
+                    position_str = str(position) if position else 'No positions'
+                
                 if wall_cladding.get('type') != 'None' and wall_cladding.get('type'):
-                    # Handle position as list or string
-                    position = wall_cladding.get('position', [])
-                    if isinstance(position, list):
-                        position_list = position if position else []
-                    else:
-                        position_list = [position] if position else []
-                    
-                    # Create proper description based on number of positions
-                    if len(position_list) == 0:
-                        description = "Cladding to walls"
-                    elif len(position_list) == 1:
-                        description = f"Cladding to {position_list[0]} walls"
-                    elif len(position_list) == 2:
-                        description = f"Cladding to {position_list[0]} and {position_list[1]} walls"
-                    else:
-                        # For 3 or more positions: "item1, item2 and item3 walls"
-                        description = f"Cladding to {', '.join(position_list[:-1])} and {position_list[-1]} walls"
-                    
-                    # Join positions for other uses
-                    position_str = "/".join(position_list) if position_list else ""
-                    
-                    wall_cladding_item = {
-                        'item_number': canopy.get('reference_number', ''),  # Use canopy reference number
-                        'description': description,
-                        'width': wall_cladding.get('width', 0),
-                        'height': wall_cladding.get('height', 0),
-                        'dimensions': f"{wall_cladding.get('width', 0)}X{wall_cladding.get('height', 0)}",
-                        'position_description': position_str,
-                        'canopy_ref': canopy.get('reference_number', ''),
-                        'level_name': level_name,
-                        'area_name': area_name,
-                        'level_area_combined': level_area_combined
+                    cladding_item = {
+                        'area': level_area_combined,
+                        'canopy_ref': canopy.get('reference_number', 'N/A'),
+                        'item_number': canopy.get('reference_number', 'N/A'),
+                        'type': wall_cladding.get('type', 'Unknown'),
+                        'position': position_str,
+                        'height': wall_cladding.get('height', 'N/A'),
+                        'length': wall_cladding.get('length', 'N/A'),
+                        'width': wall_cladding.get('width', wall_cladding.get('length', 'N/A')),  # Use width or fallback to length
+                        'price': wall_cladding.get('price', 0),
+                        'description': f"Cladding below Item {canopy.get('reference_number', 'N/A')}, supplied and installed"
                     }
-                    wall_cladding_items.append(wall_cladding_item)
+                    wall_cladding_items.append(cladding_item)
                 
                 # Check for fire suppression on this canopy
-                # Only include canopies that actually have fire suppression
-                tank_quantity = canopy.get('fire_suppression_tank_quantity', 0)
-                fire_suppression_price = canopy.get('fire_suppression_price', 0)
-                has_fire_suppression_option = canopy.get('options', {}).get('fire_suppression', False)
-                has_fire_suppression_reference = canopy.get('fire_suppression_reference_number', None)
-                
-                # Only add to fire suppression items if this specific canopy has fire suppression
-                # Check multiple conditions to ensure we catch all fire suppression items:
-                # 1. Tank quantity > 0 (standard case)
-                # 2. Fire suppression price > 0 (pricing exists)
-                # 3. Fire suppression option is enabled (flag is set)
-                # 4. Fire suppression reference number exists (reference was changed)
-                if (tank_quantity > 0 or 
-                    fire_suppression_price > 0 or 
-                    has_fire_suppression_option or 
-                    has_fire_suppression_reference):
-                    
-                    # Use the actual fire suppression reference number if available, otherwise fall back to canopy reference
-                    fs_reference = canopy.get('fire_suppression_reference_number', canopy.get('reference_number', ''))
-                    
-                    # Debug logging for fire suppression inclusion (uncomment for debugging)
-                    # canopy_ref = canopy.get('reference_number', '')
-                    # print(f"🔥 Including fire suppression for canopy {canopy_ref} -> {fs_reference}")
-                    # print(f"   Tank quantity: {tank_quantity}, Price: £{fire_suppression_price}")
-                    # print(f"   Option flag: {has_fire_suppression_option}, Has ref: {bool(has_fire_suppression_reference)}")
+                fire_suppression_tank_quantity = canopy.get('fire_suppression_tank_quantity', 0)
+                if fire_suppression_tank_quantity > 0:
+                    # Generate fire suppression system description
+                    system_type = canopy.get('fire_suppression_system_type', '')
+                    fs_system_desc = get_fire_suppression_system_description(system_type)
                     
                     fire_suppression_item = {
-                        'item_number': fs_reference,  # Use fire suppression reference (e.g., "1.01a") instead of canopy reference ("1.01")
-                        'system_description': get_fire_suppression_system_description(canopy.get('fire_suppression_system_type', '')),
-                        'fire_suppression_system_type': canopy.get('fire_suppression_system_type', ''),  # Add raw system type
-                        'manual_release': '1no station',
-                        'tank_quantity': tank_quantity if tank_quantity > 0 else 'TBD',  # Show TBD if not specified
-                        'price': fire_suppression_price,  # Fire suppression price (includes base + commissioning share + delivery share)
-                        'canopy_ref': canopy.get('reference_number', ''),  # Keep original canopy reference for internal tracking
-                        'level_name': level_name,
-                        'area_name': area_name,
+                        'area': level_area_combined,
+                        'canopy_ref': canopy.get('reference_number', 'N/A'),
+                        'item_number': canopy.get('reference_number', 'N/A'),
+                        'tank_quantity': fire_suppression_tank_quantity,
+                        'system_description': fs_system_desc,
+                        'price': canopy.get('fire_suppression_price', 0),
                         'level_area_combined': level_area_combined
                     }
                     fire_suppression_items.append(fire_suppression_item)
-                
-                # Create transformed canopy data
-                fs_system_type_raw = canopy.get('fire_suppression_system_type', '')
-                fs_system_desc = get_fire_suppression_system_description(fs_system_type_raw)
-                
-                # Handle sections - double the value if configuration is ISLAND
-                raw_sections = canopy.get('sections', '')
-                configuration = canopy.get('configuration', '').upper().strip()
-                
-                if raw_sections and raw_sections != '' and configuration == 'ISLAND':
-                    try:
-                        # Try to convert to number, double it, then convert back to string
-                        sections_num = float(raw_sections)
-                        doubled_sections = sections_num * 2
-                        # If it's a whole number, display without decimal
-                        if doubled_sections.is_integer():
-                            display_sections = str(int(doubled_sections))
-                        else:
-                            display_sections = str(doubled_sections)
-                    except (ValueError, TypeError):
-                        # If conversion fails, just use the original value
-                        display_sections = handle_empty_value(raw_sections)
                 else:
-                    # For WALL configuration or any other configuration, use original value
-                    display_sections = handle_empty_value(raw_sections)
+                    fs_system_desc = ""
+                
+                # Sections formatting - handle both numeric and text values
+                raw_sections = canopy.get('sections', '')
+                if raw_sections:
+                    try:
+                        # Try to convert to int if it's a number
+                        sections_num = int(float(raw_sections))
+                        display_sections = str(sections_num)
+                    except (ValueError, TypeError):
+                        # If it's not a number, use as string
+                        display_sections = str(raw_sections)
+                else:
+                    display_sections = ""
+                
+                # Determine if this canopy has cladding
+                has_cladding = (wall_cladding.get('type') not in ['None', None, ''] and 
+                               wall_cladding.get('type') and 
+                               (canopy.get('cladding_price', 0) > 0 or wall_cladding.get('price', 0) > 0))
                 
                 transformed_canopy = {
                     'reference_number': handle_empty_value(canopy.get('reference_number', '')),
@@ -797,45 +809,86 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                     # Pricing data
                     'canopy_price': canopy.get('canopy_price', 0),
                     'fire_suppression_price': canopy.get('fire_suppression_price', 0),
-                    'cladding_price': canopy.get('cladding_price', 0),
+                    'cladding_price': canopy.get('cladding_price', 0) or wall_cladding.get('price', 0),
                     
-                    # Wall cladding data for this canopy
-                    'has_wall_cladding': wall_cladding.get('type') != 'None' and wall_cladding.get('type'),
-                    'wall_cladding': wall_cladding,
+                    # Wall cladding data and flags
+                    'has_cladding': has_cladding,  # Template needs this to show cladding items
+                    'wall_cladding_type': wall_cladding.get('type', 'None'),
+                    'wall_cladding_position': position_str if wall_cladding.get('type') != 'None' else 'None',
+                    'wall_cladding_price': wall_cladding.get('price', 0)
                 }
-                # Add to transformed canopies for this area
-                transformed_canopies.append(transformed_canopy)
                 
-                # Create canopy info for the main canopies array (with additional location info)
-                canopy_info = {
-                    'level': level_name,
-                    'area': area_name,
-                    'level_area_combined': level_area_combined,
-                    'location': f"{level_name} - {area_name}",  # Keep this for backwards compatibility
-                    **transformed_canopy  # Include all the transformed data
-                }
-                all_canopies.append(canopy_info)
+                transformed_canopies.append(transformed_canopy)
+                all_canopies.append(transformed_canopy)
             
+            # Calculate area-level totals for template
+            area_canopy_total = sum(canopy.get('canopy_price', 0) for canopy in transformed_canopies)
+            area_fire_suppression_total = sum(canopy.get('fire_suppression_price', 0) for canopy in transformed_canopies)
+            area_cladding_total = sum(canopy.get('cladding_price', 0) for canopy in transformed_canopies)
+            
+            # Get area-level pricing first
+            area_delivery_installation = area.get('delivery_installation_price', 0)
+            area_commissioning = area.get('commissioning_price', 0)
+            
+            # Calculate area subtotals and totals
+            # CANOPY SCHEDULE subtotal should ONLY include canopy prices + delivery + commissioning
+            # Fire suppression and cladding are separate schedules with their own subtotals
+            area_canopy_schedule_subtotal = area_canopy_total + area_delivery_installation + area_commissioning
+            area_uvc_price = area.get('uvc_price', 0)
+            area_sdu_price = area.get('sdu_price', 0)
+            area_recoair_price = area.get('recoair_price', 0)
+            area_vent_clg_price = area.get('vent_clg_price', 0)
+            area_marvel_price = area.get('marvel_price', 0)
+            area_uv_extra_over_cost = area.get('uv_extra_over_cost', 0)
+            
+            # Area total includes: canopy schedule + fire suppression + cladding + other systems
+            # Note: area_delivery_installation and area_commissioning are already included in area_canopy_schedule_subtotal
+            # Note: RecoAir pricing should NOT be included in area totals - it has its own separate pricing schedule
+            area_total = (area_canopy_schedule_subtotal + area_fire_suppression_total + area_cladding_total + 
+                         area_uvc_price + area_sdu_price + area_vent_clg_price + area_marvel_price + area_uv_extra_over_cost)
+
             # Enhanced area with transformed canopy data
             enhanced_area = {
                 'name': area_name,
                 'level_area_name': level_area_combined,
+                'level_area_combined': level_area_combined,  # Add this for template compatibility
                 'canopies': transformed_canopies,  # Use transformed data instead of raw data
                 
                 # Area-level options
                 'options': area.get('options', {}),
+                'has_canopies': len(transformed_canopies) > 0,
                 
                 # Area-level pricing data
-                'delivery_installation_price': area.get('delivery_installation_price', 0),
-                'commissioning_price': area.get('commissioning_price', 0),
+                'delivery_installation_price': area_delivery_installation,
+                'commissioning_price': area_commissioning,
                 
                 # Area-level option pricing
-                'uvc_price': area.get('uvc_price', 0),
-                'sdu_price': area.get('sdu_price', 0),
-                'recoair_price': area.get('recoair_price', 0),
+                'uvc_price': area_uvc_price,
+                'sdu_price': area_sdu_price,
+                'recoair_price': area_recoair_price,
+                'vent_clg_price': area_vent_clg_price,
+                'vent_clg_detailed_pricing': area.get('vent_clg_detailed_pricing', {}),
                 
                 # RecoAir units data (detailed unit specifications)
-                'recoair_units': area.get('recoair_units', [])
+                'recoair_units': area.get('recoair_units', []),
+                
+                # UV Extra Over data
+                'has_uv_extra_over': area.get('options', {}).get('uv_extra_over', False),
+                'uv_extra_over_cost': area_uv_extra_over_cost,
+                
+                # Calculated totals for template
+                'canopy_total': area_canopy_total,
+                'fire_suppression_total': area_fire_suppression_total,
+                'cladding_total': area_cladding_total,
+                'canopy_schedule_subtotal': area_canopy_schedule_subtotal,
+                'area_total': area_total,
+                
+                # SDU pricing data (if available)
+                'sdu_pricing': area.get('sdu_pricing', {}),
+                'has_sdu': area.get('options', {}).get('sdu', False),
+                
+                # VENT CLG data (if available)
+                'has_vent_clg': area.get('options', {}).get('vent_clg', False)
             }
             enhanced_areas.append(enhanced_area)
         
@@ -862,19 +915,41 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     # Extract customer first name
     customer_first_name = get_customer_first_name(project_data.get('customer', ''))
     
+    levels_time = time.time()
+    total_levels_time = levels_time - levels_start
+    print(f"🏢 Levels processing complete: {total_levels_time:.3f}s")
+    
     # Collect RecoAir pricing data (areas and job totals)
+    recoair_start = time.time()
+    print(f"🌀 Collecting RecoAir pricing data...")
     recoair_pricing_data = collect_recoair_pricing_schedule_data(project_data)
+    recoair_time = time.time() - recoair_start
+    print(f"🌀 RecoAir data collection complete: {recoair_time:.3f}s")
     
     # Collect SDU data for areas with SDU systems
-    sdu_data = collect_sdu_data(project_data, excel_file_path)
+    sdu_start = time.time()
+    print(f"📡 Collecting SDU data...")
+    sdu_data = collect_sdu_data(project_data, excel_file_path, cached_wb)  # Pass cached workbook
+    sdu_time = time.time() - sdu_start
+    print(f"📡 SDU data collection complete: {sdu_time:.3f}s")
     
     # Analyze project for global flags
-    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
+    analysis_start = time.time()
+    print(f"🔬 Analyzing project areas...")
+    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg = analyze_project_areas(project_data)
+    analysis_time = time.time() - analysis_start
+    print(f"🔬 Project analysis complete: {analysis_time:.3f}s")
     
     # Calculate pricing totals once
-    pricing_totals = calculate_pricing_totals(project_data, excel_file_path)
+    pricing_start = time.time()
+    print(f"💰 Calculating pricing totals...")
+    pricing_totals = calculate_pricing_totals(project_data, excel_file_path, cached_wb)  # Pass cached workbook
+    pricing_time = time.time() - pricing_start
+    print(f"💰 Pricing calculations complete: {pricing_time:.3f}s")
     
     # Prepare the context
+    context_start = time.time()
+    print(f"📋 Preparing final template context...")
     context = {
         # Basic project information
         'client_name': project_data.get('customer', ''),  # Don't use handle_empty_value for customer name
@@ -920,9 +995,11 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         
         # Wall cladding data
         'wall_cladding_items': wall_cladding_items,
+        'cladding_items': wall_cladding_items,  # Alternative name for template compatibility
         
         # Fire suppression data
         'fire_suppression_items': fire_suppression_items,
+        'fs_items': fire_suppression_items,  # Alternative name for template compatibility
         
         # Scope of works data
         'scope_of_works': generate_scope_of_works(project_data),
@@ -933,6 +1010,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'recoair_job_totals': recoair_pricing_data['job_totals'],  # RecoAir job totals
         'format_currency': format_currency,  # Make currency formatter available in templates
         'format_current': format_currency,  # Alias for format_currency (for template compatibility)
+        'currency_format': format_currency,  # Additional alias for template compatibility
         
         # Contract system data
         'has_contract_system': contract_data['has_extract_system'] or contract_data['has_supply_system'],
@@ -942,6 +1020,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'supply_system_price': contract_data['supply_system_price'],    # System price excluding costs
         'extract_system_total': contract_data['extract_system_total'],  # Total including all costs
         'supply_system_total': contract_data['supply_system_total'],    # Total including all costs
+        'suply_system_total': contract_data['supply_system_total'],     # Alternative spelling for template compatibility
         'contract_total_price': contract_data['contract_total_price'],
         
         # New contract data fields
@@ -952,6 +1031,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'extract_delivery_price': contract_data['extract_delivery_price'],
         'supply_delivery_price': contract_data['supply_delivery_price'],
         'extract_commissioning_price': contract_data['extract_commissioning_price'],
+        'extract_comissioning_price': contract_data['extract_commissioning_price'],  # Alternative spelling for template compatibility
         'supply_commissioning_price': contract_data['supply_commissioning_price'],
         'total_installation_price': contract_data['total_installation_price'],
         'total_commissioning_price': contract_data['total_commissioning_price'],
@@ -966,14 +1046,26 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'total_uvc_price': pricing_totals.get('total_uvc_price', 0),
         'total_sdu_price': pricing_totals.get('total_sdu_price', 0),
         'total_recoair_price': pricing_totals.get('total_recoair_price', 0),
+        'total_vent_clg_price': pricing_totals.get('total_vent_clg_price', 0),
+        'total_marvel_price': pricing_totals.get('total_marvel_price', 0),
         'project_total': pricing_totals.get('project_total', 0),
         
         # RecoAir-specific data (for RecoAir templates)
         'recoair_areas': [area for level in enhanced_levels for area in level.get('areas', []) if area.get('options', {}).get('recoair', False)],
         'total_recoair_units': sum(len(area.get('recoair_units', [])) for level in enhanced_levels for area in level.get('areas', [])),
         
-        # SDU-specific data
-        'sdu_areas': sdu_data,
+        # SDU-specific data - ensure each SDU area has the services data directly accessible
+        'sdu_areas': [
+            {
+                **sdu_item,
+                # Make services data directly accessible on the sdu object for template compatibility
+                'electrical_services': sdu_item.get('electrical_services', {}),
+                'gas_services': sdu_item.get('gas_services', {}),
+                'water_services': sdu_item.get('water_services', {}),
+                'pricing': sdu_item.get('pricing', {})
+            }
+            for sdu_item in sdu_data
+        ],
         'has_sdu': len(sdu_data) > 0,
         'total_sdu_areas': len(sdu_data),
         
@@ -983,6 +1075,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'is_recoair_only': is_recoair_only,
         'has_uv': has_uv,
         'has_marvel': has_marvel,
+        'has_vent_clg': has_vent_clg,
         
         # Feature flags for conditional display of systems
         'show_kitchen_extract_system': is_feature_enabled('kitchen_extract_system'),
@@ -993,10 +1086,92 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'show_dishwasher_extract': is_feature_enabled('dishwasher_extract'),
         'show_gas_interlocking': is_feature_enabled('gas_interlocking'),
         'show_pollustop_unit': is_feature_enabled('pollustop_unit'),
+        'vent_ceiling': is_feature_enabled('cyclocell_cassette_ceiling'),
+        
+        # Add gas, water, electrical, and pricing data with default values (from first SDU if available)
+        'electrical_services': sdu_data[0].get('electrical_services', {
+            'distribution_board': 0,
+            'single_phase_switched_spur': 0,
+            'three_phase_socket_outlet': 0,
+            'switched_socket_outlet': 0,
+            'emergency_knock_off': 0,
+            'ring_main_inc_2no_sso': 0
+        }) if sdu_data else {
+            'distribution_board': 0,
+            'single_phase_switched_spur': 0,
+            'three_phase_socket_outlet': 0,
+            'switched_socket_outlet': 0,
+            'emergency_knock_off': 0,
+            'ring_main_inc_2no_sso': 0
+        },
+        'gas_services': sdu_data[0].get('gas_services', {
+            'gas_manifold': 0,
+            'gas_connection_15mm': 0,
+            'gas_connection_20mm': 0,
+            'gas_connection_25mm': 0,
+            'gas_connection_32mm': 0,
+            'gas_solenoid_valve': 0
+        }) if sdu_data else {
+            'gas_manifold': 0,
+            'gas_connection_15mm': 0,
+            'gas_connection_20mm': 0,
+            'gas_connection_25mm': 0,
+            'gas_connection_32mm': 0,
+            'gas_solenoid_valve': 0
+        },  # Match Excel structure for SDU gas services
+        'water_services': sdu_data[0].get('water_services', {
+            'cws_manifold_22mm': 0,
+            'cws_manifold_15mm': 0,
+            'hws_manifold': 0,
+            'water_connection_15mm': 0,
+            'water_connection_22mm': 0,
+            'water_connection_28mm': 0
+        }) if sdu_data else {
+            'cws_manifold_22mm': 0,
+            'cws_manifold_15mm': 0,
+            'hws_manifold': 0,
+            'water_connection_15mm': 0,
+            'water_connection_22mm': 0,
+            'water_connection_28mm': 0
+        },  # Match Excel structure for SDU water services
+        'pricing': sdu_data[0].get('pricing', {
+            'final_carcass_price': 0,
+            'final_electrical_price': 0,
+            'live_site_test_price': 0,
+            'has_live_test': False,
+            'total_price': 0
+        }) if sdu_data else {
+            'final_carcass_price': 0,
+            'final_electrical_price': 0,
+            'live_site_test_price': 0,
+            'has_live_test': False,
+            'total_price': 0
+        },  # Match Excel structure for SDU pricing
         
         # Fallback variables for template compatibility
         'level': enhanced_levels[0] if enhanced_levels else {'level_name': '', 'areas': []},  # First level as fallback
-        'area': enhanced_levels[0].get('areas', [{}])[0] if enhanced_levels and enhanced_levels[0].get('areas') else {'name': '', 'recoair_units': [], 'options': {}},
+        'area': enhanced_levels[0].get('areas', [{}])[0] if enhanced_levels and enhanced_levels[0].get('areas') else {
+            'name': '', 
+            'level_area_combined': '',
+            'canopies': [],
+            'recoair_units': [], 
+            'options': {},
+            'delivery_installation_price': 0,
+            'commissioning_price': 0,
+            'uvc_price': 0,
+            'sdu_price': 0,
+            'recoair_price': 0,
+            'has_uv_extra_over': False,
+            'uv_extra_over_cost': 0,
+            'canopy_total': 0,
+            'fire_suppression_total': 0,
+            'cladding_total': 0,
+            'canopy_schedule_subtotal': 0,
+            'area_total': 0,
+            'has_canopies': False,
+            'has_sdu': False,
+            'sdu_pricing': {}
+        },
         
         # RecoAir unit fallback variables
         'model': '',  # Fallback for RecoAir model
@@ -1010,12 +1185,29 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'delivery_installation_price': 0,  # Fallback for delivery price
         'total_uv_extra_over_cost': pricing_totals.get('total_uv_extra_over_cost', 0),  # Use calculated total UV Extra Over costs
         'has_any_uv_extra_over': pricing_totals.get('has_any_uv_extra_over', False),  # Use calculated UV Extra Over flag
-        'extra_overs': area.get('options', {}).get('uv_extra_over', False),  # Easy flag for templates
+        'extra_overs': (enhanced_levels[0].get('areas', [{}])[0] if enhanced_levels and enhanced_levels[0].get('areas') else {}).get('options', {}).get('uv_extra_over', False),  # Easy flag for templates
     }
+    
+    context_time = time.time()
+    total_context_time = context_time - context_start
+    print(f"📋 Context preparation complete: {total_context_time:.3f}s")
+    
+    total_time = time.time() - start_time
+    print(f"🚀 Template context preparation TOTAL: {total_time:.3f}s")
+    print(f"   📊 Breakdown:")
+    print(f"      - Initialization: {init_time - start_time:.3f}s")
+    print(f"      - Contact info: {contact_time - init_time:.3f}s")
+    print(f"      - Contract processing: {total_contract_time:.3f}s")
+    print(f"      - Levels processing: {total_levels_time:.3f}s")
+    print(f"      - RecoAir data: {recoair_time:.3f}s")
+    print(f"      - SDU data: {sdu_time:.3f}s")
+    print(f"      - Project analysis: {analysis_time:.3f}s")
+    print(f"      - Pricing calculations: {pricing_time:.3f}s")
+    print(f"      - Context preparation: {total_context_time:.3f}s")
     
     return context
 
-def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, bool]:
+def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, bool, bool]:
     """
     Analyze project areas to determine what types of systems are present.
     
@@ -1023,12 +1215,13 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
         project_data (Dict): Project data with levels and areas
         
     Returns:
-        Tuple[bool, bool, bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel)
+        Tuple[bool, bool, bool, bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg)
     """
     has_canopies = False
     has_recoair = False
     has_uv = False
     has_marvel = False
+    has_vent_clg = False
     
     for level in project_data.get('levels', []):
         for area in level.get('areas', []):
@@ -1050,11 +1243,15 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
             # Check if area has MARVEL option
             if area.get('options', {}).get('marvel', False):
                 has_marvel = True
+            
+            # Check if area has VENT CLG option
+            if area.get('options', {}).get('vent_clg', False):
+                has_vent_clg = True
     
     # Determine if project is RecoAir-only
     is_recoair_only = has_recoair and not has_canopies
     
-    return has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel
+    return has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg
 
 def generate_single_document(project_data: Dict, template_path: str, output_filename: str, excel_file_path: str = None) -> str:
     """
@@ -1068,28 +1265,64 @@ def generate_single_document(project_data: Dict, template_path: str, output_file
     Returns:
         str: Path to the generated Word document
     """
+    import time
+    start_time = time.time()
+    print(f"📄 Starting Word document generation...")
+    print(f"   📁 Template: {template_path}")
+    print(f"   📁 Output: {output_filename}")
+    
     try:
         # Check if template exists
+        template_check_start = time.time()
         if not os.path.exists(template_path):
             raise Exception(f"Template file not found at {template_path}")
+        template_check_time = time.time() - template_check_start
+        print(f"   ✅ Template exists: {template_check_time:.3f}s")
         
         # Load the template
+        template_load_start = time.time()
+        print(f"   📖 Loading Word template...")
         doc = DocxTemplate(template_path)
+        template_load_time = time.time() - template_load_start
+        print(f"   ✅ Template loaded: {template_load_time:.3f}s")
         
         # Prepare the context for template rendering
+        context_prep_start = time.time()
+        print(f"   🔧 Preparing template context...")
         context = prepare_template_context(project_data, excel_file_path)
+        context_prep_time = time.time() - context_prep_start
+        print(f"   ✅ Context prepared: {context_prep_time:.3f}s")
         
         # Render the template with the context
+        render_start = time.time()
+        print(f"   🎨 Rendering template with context...")
         doc.render(context)
+        render_time = time.time() - render_start
+        print(f"   ✅ Template rendered: {render_time:.3f}s")
         
         # Save the document
+        save_start = time.time()
+        print(f"   💾 Saving document...")
         output_path = f"output/{output_filename}"
         os.makedirs("output", exist_ok=True)
         doc.save(output_path)
+        save_time = time.time() - save_start
+        print(f"   ✅ Document saved: {save_time:.3f}s")
+        
+        total_time = time.time() - start_time
+        print(f"📄 Word document generation COMPLETE: {total_time:.3f}s")
+        print(f"   📊 Breakdown:")
+        print(f"      - Template check: {template_check_time:.3f}s")
+        print(f"      - Template load: {template_load_time:.3f}s")
+        print(f"      - Context prep: {context_prep_time:.3f}s")
+        print(f"      - Template render: {render_time:.3f}s")
+        print(f"      - Document save: {save_time:.3f}s")
         
         return output_path
         
     except Exception as e:
+        error_time = time.time() - start_time
+        print(f"   ❌ Error after {error_time:.3f}s: {str(e)}")
         raise Exception(f"Failed to generate Word document: {str(e)}")
 
 def format_date_for_filename(date_str: str) -> str:
@@ -1122,7 +1355,7 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
     """
     try:
         # Analyze project to determine what documents to generate
-        has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel = analyze_project_areas(project_data)
+        has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg = analyze_project_areas(project_data)
         
         project_number = project_data.get('project_number', 'unknown')
         date_str = format_date_for_filename(project_data.get('date', ''))
@@ -1281,6 +1514,7 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
             # Get commissioning price (should be read from N46 in Excel)
             # For now, use area commissioning price or default to 0
             commissioning_price = area.get('recoair_commissioning_price', 0) or area.get('commissioning_price', 0)
+            print(commissioning_price)
             
             # Get flat pack data if available
             flat_pack_data = area.get('recoair_flat_pack', {})
@@ -1332,19 +1566,23 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
         'job_totals': job_totals
     }
 
-def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) -> Dict:
+def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, cached_wb=None) -> Dict:
     """
     Calculate comprehensive pricing totals for the project.
     
     Args:
-        project_data (Dict): Project data with pricing information
-        excel_file_path (str, optional): Path to Excel file to extract detailed SDU data
+        project_data (Dict): Project data
+        excel_file_path (str, optional): Path to Excel file for contract data
+        cached_wb (optional): Pre-loaded Excel workbook to avoid reloading
         
     Returns:
-        Dict: Pricing totals and breakdowns
+        Dict: Comprehensive pricing totals
     """
+    import time
+    start_time = time.time()
+    print(f"💰 Starting pricing totals calculation...")
+    
     totals = {
-        'total_canopies': 0,
         'total_canopy_price': 0,
         'total_fire_suppression_price': 0,
         'total_cladding_price': 0,
@@ -1352,27 +1590,226 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
         'total_commissioning': 0,
         'total_uvc_price': 0,
         'total_sdu_price': 0,
-        'total_sdu_subtotal': 0,  # New: total of all SDU subtotals
         'total_recoair_price': 0,
-        'total_marvel_price': 0,  # New: total of all MARVEL prices
-        'total_uv_extra_over_cost': 0,  # New: total of all UV Extra Over costs
-        'has_any_uv_extra_over': False,  # New: flag indicating if any area has UV Extra Over
-        'areas': [],
+        'total_vent_clg_price': 0,
+        'total_uv_extra_over_cost': 0,
+        'has_any_uv_extra_over': False,
         'project_total': 0,
-        'contract_total_price': 0  # Add contract total price to totals
+        'contract_total_price': 0,
+        'areas': []  # Store area-level data for templates
     }
     
-    # Collect SDU data once for all areas
-    sdu_data_by_area = {}
-    sdu_areas = collect_sdu_data(project_data, excel_file_path)
-    for sdu_area in sdu_areas:
-        key = sdu_area['level_area_combined']
-        sdu_data_by_area[key] = sdu_area
+    init_time = time.time()
+    print(f"   ✅ Totals initialization: {init_time - start_time:.3f}s")
+    
+    base_project_total = 0
+    contract_systems_total = 0
+    
+    # Process each level and area
+    area_process_start = time.time()
+    print(f"   🏢 Processing areas for pricing...")
+    
+    for level in project_data.get('levels', []):
+        level_name = level.get('level_name', '')
+        
+        for area in level.get('areas', []):
+            area_name = area.get('name', '')
+            
+            # Canopy pricing
+            area_canopy_total = sum(canopy.get('canopy_price', 0) for canopy in area.get('canopies', []))
+            totals['total_canopy_price'] += area_canopy_total
+            
+            # Fire suppression pricing
+            area_fire_supp_total = sum(canopy.get('fire_suppression_price', 0) for canopy in area.get('canopies', []))
+            totals['total_fire_suppression_price'] += area_fire_supp_total
+            
+            # Wall cladding pricing - use same logic as transformed canopies
+            area_cladding_total = 0
+            for canopy in area.get('canopies', []):
+                # Use same logic as in transformed canopies for consistency
+                cladding_price = canopy.get('cladding_price', 0)
+                if not cladding_price:
+                    wall_cladding = canopy.get('wall_cladding', {})
+                    cladding_price = wall_cladding.get('price', 0)
+                area_cladding_total += cladding_price
+            totals['total_cladding_price'] += area_cladding_total
+            
+            # Area-level pricing
+            delivery_installation = area.get('delivery_installation_price', 0)
+            commissioning = area.get('commissioning_price', 0)
+            uvc_price = area.get('uvc_price', 0)
+            sdu_price = area.get('sdu_price', 0)  # Basic price from project data
+            recoair_price = area.get('recoair_price', 0)
+            vent_clg_price = area.get('vent_clg_price', 0)
+            marvel_price = area.get('marvel_price', 0)
+            
+            totals['total_delivery_installation'] += delivery_installation
+            totals['total_commissioning'] += commissioning
+            totals['total_uvc_price'] += uvc_price
+            totals['total_sdu_price'] += sdu_price
+            totals['total_recoair_price'] += recoair_price
+            totals['total_vent_clg_price'] += vent_clg_price
+            totals['total_marvel_price'] = totals.get('total_marvel_price', 0) + marvel_price
+            
+            # Check for UV Extra Over
+            has_uv_extra_over = area.get('options', {}).get('uv_extra_over', False)
+            uv_extra_over_cost = area.get('uv_extra_over_cost', 0)
+            
+            if has_uv_extra_over and uv_extra_over_cost > 0:
+                totals['has_any_uv_extra_over'] = True
+                totals['total_uv_extra_over_cost'] += uv_extra_over_cost
+            
+            # Calculate area subtotals and totals for template access
+            # CANOPY SCHEDULE subtotal should ONLY include canopy prices + delivery + commissioning
+            # Fire suppression and cladding are separate schedules with their own subtotals
+            area_canopy_schedule_subtotal = area_canopy_total + delivery_installation + commissioning
+            # Area total includes: canopy schedule + fire suppression + cladding + other systems
+            # Note: delivery_installation and commissioning are already included in area_canopy_schedule_subtotal
+            # Note: RecoAir pricing should NOT be included in area totals - it has its own separate pricing schedule
+            area_total = (area_canopy_schedule_subtotal + area_fire_supp_total + area_cladding_total + 
+                         uvc_price + sdu_price + vent_clg_price + marvel_price + uv_extra_over_cost)
+
+            # Process canopies to add has_cladding flag for template compatibility
+            processed_canopies = []
+            for canopy in area.get('canopies', []):
+                # Create a copy of the canopy data
+                processed_canopy = dict(canopy)
+                
+                # Apply same has_cladding logic as in template context preparation
+                wall_cladding = canopy.get('wall_cladding', {})
+                cladding_price = canopy.get('cladding_price', 0)
+                has_cladding = (wall_cladding.get('type') not in ['None', None, ''] and 
+                               wall_cladding.get('type') and 
+                               (cladding_price > 0 or wall_cladding.get('price', 0) > 0))
+                
+                processed_canopy['has_cladding'] = has_cladding
+                processed_canopies.append(processed_canopy)
+            
+                            # Store area data for template access
+                area_data = {
+                    'level_area_combined': f"{level_name} - {area_name}",
+                    'name': area_name,
+                    'level_name': level_name,
+                    'has_canopies': len(area.get('canopies', [])) > 0,
+                    'has_uv_extra_over': has_uv_extra_over,
+                    'uv_extra_over_cost': uv_extra_over_cost,
+                    'options': area.get('options', {}),
+                    'delivery_installation_price': delivery_installation,
+                    'commissioning_price': commissioning,
+                    'uvc_price': uvc_price,
+                    'sdu_price': sdu_price,
+                    'recoair_price': recoair_price,
+                    'vent_clg_price': vent_clg_price,
+                    'marvel_price': marvel_price,
+                    'vent_clg_detailed_pricing': area.get('vent_clg_detailed_pricing', {}),
+                    'recoair_units': area.get('recoair_units', []),
+                    'canopy_total': area_canopy_total,
+                    'fire_suppression_total': area_fire_supp_total,
+                    'cladding_total': area_cladding_total,
+                    'canopy_schedule_subtotal': area_canopy_schedule_subtotal,
+                    'area_total': area_total,
+                    'area_subtotal': area_total,  # Alternative name for template compatibility
+                    'canopies': processed_canopies,  # Use processed canopies with has_cladding flag
+                    'has_sdu': area.get('options', {}).get('sdu', False),
+                    'sdu_pricing': area.get('sdu_pricing', {}),
+                    
+                    # Additional template compatibility variables
+                    'has_marvel': area.get('options', {}).get('marvel', False),
+                    'marvel_pricing': area.get('marvel_pricing', {}),
+                    'has_vent_clg': area.get('options', {}).get('vent_clg', False),
+                    'uve_price': uvc_price,  # Alternative spelling for template compatibility
+                    'sdu_subtotal': sdu_price,  # SDU subtotal for template compatibility
+                    'sdu': {  # SDU data object with pricing structure that matches template expectations
+                        'pricing': {
+                            'final_carcass_price': 0,
+                            'final_electrical_price': 0,
+                            'live_site_test_price': 0,
+                            'has_live_test': False,
+                            'total_price': 0
+                        }
+                    },
+                }
+            totals['areas'].append(area_data)
+    
+    area_process_time = time.time() - area_process_start
+    print(f"   ✅ Area processing complete: {area_process_time:.3f}s")
+    
+    # Calculate base project total
+    base_calc_start = time.time()
+    print(f"   🧮 Calculating base project total...")
+    
+    # Base project total should NOT include RecoAir pricing - it has separate schedules
+    base_project_total = (
+        totals['total_canopy_price'] +
+        totals['total_fire_suppression_price'] +
+        totals['total_cladding_price'] +
+        totals['total_delivery_installation'] +
+        totals['total_commissioning'] +
+        totals['total_uvc_price'] +
+        totals['total_sdu_price'] +
+        totals['total_vent_clg_price'] +
+        totals.get('total_marvel_price', 0) +
+        totals['total_uv_extra_over_cost']
+    )
+    
+    base_calc_time = time.time() - base_calc_start
+    print(f"   ✅ Base calculation complete: {base_calc_time:.3f}s")
+    
+    # Collect SDU data to merge with area data
+    sdu_merge_start = time.time()
+    print(f"   📡 Collecting SDU data for merging...")
+    sdu_data_list = collect_sdu_data(project_data, excel_file_path, cached_wb)
+    
+    # Create a lookup dictionary for SDU data by level_area_combined
+    sdu_lookup = {sdu['level_area_combined']: sdu for sdu in sdu_data_list}
+    
+    # Update area data with actual SDU pricing and recalculate totals
+    for area_data in totals['areas']:
+        level_area_combined = area_data['level_area_combined']
+        if level_area_combined in sdu_lookup:
+            sdu_info = sdu_lookup[level_area_combined]
+            sdu_detailed_pricing = sdu_info.get('pricing', {})
+            
+            # Update the sdu.pricing structure with actual data
+            area_data['sdu']['pricing'] = sdu_detailed_pricing
+            
+            # Calculate actual SDU subtotal from detailed pricing
+            sdu_subtotal = sdu_detailed_pricing.get('total_price', 0)
+            area_data['sdu_subtotal'] = sdu_subtotal  # Update subtotal
+            
+            # Recalculate area total using actual SDU pricing instead of basic sdu_price
+            old_sdu_price = area_data['sdu_price']  # Basic SDU price used in original calculation
+            area_data['sdu_price'] = sdu_subtotal   # Update to use detailed pricing
+            
+            # Update area total by replacing the old SDU price with the new detailed pricing
+            area_data['area_total'] = area_data['area_total'] - old_sdu_price + sdu_subtotal
+            area_data['area_subtotal'] = area_data['area_total']  # Keep alternative name in sync
+            
+            # Update global totals as well
+            totals['total_sdu_price'] = totals['total_sdu_price'] - old_sdu_price + sdu_subtotal
+            
+            print(f"         ✅ Updated {level_area_combined}: SDU subtotal ${sdu_subtotal}, Area total ${area_data['area_total']}")
+    
+    sdu_merge_time = time.time() - sdu_merge_start
+    print(f"   ✅ SDU data merging complete: {sdu_merge_time:.3f}s")
     
     # Get contract total from Excel if available
+    contract_start = time.time()
+    print(f"   📋 Reading contract totals from Excel...")
+    
     if excel_file_path and os.path.exists(excel_file_path):
         try:
-            wb = load_workbook(excel_file_path, data_only=True)
+            # Use cached workbook if available, otherwise load fresh
+            if cached_wb:
+                wb = cached_wb
+                print(f"      ✅ Using cached workbook")
+                wb_load_time = 0
+            else:
+                wb_load_start = time.time()
+                wb = load_workbook(excel_file_path, data_only=True)
+                wb_load_time = time.time() - wb_load_start
+                print(f"      📖 Excel loaded: {wb_load_time:.3f}s")
+            
             # Look for CONTRACT sheet (exact match or numbered variant like CONTRACT1)
             contract_sheet = None
             for sheet_name in wb.sheetnames:
@@ -1381,166 +1818,35 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
                     break
             
             if contract_sheet:
+                print(f"      📊 Reading contract totals...")
                 # Get contract total from J9
                 contract_total = contract_sheet['J9'].value
                 if contract_total and float(contract_total) > 0:
                     totals['contract_total_price'] = float(contract_total)
+                    print(f"      ✅ Contract total found: {totals['contract_total_price']}")
+            else:
+                print(f"      ℹ️  No CONTRACT sheet found")
         except Exception as e:
-            print(f"Warning: Could not read contract total: {str(e)}")
+            print(f"      ❌ Contract total read error: {str(e)}")
+    else:
+        print(f"      ℹ️  No Excel file for contract totals")
     
-    for level in project_data.get('levels', []):
-        for area in level.get('areas', []):
-            # Skip areas that only have RecoAir systems (no canopies) - they belong in separate RecoAir quotation
-            canopies = area.get('canopies', [])
-            has_canopies = len(canopies) > 0
-            has_recoair_only = area.get('options', {}).get('recoair', False) and not has_canopies
-            
-            if has_recoair_only:
-                continue  # Skip RecoAir-only areas from main quotation
-            
-            level_area_combined = f"{level.get('level_name', '')} - {area.get('name', '')}"
-            
-            area_totals = {
-                'level_name': level.get('level_name', ''),
-                'area_name': area.get('name', ''),
-                'level_area_combined': level_area_combined,
-                'canopy_count': len(canopies),
-                'has_canopies': len(canopies) > 0,  # Boolean flag for easy template checking
-                'canopy_total': 0,
-                'fire_suppression_total': 0,
-                'cladding_total': 0,
-                'delivery_installation_price': area.get('delivery_installation_price', 0),
-                'commissioning_price': area.get('commissioning_price', 0),
-                'uvc_price': area.get('uvc_price', 0),
-                'sdu_price': area.get('sdu_price', 0),
-                'recoair_price': area.get('recoair_price', 0),
-                'canopy_schedule_subtotal': 0,  # Canopy total + delivery + commissioning (excluding fire suppression)
-                'area_subtotal': 0,
-                'canopies': [],
-                
-                # Add UV Extra Over support
-                'has_uv_extra_over': area.get('options', {}).get('uv_extra_over', False),
-                'uv_extra_over_cost': area.get('uv_extra_over_cost', 0),
-                'extra_overs': area.get('options', {}).get('uv_extra_over', False),  # Easy flag for templates
-                
-                # Add SDU data if this area has SDU
-                'has_sdu': area.get('options', {}).get('sdu', False),
-                'sdu': sdu_data_by_area.get(level_area_combined, {}),
-                
-                # Add MARVEL data if this area has MARVEL
-                'has_marvel': area.get('options', {}).get('marvel', False),
-                'marvel_price': area.get('marvel_price', 0),
-                'marvel_pricing': area.get('marvel_pricing', {
-                    'factory_components': 0,
-                    'onsite_installation': 0,
-                    'commissioning': 0,
-                    'total_price': 0
-                })
-            }
-            
-            # Calculate canopy and fire suppression totals for this area
-            for canopy in canopies:
-                canopy_price = canopy.get('canopy_price', 0) or 0
-                fire_suppression_price = canopy.get('fire_suppression_price', 0) or 0
-                cladding_price = canopy.get('cladding_price', 0) or 0
-                
-                area_totals['canopy_total'] += canopy_price
-                area_totals['fire_suppression_total'] += fire_suppression_price
-                area_totals['cladding_total'] += cladding_price
-                
-                # Add individual canopy pricing info
-                area_totals['canopies'].append({
-                    'reference_number': canopy.get('reference_number', ''),
-                    'model': canopy.get('model', ''),
-                    'canopy_price': canopy_price,
-                    'fire_suppression_price': fire_suppression_price,
-                    'cladding_price': cladding_price,
-                    'fire_suppression_tank_quantity': canopy.get('fire_suppression_tank_quantity', 0),
-                    'has_cladding': canopy.get('cladding_price', 0) > 0 or canopy.get('wall_cladding', {}).get('type') not in ['None', None]
-                })
-                
-                # Add to project totals
-                totals['total_canopies'] += 1
-                totals['total_canopy_price'] += canopy_price
-                totals['total_fire_suppression_price'] += fire_suppression_price
-                totals['total_cladding_price'] += cladding_price
-            
-            # Calculate SDU subtotal from detailed pricing if available
-            sdu_subtotal = 0
-            sdu_data = sdu_data_by_area.get(level_area_combined, {})
-            if sdu_data and sdu_data.get('pricing', {}):
-                sdu_pricing = sdu_data['pricing']
-                sdu_subtotal = (
-                    sdu_pricing.get('final_carcass_price', 0) +
-                    sdu_pricing.get('final_electrical_price', 0) +
-                    (sdu_pricing.get('live_site_test_price', 0) if sdu_pricing.get('has_live_test', False) else 0)
-                )
-            
-            # Add SDU subtotal to area totals
-            area_totals['sdu_subtotal'] = sdu_subtotal
-            
-            # Calculate area subtotal (excluding RecoAir price - RecoAir has separate quotation)
-            # Use SDU subtotal if available, otherwise fall back to sdu_price
-            sdu_total_for_area = sdu_subtotal if sdu_subtotal > 0 else area_totals['sdu_price']
-            
-            area_totals['area_subtotal'] = (
-                area_totals['canopy_total'] + 
-                area_totals['fire_suppression_total'] + 
-                area_totals['cladding_total'] +
-                area_totals['delivery_installation_price'] + 
-                area_totals['commissioning_price'] +
-                area_totals['uvc_price'] +
-                sdu_total_for_area +
-                area_totals['marvel_price']
-                # Note: recoair_price excluded - RecoAir systems have separate quotation
-            )
-            
-            # Calculate canopy schedule subtotal (canopy total + delivery + commissioning, excluding fire suppression)
-            area_totals['canopy_schedule_subtotal'] = (
-                area_totals['canopy_total'] + 
-                area_totals['delivery_installation_price'] + 
-                area_totals['commissioning_price']
-            )
-            
-            # Add to project totals
-            totals['total_delivery_installation'] += area_totals['delivery_installation_price']
-            totals['total_commissioning'] += area_totals['commissioning_price']
-            totals['total_uvc_price'] += area_totals['uvc_price']
-            totals['total_sdu_price'] += area_totals['sdu_price']
-            totals['total_sdu_subtotal'] += sdu_subtotal  # Add SDU subtotal to project totals
-            totals['total_recoair_price'] += area_totals['recoair_price']
-            totals['total_marvel_price'] += area_totals['marvel_price']
-            
-            # Update UV Extra Over cost and flag
-            if area.get('options', {}).get('uv_extra_over', False):
-                totals['total_uv_extra_over_cost'] += area.get('uv_extra_over_cost', 0)
-                totals['has_any_uv_extra_over'] = True
-            
-            totals['areas'].append(area_totals)
+    contract_time = time.time() - contract_start
+    print(f"   ✅ Contract processing complete: {contract_time:.3f}s")
     
-    # Calculate project total (excluding RecoAir price - RecoAir has separate quotation)
-    # Use SDU subtotal if available, otherwise fall back to SDU price
-    sdu_total_for_project = totals['total_sdu_subtotal'] if totals['total_sdu_subtotal'] > 0 else totals['total_sdu_price']
+    # Read contract systems totals for project total calculation
+    contract_systems_start = time.time()
+    print(f"   🏗️  Reading contract systems totals...")
     
-    # Calculate base project total (without contract total)
-    base_project_total = (
-        totals['total_canopy_price'] + 
-        totals['total_fire_suppression_price'] + 
-        totals['total_cladding_price'] +
-        totals['total_delivery_installation'] + 
-        totals['total_commissioning'] +
-        totals['total_uvc_price'] +
-        sdu_total_for_project +
-        totals['total_marvel_price']
-        # Note: total_recoair_price excluded - RecoAir systems have separate quotation
-    )
-    
-    # Add contract system totals to project total
-    # Note: We use extract_system_total and supply_system_total which include all costs
-    contract_systems_total = 0
     if excel_file_path and os.path.exists(excel_file_path):
         try:
-            wb = load_workbook(excel_file_path, data_only=True)
+            # Use cached workbook if available, otherwise load fresh
+            if cached_wb:
+                wb = cached_wb
+                print(f"      ✅ Using cached workbook")
+            else:
+                wb = load_workbook(excel_file_path, data_only=True)
+            
             # Look for CONTRACT sheet
             contract_sheet = None
             for sheet_name in wb.sheetnames:
@@ -1558,11 +1864,44 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None) ->
                 supply_total = contract_sheet['N12'].value
                 if supply_total and isinstance(supply_total, (int, float)) and supply_total > 0:
                     contract_systems_total += float(supply_total)
+                    
+                print(f"      ✅ Contract systems total: {contract_systems_total}")
         except Exception as e:
-            print(f"Warning: Could not read contract system totals: {str(e)}")
+            print(f"      ❌ Contract systems read error: {str(e)}")
+    
+    contract_systems_time = time.time() - contract_systems_start
+    print(f"   ✅ Contract systems processing complete: {contract_systems_time:.3f}s")
+    
+    # Recalculate base project total with updated SDU pricing
+    final_calc_start = time.time()
+    updated_base_total = (
+        totals['total_canopy_price'] +
+        totals['total_fire_suppression_price'] +
+        totals['total_cladding_price'] +
+        totals['total_delivery_installation'] +
+        totals['total_commissioning'] +
+        totals['total_uvc_price'] +
+        totals['total_sdu_price'] +  # This now includes updated detailed SDU pricing
+        totals['total_vent_clg_price'] +
+        totals.get('total_marvel_price', 0) +
+        totals['total_uv_extra_over_cost']
+    )
     
     # Add contract systems total to project total
-    totals['project_total'] = base_project_total + contract_systems_total
+    totals['project_total'] = updated_base_total + contract_systems_total
+    final_calc_time = time.time() - final_calc_start
+    print(f"   ✅ Final total calculation (with updated SDU pricing): {final_calc_time:.3f}s")
+    
+    total_time = time.time() - start_time
+    print(f"💰 Pricing totals calculation COMPLETE: {total_time:.3f}s")
+    print(f"   📊 Breakdown:")
+    print(f"      - Initialization: {init_time - start_time:.3f}s")
+    print(f"      - Area processing: {area_process_time:.3f}s")
+    print(f"      - Base calculation: {base_calc_time:.3f}s")
+    print(f"      - SDU data merging: {sdu_merge_time:.3f}s")
+    print(f"      - Contract totals: {contract_time:.3f}s")
+    print(f"      - Contract systems: {contract_systems_time:.3f}s")
+    print(f"      - Final calculation: {final_calc_time:.3f}s")
     
     return totals
 
@@ -1707,130 +2046,178 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
     
     return scope_items
 
-def collect_sdu_data(project_data: Dict, excel_file_path: str = None) -> List[Dict]:
+def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=None) -> List[Dict]:
     """
-    Collect SDU data from project areas that have SDU systems.
-    Reads electrical services data from Excel sheets if available.
+    Collect SDU (Supply Diffusion Unit) data for areas with SDU systems.
     
     Args:
-        project_data (Dict): Project data with levels and areas
+        project_data (Dict): Project data
         excel_file_path (str, optional): Path to Excel file to extract detailed SDU data
+        cached_wb (optional): Pre-loaded Excel workbook to avoid reloading
         
     Returns:
-        List[Dict]: List of SDU data for each area with SDU systems
+        List[Dict]: SDU data for each area that has SDU systems
     """
+    import time
+    start_time = time.time()
+    print(f"📡 Starting SDU data collection...")
+    
     sdu_areas = []
     
-    try:
-        # Import here to avoid circular imports
-        from utils.excel import extract_sdu_electrical_services
-        from openpyxl import load_workbook
+    # Process each level and area to find SDU systems
+    area_scan_start = time.time()
+    print(f"   🔍 Scanning areas for SDU systems...")
+    
+    for level in project_data.get('levels', []):
+        level_name = level.get('level_name', '')
         
-        # Load Excel workbook if path is provided
-        wb = None
-        if excel_file_path and os.path.exists(excel_file_path):
-            try:
-                wb = load_workbook(excel_file_path, data_only=True)
-            except Exception as e:
-                print(f"Warning: Could not load Excel file for SDU data: {str(e)}")
-        
-        for level in project_data.get('levels', []):
-            level_name = level.get('level_name', '')
+        for area_index, area in enumerate(level.get('areas', [])):
+            area_name = area.get('name', '')
+            level_area_combined = f"{level_name} - {area_name}"
+            area_number = area_index + 1  # Areas are numbered starting from 1
             
-            for area in level.get('areas', []):
-                area_name = area.get('name', '')
+            # Check if this area has SDU systems
+            if not area.get('options', {}).get('sdu', False):
+                continue
+            
+            print(f"      📡 Found SDU area: {level_area_combined} (Area {area_number})")
+            
+            # Initialize SDU area data
+            sdu_area = {
+                'level_name': level_name,
+                'area_name': area_name,
+                'area_number': area_number,  # Add area number for sheet name construction
+                'level_area_combined': level_area_combined,
+                'has_sdu': True,
+                'sdu_price': area.get('sdu_price', 0),
+                'pricing': {},  # Detailed pricing from Excel
+                'electrical_services': {},  # Electrical services data from Excel
+                'gas_services': {  # Initialize gas services
+                    'gas_manifold': 0,
+                    'gas_connection_15mm': 0,
+                    'gas_connection_20mm': 0,
+                    'gas_connection_25mm': 0,
+                    'gas_connection_32mm': 0,
+                    'gas_solenoid_valve': 0
+                },
+                'water_services': {  # Initialize water services
+                    'cws_manifold_22mm': 0,
+                    'cws_manifold_15mm': 0,
+                    'hws_manifold': 0,
+                    'water_connection_15mm': 0,
+                    'water_connection_22mm': 0,
+                    'water_connection_28mm': 0
+                },
+                'pricing': {  # Initialize pricing data
+                    'final_carcass_price': 0,
+                    'final_electrical_price': 0,
+                    'live_site_test_price': 0,
+                    'has_live_test': False,
+                    'total_price': 0
+                }
+            }
+            
+            sdu_areas.append(sdu_area)
+    
+    area_scan_time = time.time() - area_scan_start
+    print(f"   ✅ Area scan complete: {area_scan_time:.3f}s - Found {len(sdu_areas)} SDU areas")
+    
+    # Extract detailed data from Excel if available
+    if excel_file_path and os.path.exists(excel_file_path) and len(sdu_areas) > 0:
+        excel_start = time.time()
+        print(f"   📖 Loading Excel for detailed SDU data...")
+        
+        try:
+            # Use cached workbook if available, otherwise load fresh
+            if cached_wb:
+                wb = cached_wb
+                print(f"      ✅ Using cached workbook")
+                wb_load_time = 0
+            else:
+                wb_load_start = time.time()
+                from openpyxl import load_workbook
+                wb = load_workbook(excel_file_path, data_only=True)
+                wb_load_time = time.time() - wb_load_start
+                print(f"      ✅ Excel loaded: {wb_load_time:.3f}s")
+            
+            # Process each SDU area
+            for sdu_area in sdu_areas:
+                area_process_start = time.time()
+                print(f"      🔧 Processing {sdu_area['level_area_combined']}...")
                 
-                # Check if this area has SDU system
-                if area.get('options', {}).get('sdu', False):
-                    # Create basic SDU data structure
-                    sdu_data = {
-                        'level_name': level_name,
-                        'area_name': area_name,
-                        'level_area_combined': f"{level_name} - {area_name}",
-                        'sdu_price': area.get('sdu_price', 0),
-                        
-                        # Default electrical services (will be updated if Excel data is available)
-                        'electrical_services': {
-                            'distribution_board': 0,
-                            'single_phase_switched_spur': 0,
-                            'three_phase_socket_outlet': 0,
-                            'switched_socket_outlet': 0,
-                            'emergency_knock_off': 0,
-                            'ring_main_inc_2no_sso': 0
-                        },
-                        
-                        # Gas services (now implemented)
-                        'gas_services': {
-                            'gas_manifold': 0,
-                            'gas_connection_15mm': 0,
-                            'gas_connection_20mm': 0,
-                            'gas_connection_25mm': 0,
-                            'gas_connection_32mm': 0,
-                            'gas_solenoid_valve': 0
-                        },
-                        
-                        # Water services (now implemented)
-                        'water_services': {
-                            'cws_manifold_22mm': 0,
-                            'cws_manifold_15mm': 0,
-                            'hws_manifold': 0,
-                            'water_connection_15mm': 0,
-                            'water_connection_22mm': 0,
-                            'water_connection_28mm': 0
-                        },
-                        
-                        # Pricing information (now implemented)
-                        'pricing': {
-                            'carcass_only_price': 0,
-                            'electrical_mechanical_price': 0,
-                            'live_site_test_price': 0,
-                            'delivery_price': 0,
-                            'final_carcass_price': 0,
-                            'final_electrical_price': 0,
-                            'has_live_test': False
-                        }
+                level_name = sdu_area['level_name']
+                area_number = sdu_area['area_number']
+                
+                # Look for SDU sheet for this area using the correct naming pattern
+                sdu_sheet_name = f"SDU - {level_name} ({area_number})"
+                if sdu_sheet_name in wb.sheetnames:
+                    print(f"         📊 Reading SDU sheet: {sdu_sheet_name}")
+                    sdu_sheet = wb[sdu_sheet_name]
+                    
+                    # Extract electrical, gas, and water services data
+                    from utils.excel import extract_sdu_electrical_services
+                    services_data = extract_sdu_electrical_services(sdu_sheet)
+                    sdu_area['electrical_services'] = services_data.get('electrical_services', {})
+                    sdu_area['gas_services'] = services_data.get('gas_services', {
+                        'gas_manifold': 0,
+                        'gas_connection_15mm': 0,
+                        'gas_connection_20mm': 0,
+                        'gas_connection_25mm': 0,
+                        'gas_connection_32mm': 0,
+                        'gas_solenoid_valve': 0
+                    })
+                    sdu_area['water_services'] = services_data.get('water_services', {
+                        'cws_manifold_22mm': 0,
+                        'cws_manifold_15mm': 0,
+                        'hws_manifold': 0,
+                        'water_connection_15mm': 0,
+                        'water_connection_22mm': 0,
+                        'water_connection_28mm': 0
+                    })
+                    
+                    # Extract pricing data using the services data structure
+                    # The extract_sdu_electrical_services function already extracted pricing data
+                    extracted_pricing = services_data.get('pricing', {})
+                    
+                    # Update pricing data with the extracted values
+                    sdu_area['pricing'] = {
+                        'final_carcass_price': extracted_pricing.get('final_carcass_price', 0),
+                        'final_electrical_price': extracted_pricing.get('final_electrical_price', 0),
+                        'live_site_test_price': extracted_pricing.get('live_site_test_price', 0),
+                        'has_live_test': extracted_pricing.get('has_live_test', False),
+                        'total_price': (
+                            extracted_pricing.get('final_carcass_price', 0) +
+                            extracted_pricing.get('final_electrical_price', 0) +
+                            (extracted_pricing.get('live_site_test_price', 0) if extracted_pricing.get('has_live_test', False) else 0)
+                        )
                     }
                     
-                    # Try to extract electrical services data from Excel if workbook is available
-                    if wb:
-                        # Find the corresponding SDU sheet
-                        sdu_sheet_name = None
-                        for sheet_name in wb.sheetnames:
-                            if 'SDU - ' in sheet_name and level_name in sheet_name:
-                                # Check if this sheet corresponds to this area by checking the title in B1
-                                try:
-                                    sheet = wb[sheet_name]
-                                    title = sheet['B1'].value
-                                    if title and area_name in title:
-                                        sdu_sheet_name = sheet_name
-                                        break
-                                except:
-                                    continue
-                        
-                        if sdu_sheet_name:
-                            try:
-                                sdu_sheet = wb[sdu_sheet_name]
-                                services_data = extract_sdu_electrical_services(sdu_sheet)
-                                # Update electrical, gas, water services, and pricing
-                                sdu_data['electrical_services'] = services_data.get('electrical_services', sdu_data['electrical_services'])
-                                sdu_data['gas_services'] = services_data.get('gas_services', sdu_data['gas_services'])
-                                sdu_data['water_services'] = services_data.get('water_services', sdu_data['water_services'])
-                                sdu_data['pricing'] = services_data.get('pricing', sdu_data['pricing'])
-                                print(f"Extracted services for {level_name} - {area_name}:")
-                                print(f"  Electrical: {services_data.get('electrical_services', {})}")
-                                print(f"  Gas: {services_data.get('gas_services', {})}")
-                                print(f"  Water: {services_data.get('water_services', {})}")
-                                print(f"  Pricing: {services_data.get('pricing', {})}")
-                            except Exception as e:
-                                print(f"Warning: Could not extract services from {sdu_sheet_name}: {str(e)}")
-                    
-                    sdu_areas.append(sdu_data)
+                    print(f"         ✅ Pricing extracted: Total ${sdu_area['pricing']['total_price']}")
+                else:
+                    print(f"         ⚠️  No SDU sheet found: {sdu_sheet_name}")
+                
+                area_process_time = time.time() - area_process_start
+                print(f"      ✅ {sdu_area['level_area_combined']} processed: {area_process_time:.3f}s")
+                
+        except Exception as e:
+            excel_error_time = time.time() - excel_start
+            print(f"      ❌ Excel processing error after {excel_error_time:.3f}s: {str(e)}")
         
-        # Close workbook if we opened it
-        if wb:
-            wb.close()
+        excel_time = time.time() - excel_start
+        print(f"   ✅ Excel processing complete: {excel_time:.3f}s")
+    else:
+        if len(sdu_areas) == 0:
+            print(f"   ℹ️  No SDU areas found - skipping Excel processing")
+        else:
+            print(f"   ℹ️  No Excel file provided - using basic SDU data only")
     
-    except Exception as e:
-        print(f"Warning: Could not collect SDU data: {str(e)}")
+    total_time = time.time() - start_time
+    print(f"📡 SDU data collection COMPLETE: {total_time:.3f}s")
+    print(f"   📊 Breakdown:")
+    print(f"      - Area scanning: {area_scan_time:.3f}s")
+    if excel_file_path and len(sdu_areas) > 0:
+        excel_time = time.time() - (excel_start if 'excel_start' in locals() else start_time)
+        print(f"      - Excel processing: {excel_time:.3f}s")
+    print(f"   ✅ Collected data for {len(sdu_areas)} SDU areas")
     
     return sdu_areas 

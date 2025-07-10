@@ -275,6 +275,89 @@ UV-C     UV-C System, supplied and installed     {{ format_currency(area.uvc_pri
 {% endfor %}
 ```
 
+## 🏗️ VENT CLG (Ventilated Ceiling) Schedule Implementation
+
+### Data Sources
+
+- **Item Number**: Read from Excel cell B12 in VENT CLG sheets
+- **Coverage**: Read from Excel cell C37 (square metres)
+- **Unit Price**: Read from Excel cell J13
+- **Delivery & Installation**: Read from Excel cell J54
+- **Testing & Commissioning**: Read from Excel cell J55
+- **VENT CLG Selection**: Area-level option `area.options.vent_clg`
+
+### Available Data
+
+Each area with VENT CLG has:
+
+- `area.vent_clg_price`: Total price (unit + delivery + commissioning)
+- `area.vent_clg_detailed_pricing`: Detailed breakdown including:
+  - `item_number`: Item reference (from B12)
+  - `coverage_sqm`: Square metre coverage (from C37)
+  - `unit_price`: Base unit price (from J13)
+  - `delivery_installation_price`: Delivery & installation (from J54)
+  - `commissioning_price`: Testing & commissioning (from J55)
+  - `total_price`: Complete system price
+
+### Features
+
+- **Conditional Display**: VENT CLG Schedule only appears if area has VENT CLG selected
+- **Detailed Breakdown**: Shows unit price, delivery/installation, and commissioning separately
+- **Coverage Information**: Displays square metre coverage from Excel
+- **Professional Format**: Matches the style of other schedules
+
+### Template Usage
+
+```jinja2
+{% for level in levels %}
+  {% for area in level.areas %}
+    {% if area.options.vent_clg %}
+{{ area.level_area_name | upper }} - VENT CLG SCHEDULE
+
+| ITEM | VENTILATED CEILING SCHEDULE | PRICE |
+|------|----------------------------|-------|
+| {{ area.vent_clg_detailed_pricing.item_number }} | Ventilated Ceiling System ({{ area.vent_clg_detailed_pricing.coverage_sqm }}m²) | {{ format_currency(area.vent_clg_detailed_pricing.unit_price) }} |
+| | Delivery & Installation | {{ format_currency(area.vent_clg_detailed_pricing.delivery_installation_price) }} |
+| | Testing & Commissioning | {{ format_currency(area.vent_clg_detailed_pricing.commissioning_price) }} |
+| | **SUB TOTAL** | **{{ format_currency(area.vent_clg_price) }}** |
+
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+```
+
+### Alternative Text Format
+
+```jinja2
+{% for level in levels %}
+  {% for area in level.areas %}
+    {% if area.options.vent_clg %}
+{{ area.level_area_name | upper }} - VENT CLG SCHEDULE
+
+ITEM     VENTILATED CEILING SCHEDULE              PRICE
+----------------------------------------------------------
+{{ area.vent_clg_detailed_pricing.item_number }}    Ventilated Ceiling System ({{ area.vent_clg_detailed_pricing.coverage_sqm }}m²)    {{ format_currency(area.vent_clg_detailed_pricing.unit_price) }}
+         Delivery & Installation                  {{ format_currency(area.vent_clg_detailed_pricing.delivery_installation_price) }}
+         Testing & Commissioning                  {{ format_currency(area.vent_clg_detailed_pricing.commissioning_price) }}
+                                                  SUB TOTAL: {{ format_currency(area.vent_clg_price) }}
+
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+```
+
+### Compact Format
+
+```jinja2
+{% for level in levels %}
+  {% for area in level.areas %}
+    {% if area.options.vent_clg %}
+🏗️ {{ area.level_area_name }} - VENT CLG SYSTEM ({{ area.vent_clg_detailed_pricing.coverage_sqm }}m²): {{ format_currency(area.vent_clg_price) }}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+```
+
 ### Integration with Other Schedules
 
 ```jinja2
@@ -293,6 +376,14 @@ UV-C     UV-C System, supplied and installed     {{ format_currency(area.uvc_pri
 🔬 UV-C CONTROL SCHEDULE
 UV-C     UV-C System, supplied and installed     {{ format_currency(area.uvc_price) }}
                                                   SUB TOTAL: {{ format_currency(area.uvc_price) }}
+{% endif %}
+
+{% if area.vent_clg_price > 0 %}
+🏗️ VENT CLG SCHEDULE
+{{ area.vent_clg_detailed_pricing.item_number }}    Ventilated Ceiling System ({{ area.vent_clg_detailed_pricing.coverage_sqm }}m²)    {{ format_currency(area.vent_clg_detailed_pricing.unit_price) }}
+         Delivery & Installation                  {{ format_currency(area.vent_clg_detailed_pricing.delivery_installation_price) }}
+         Testing & Commissioning                  {{ format_currency(area.vent_clg_detailed_pricing.commissioning_price) }}
+                                                  SUB TOTAL: {{ format_currency(area.vent_clg_price) }}
 {% endif %}
 
 {% if area.cladding_total > 0 %}
@@ -326,11 +417,14 @@ SUB TOTAL: {{ format_currency(area.fire_suppression_total) }}
 2. **Cladding Schedule**: `area.cladding_total` includes all cladding prices for the area
 3. **Fire Suppression Schedule**: `area.fire_suppression_total` includes all fire suppression prices (base unit + commissioning share + delivery share per unit)
 4. **UV-C Schedule**: `area.uvc_price` includes UV-C system price for the area
-5. **Area Subtotal**: `area.area_subtotal` includes everything (canopy schedule + cladding + fire suppression + UV-C + SDU + RecoAir)
-6. **Currency Formatting**: Use `{{ format_currency(amount) }}` for proper £ formatting
-7. **Conditional Display**:
+5. **VENT CLG Schedule**: `area.vent_clg_price` includes complete ventilated ceiling system price for the area
+6. **Area Subtotal**: `area.area_subtotal` includes everything (canopy schedule + cladding + fire suppression + UV-C + SDU + RecoAir + VENT CLG)
+7. **Currency Formatting**: Use `{{ format_currency(amount) }}` for proper £ formatting
+8. **Conditional Display**:
    - Use `{% if area.fire_suppression_total > 0 %}` to show fire suppression only when applicable
    - Use `{% if area.cladding_total > 0 %}` to show cladding only when applicable
    - Use `{% if area.uvc_price > 0 %}` to show UV-C only when applicable
+   - Use `{% if area.vent_clg_price > 0 %}` to show VENT CLG only when applicable
    - Use `{% if area.options.uvc %}` to check if UV-C is selected for the area
+   - Use `{% if area.options.vent_clg %}` to check if VENT CLG is selected for the area
    - Use `{% if canopy.has_cladding %}` to check individual canopy cladding
