@@ -1511,10 +1511,10 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                     area_units_total += base_unit_price  # Use base price from N12
                     total_delivery_price += delivery_price
             
-            # Get commissioning price (should be read from N46 in Excel)
-            # For now, use area commissioning price or default to 0
-            commissioning_price = area.get('recoair_commissioning_price', 0) or area.get('commissioning_price', 0)
-            print(commissioning_price)
+            # Get commissioning price from N46 in Excel (recoair_commissioning_price)
+            # Do NOT fallback to general area commissioning price - use only RecoAir-specific commissioning
+            commissioning_price = area.get('recoair_commissioning_price', 0)
+            print(f"RecoAir commissioning price for {level_area_combined}: {commissioning_price}")
             
             # Get flat pack data if available
             flat_pack_data = area.get('recoair_flat_pack', {})
