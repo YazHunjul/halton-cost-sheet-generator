@@ -1048,7 +1048,25 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'total_recoair_price': pricing_totals.get('total_recoair_price', 0),
         'total_vent_clg_price': pricing_totals.get('total_vent_clg_price', 0),
         'total_marvel_price': pricing_totals.get('total_marvel_price', 0),
-        'project_total': pricing_totals.get('project_total', 0),
+        'project_total': pricing_totals.get('project_total', 0),  # Includes contract systems
+        
+        # Base systems total plus contract total (includes all pricing except contract systems M12/N12)
+        'base_systems_total': (
+            pricing_totals.get('total_canopy_price', 0) +
+            pricing_totals.get('total_fire_suppression_price', 0) +
+            pricing_totals.get('total_cladding_price', 0) +
+            pricing_totals.get('total_delivery_installation', 0) +
+            pricing_totals.get('total_commissioning', 0) +
+            pricing_totals.get('total_uvc_price', 0) +
+            pricing_totals.get('total_sdu_price', 0) +
+            pricing_totals.get('total_vent_clg_price', 0) +
+            pricing_totals.get('total_marvel_price', 0) +
+            pricing_totals.get('total_uv_extra_over_cost', 0) +
+            pricing_totals.get('contract_total_price', 0)  # Include contract total from J9
+        ),
+        
+        # Job total from Excel T28 (most accurate - uses Excel's own calculations)
+        'job_total_t28': pricing_totals.get('job_total_t28', 0),
         
         # RecoAir-specific data (for RecoAir templates)
         'recoair_areas': [area for level in enhanced_levels for area in level.get('areas', []) if area.get('options', {}).get('recoair', False)],
@@ -1596,6 +1614,7 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
         'has_any_uv_extra_over': False,
         'project_total': 0,
         'contract_total_price': 0,
+        'job_total_t28': 0,  # Job total from Excel T28
         'areas': []  # Store area-level data for templates
     }
     
@@ -1738,7 +1757,7 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
     base_calc_start = time.time()
     print(f"   🧮 Calculating base project total...")
     
-    # Base project total should NOT include RecoAir pricing - it has separate schedules
+    # Base project total calculation
     base_project_total = (
         totals['total_canopy_price'] +
         totals['total_fire_suppression_price'] +
@@ -1775,20 +1794,28 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
             
             # Calculate actual SDU subtotal from detailed pricing
             sdu_subtotal = sdu_detailed_pricing.get('total_price', 0)
-            area_data['sdu_subtotal'] = sdu_subtotal  # Update subtotal
             
-            # Recalculate area total using actual SDU pricing instead of basic sdu_price
-            old_sdu_price = area_data['sdu_price']  # Basic SDU price used in original calculation
-            area_data['sdu_price'] = sdu_subtotal   # Update to use detailed pricing
-            
-            # Update area total by replacing the old SDU price with the new detailed pricing
-            area_data['area_total'] = area_data['area_total'] - old_sdu_price + sdu_subtotal
-            area_data['area_subtotal'] = area_data['area_total']  # Keep alternative name in sync
-            
-            # Update global totals as well
-            totals['total_sdu_price'] = totals['total_sdu_price'] - old_sdu_price + sdu_subtotal
-            
-            print(f"         ✅ Updated {level_area_combined}: SDU subtotal ${sdu_subtotal}, Area total ${area_data['area_total']}")
+            # Only update pricing if we have actual detailed pricing data (> 0)
+            # Otherwise, keep the basic SDU price from project data
+            if sdu_subtotal > 0:
+                area_data['sdu_subtotal'] = sdu_subtotal  # Update subtotal
+                
+                # Recalculate area total using actual SDU pricing instead of basic sdu_price
+                old_sdu_price = area_data['sdu_price']  # Basic SDU price used in original calculation
+                area_data['sdu_price'] = sdu_subtotal   # Update to use detailed pricing
+                
+                # Update area total by replacing the old SDU price with the new detailed pricing
+                area_data['area_total'] = area_data['area_total'] - old_sdu_price + sdu_subtotal
+                area_data['area_subtotal'] = area_data['area_total']  # Keep alternative name in sync
+                
+                # Update global totals as well
+                totals['total_sdu_price'] = totals['total_sdu_price'] - old_sdu_price + sdu_subtotal
+                
+                print(f"         ✅ Updated {level_area_combined}: SDU subtotal ${sdu_subtotal}, Area total ${area_data['area_total']}")
+            else:
+                # Keep basic SDU pricing - no detailed pricing available
+                area_data['sdu_subtotal'] = area_data['sdu_price']  # Use basic price as subtotal
+                print(f"         ℹ️  Kept basic SDU pricing for {level_area_combined}: ${area_data['sdu_price']}")
     
     sdu_merge_time = time.time() - sdu_merge_start
     print(f"   ✅ SDU data merging complete: {sdu_merge_time:.3f}s")
@@ -1826,6 +1853,18 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
                     print(f"      ✅ Contract total found: {totals['contract_total_price']}")
             else:
                 print(f"      ℹ️  No CONTRACT sheet found")
+            
+            # Read job total from JOB TOTAL sheet T28
+            if 'JOB TOTAL' in wb.sheetnames:
+                job_total_sheet = wb['JOB TOTAL']
+                t28_value = job_total_sheet['T28'].value
+                if t28_value and isinstance(t28_value, (int, float)) and t28_value > 0:
+                    totals['job_total_t28'] = float(t28_value)
+                    print(f"      ✅ Job total T28 found: {totals['job_total_t28']}")
+                else:
+                    print(f"      ℹ️  No valid T28 value in JOB TOTAL sheet (value: {t28_value})")
+            else:
+                print(f"      ℹ️  No JOB TOTAL sheet found")
         except Exception as e:
             print(f"      ❌ Contract total read error: {str(e)}")
     else:
@@ -1887,8 +1926,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
         totals['total_uv_extra_over_cost']
     )
     
-    # Add contract systems total to project total
-    totals['project_total'] = updated_base_total + contract_systems_total
+    # Add contract systems total and contract total price to project total
+    totals['project_total'] = updated_base_total + contract_systems_total + totals.get('contract_total_price', 0)
     final_calc_time = time.time() - final_calc_start
     print(f"   ✅ Final total calculation (with updated SDU pricing): {final_calc_time:.3f}s")
     
