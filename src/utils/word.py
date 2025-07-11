@@ -1068,6 +1068,9 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         # Job total from Excel T28 (most accurate - uses Excel's own calculations)
         'job_total_t28': pricing_totals.get('job_total_t28', 0),
         
+        # Main quote total excluding RecoAir (T28 - T24)
+        'job_total_excluding_recoair': pricing_totals.get('job_total_t28', 0) - pricing_totals.get('recoair_price_t24', 0),
+        
         # RecoAir-specific data (for RecoAir templates)
         'recoair_areas': [area for level in enhanced_levels for area in level.get('areas', []) if area.get('options', {}).get('recoair', False)],
         'total_recoair_units': sum(len(area.get('recoair_units', [])) for level in enhanced_levels for area in level.get('areas', [])),
@@ -1854,7 +1857,7 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
             else:
                 print(f"      ℹ️  No CONTRACT sheet found")
             
-            # Read job total from JOB TOTAL sheet T28
+            # Read job total from JOB TOTAL sheet T28 and RecoAir price from T24
             if 'JOB TOTAL' in wb.sheetnames:
                 job_total_sheet = wb['JOB TOTAL']
                 t28_value = job_total_sheet['T28'].value
@@ -1863,6 +1866,15 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
                     print(f"      ✅ Job total T28 found: {totals['job_total_t28']}")
                 else:
                     print(f"      ℹ️  No valid T28 value in JOB TOTAL sheet (value: {t28_value})")
+                
+                # Read RecoAir price from T24
+                t24_value = job_total_sheet['T24'].value
+                if t24_value and isinstance(t24_value, (int, float)):
+                    totals['recoair_price_t24'] = float(t24_value)
+                    print(f"      ✅ RecoAir price T24 found: {totals['recoair_price_t24']}")
+                else:
+                    print(f"      ℹ️  No valid T24 value in JOB TOTAL sheet (value: {t24_value})")
+                    totals['recoair_price_t24'] = 0
             else:
                 print(f"      ℹ️  No JOB TOTAL sheet found")
         except Exception as e:

@@ -2715,21 +2715,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                     contract_sheet.add_data_validation(plant_dv)
                     plant_dv.add('D58:D58')
                     
-                    # Move second column data from F to G for Canopies section
-                    # First, identify the range of rows that need to be moved
-                    start_row = 1  # Start from the first row
-                    end_row = 100  # Go through all potential rows
-                    
-                    # Move data from column F to G
-                    for row in range(start_row, end_row + 1):
-                        cell_f = contract_sheet[f'F{row}']
-                        cell_g = contract_sheet[f'G{row}']
-                        if cell_f.value is not None:
-                            cell_g.value = cell_f.value
-                            cell_f.value = None
-                            # Copy formatting if needed
-                            if cell_f.has_style:
-                                cell_g._style = cell_f._style
+                    # Contract sheet structure should remain as-is
+                    # Do not move data between columns as it interferes with duct formulas
                     
                     print("✓ Added dropdowns and fixed column alignment in contract sheet")
                 except Exception as e:
@@ -4548,6 +4535,7 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         recoair_sheets = []
         marvel_sheets = []
         vent_clg_sheets = []
+        contract_sheets = []
         other_sheets = []
         
         for sheet_name in wb.sheetnames:
@@ -4567,6 +4555,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
                     marvel_sheets.append(sheet_name)
                 elif 'VENT CLG - ' in sheet_name:
                     vent_clg_sheets.append(sheet_name)  # VENT CLG gets its own category
+                elif sheet_name == 'CONTRACT' or sheet_name.startswith('CONTRACT'):
+                    contract_sheets.append(sheet_name)
                 elif sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData']:
                     other_sheets.append(sheet_name)
         
@@ -4662,6 +4652,17 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
             summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G10"  # Cost reference
             current_row += 1
         
+        # CONTRACT sheets
+        for sheet_name in contract_sheets:
+            summary_sheet[f'A{current_row}'] = 'CONTRACT'
+            summary_sheet[f'B{current_row}'] = sheet_name
+            safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!J9,0)"  # Price - CONTRACT uses J9
+            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!G9,0)"  # Cost - CONTRACT uses G9 (assumed based on pattern)
+            summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!J9"  # Price reference
+            summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G9"  # Cost reference
+            current_row += 1
+        
         # OTHER sheets
         for sheet_name in other_sheets:
             summary_sheet[f'A{current_row}'] = 'OTHER'
@@ -4683,9 +4684,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'B{summary_row + 5}'] = 'RECOAIR TOTAL'
         summary_sheet[f'B{summary_row + 6}'] = 'MARVEL TOTAL'
         summary_sheet[f'B{summary_row + 7}'] = 'VENT CLG TOTAL'
-        summary_sheet[f'B{summary_row + 8}'] = 'OTHER TOTAL'
-        summary_sheet[f'B{summary_row + 9}'] = 'UV EXTRA OVER TOTAL'
-        summary_sheet[f'B{summary_row + 10}'] = 'PROJECT TOTAL'
+        summary_sheet[f'B{summary_row + 8}'] = 'CONTRACT TOTAL'
+        summary_sheet[f'B{summary_row + 9}'] = 'OTHER TOTAL'
+        summary_sheet[f'B{summary_row + 10}'] = 'UV EXTRA OVER TOTAL'
+        summary_sheet[f'B{summary_row + 11}'] = 'PROJECT TOTAL'
         
         # Calculate totals using SUMIF formulas
         summary_sheet[f'C{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",C:C)'  # Sum all CANOPY sheet prices
@@ -4695,9 +4697,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'C{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",C:C)'  # Sum all RECOAIR sheet prices
         summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",C:C)'  # Sum all MARVEL sheet prices
         summary_sheet[f'C{summary_row + 7}'] = f'=SUMIF(A:A,"VENT CLG",C:C)'  # Sum all VENT CLG sheet prices
-        summary_sheet[f'C{summary_row + 8}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
-        summary_sheet[f'C{summary_row + 9}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",C:C)'  # Sum all UV Extra Over sheet prices (tracked but excluded)
-        summary_sheet[f'C{summary_row + 10}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}+C{summary_row + 8}'  # Project price total (excludes UV Extra Over)
+        summary_sheet[f'C{summary_row + 8}'] = f'=SUMIF(A:A,"CONTRACT",C:C)'  # Sum all CONTRACT sheet prices
+        summary_sheet[f'C{summary_row + 9}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
+        summary_sheet[f'C{summary_row + 10}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",C:C)'  # Sum all UV Extra Over sheet prices (tracked but excluded)
+        summary_sheet[f'C{summary_row + 11}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}+C{summary_row + 8}+C{summary_row + 9}'  # Project price total (excludes UV Extra Over)
         
         # Cost totals
         summary_sheet[f'D{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",D:D)'  # Sum all CANOPY sheet costs
@@ -4707,9 +4710,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'D{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",D:D)'  # Sum all RECOAIR sheet costs
         summary_sheet[f'D{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",D:D)'  # Sum all MARVEL sheet costs
         summary_sheet[f'D{summary_row + 7}'] = f'=SUMIF(A:A,"VENT CLG",D:D)'  # Sum all VENT CLG sheet costs
-        summary_sheet[f'D{summary_row + 8}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
-        summary_sheet[f'D{summary_row + 9}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",D:D)'  # Sum all UV Extra Over sheet costs (tracked but excluded)
-        summary_sheet[f'D{summary_row + 10}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}+D{summary_row + 8}'  # Project cost total (excludes UV Extra Over)
+        summary_sheet[f'D{summary_row + 8}'] = f'=SUMIF(A:A,"CONTRACT",D:D)'  # Sum all CONTRACT sheet costs
+        summary_sheet[f'D{summary_row + 9}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
+        summary_sheet[f'D{summary_row + 10}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",D:D)'  # Sum all UV Extra Over sheet costs (tracked but excluded)
+        summary_sheet[f'D{summary_row + 11}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}+D{summary_row + 8}+D{summary_row + 9}'  # Project cost total (excludes UV Extra Over)
         
         # Store the summary row positions for JOB TOTAL to reference
         summary_sheet['H1'] = 'Reference Cells for JOB TOTAL'
@@ -4720,19 +4724,21 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet['H6'] = f'RECOAIR_PRICE_TOTAL=C{summary_row + 5}'
         summary_sheet['H7'] = f'MARVEL_PRICE_TOTAL=C{summary_row + 6}'
         summary_sheet['H8'] = f'VENT_CLG_PRICE_TOTAL=C{summary_row + 7}'
-        summary_sheet['H9'] = f'OTHER_PRICE_TOTAL=C{summary_row + 8}'
-        summary_sheet['H10'] = f'UV_EXTRA_OVER_PRICE_TOTAL=C{summary_row + 9}'
-        summary_sheet['H11'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 10}'
-        summary_sheet['H12'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
-        summary_sheet['H13'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
-        summary_sheet['H14'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
-        summary_sheet['H15'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
-        summary_sheet['H16'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
-        summary_sheet['H17'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
-        summary_sheet['H18'] = f'VENT_CLG_COST_TOTAL=D{summary_row + 7}'
-        summary_sheet['H19'] = f'OTHER_COST_TOTAL=D{summary_row + 8}'
-        summary_sheet['H20'] = f'UV_EXTRA_OVER_COST_TOTAL=D{summary_row + 9}'
-        summary_sheet['H21'] = f'PROJECT_COST_TOTAL=D{summary_row + 10}'
+        summary_sheet['H9'] = f'CONTRACT_PRICE_TOTAL=C{summary_row + 8}'
+        summary_sheet['H10'] = f'OTHER_PRICE_TOTAL=C{summary_row + 9}'
+        summary_sheet['H11'] = f'UV_EXTRA_OVER_PRICE_TOTAL=C{summary_row + 10}'
+        summary_sheet['H12'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 11}'
+        summary_sheet['H13'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
+        summary_sheet['H14'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
+        summary_sheet['H15'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
+        summary_sheet['H16'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
+        summary_sheet['H17'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
+        summary_sheet['H18'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
+        summary_sheet['H19'] = f'VENT_CLG_COST_TOTAL=D{summary_row + 7}'
+        summary_sheet['H20'] = f'CONTRACT_COST_TOTAL=D{summary_row + 8}'
+        summary_sheet['H21'] = f'OTHER_COST_TOTAL=D{summary_row + 9}'
+        summary_sheet['H22'] = f'UV_EXTRA_OVER_COST_TOTAL=D{summary_row + 10}'
+        summary_sheet['H23'] = f'PROJECT_COST_TOTAL=D{summary_row + 11}'
         
         print(f"Created PRICING_SUMMARY sheet with {current_row - 2} individual sheet references")
         
@@ -4794,8 +4800,9 @@ def update_job_total_sheet(wb: Workbook) -> None:
             19: ('Vent Clg', 'VENT CLG'),       # Row 19: Vent Clg -> VENT CLG (dedicated category)
             20: ('MARVEL', 'MARVEL'),           # Row 20: MARVEL
             21: ('Edge', 'EBOX'),               # Row 21: Edge -> EBOX
+            26: ('Contract', 'CONTRACT'),       # Row 22: Contract -> CONTRACT (was Aerolys, now repurposed for Contract)
             24: ('Reco', 'RECOAIR'),            # Row 24: Reco -> RECOAIR
-            # Rows 22 (Aerolys), 23 (Pollustop), 25 (Reactaway) intentionally excluded - these are unused systems
+            # Row 23 (Pollustop), 25 (Reactaway) intentionally excluded - these are unused systems
         }
         
         # Clear all Job Total cells first
