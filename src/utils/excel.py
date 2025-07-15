@@ -1931,8 +1931,8 @@ def write_sdu_metadata(sheet: Worksheet, project_data: Dict, template_version: s
             # Date at F8 (corrected from G8)
             write_to_cell_safe(sheet, 'F8', project_data.get('date', ''))
             
-            # Revision at K9
-            write_to_cell_safe(sheet, 'K8', project_data.get('revision', ''))
+            # Revision at K7
+            write_to_cell_safe(sheet, 'K7', project_data.get('revision', ''))
             
         except Exception as e:
             print(f"Warning: Could not write SDU project metadata: {str(e)}")
@@ -5706,8 +5706,8 @@ def write_metadata_with_mappings(sheet: Worksheet, project_data: Dict, cell_mapp
             value = project_data.get(field)
             try:
                 if field == "revision":
-                    # For first revision (A), leave the cell empty; otherwise use the revision value
-                    sheet[cell] = "" if value == "A" else (value or "")
+                    # Use provided revision or leave blank for initial version (no revision)
+                    sheet[cell] = value or ""
                 elif value:
                     if field == "estimator":
                         from utils.word import get_combined_initials
@@ -5729,8 +5729,8 @@ def write_metadata_with_mappings(sheet: Worksheet, project_data: Dict, cell_mapp
                                 break
                     # Try writing again after unmerging
                     if field == "revision":
-                        # For first revision (A), leave the cell empty; otherwise use the revision value
-                        sheet[cell] = "" if value == "A" else (value or "")
+                        # Use provided revision or leave blank for initial version (no revision)
+                        sheet[cell] = value or ""
                     elif value:
                         if field == "estimator":
                             from utils.word import get_combined_initials
