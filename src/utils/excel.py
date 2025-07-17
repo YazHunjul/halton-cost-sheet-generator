@@ -1962,15 +1962,15 @@ def write_vent_clg_metadata(sheet: Worksheet, project_data: Dict, template_versi
         template_version (str): Version of the template being used
     """
     try:
-        # Use C column for basic project info as specified by user
+        # Use correct column mappings for VENT CLG sheet
         cell_mappings = {
-            "project_number": "C3",  # Job No
-            "company": "C5",         # Customer
-            "estimator": "C7",       # Sales Manager / Estimator
-            "project_name": "C3",    # Project Name (same as job number)
-            "project_location": "C5", # Project Location (same as customer)
-            "date": "C7",            # Date (same as estimator)
-            "revision": "K7",        # Revision
+            "project_number": "C3",     # Job No in column C
+            "company": "C5",            # Customer in column C
+            "estimator": "C7",          # Sales Manager / Estimator in column C
+            "project_name": "F3",       # Project Name in column F
+            "project_location": "F5",   # Project Location in column F
+            "date": "F7",               # Date in column F
+            "revision": "K7",           # Revision in column K
         }
         
         # Helper function to safely write to cells
