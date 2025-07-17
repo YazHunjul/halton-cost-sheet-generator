@@ -2866,8 +2866,12 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 # Check if area has UV-C system (area-level option)
                 has_uvc = area.get("options", {}).get("uvc", False)
                 
-                # Check if area has SDU system (area-level option)
+                # Check if area has SDU system (area-level option) - DEPRECATED
                 has_sdu = area.get("options", {}).get("sdu", False)
+                
+                # Check which canopies have SDU enabled (canopy-level option)
+                sdu_canopies = [canopy for canopy in area_canopies if canopy.get('options', {}).get('sdu', False)]
+                has_canopy_sdu = len(sdu_canopies) > 0
                 
                 # Check if area has RecoAir system (area-level option)
                 has_recoair = area.get("options", {}).get("recoair", False)
@@ -2958,25 +2962,34 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             else:
                                 print(f"Warning: Not enough EBOX sheets in template for UV-C system in area {area_name}")
                         
-                        # Create SDU sheet if SDU is selected for this area
-                        if has_sdu:
+                        # Create SDU sheets for each canopy that has SDU enabled
+                        for canopy in sdu_canopies:
                             if sdu_sheets:
                                 sdu_sheet_name = sdu_sheets.pop(0)
                                 sdu_sheet = wb[sdu_sheet_name]
-                                new_sdu_name = f"SDU - {level_name} ({area_number})"
+                                canopy_ref = canopy.get('reference_number', 'C???')
+                                new_sdu_name = f"SDU - {level_name} ({area_number}) - {canopy_ref}"
+                                # Ensure sheet name doesn't exceed Excel's 31 character limit
+                                if len(new_sdu_name) > 31:
+                                    new_sdu_name = f"SDU - L{level_number} ({area_number}) - {canopy_ref}"
+                                    if len(new_sdu_name) > 31:
+                                        new_sdu_name = f"SDU - L{level_number}({area_number}) - {canopy_ref}"
+                                        if len(new_sdu_name) > 31:
+                                            new_sdu_name = f"SDU - L{level_number}({area_number})-{canopy_ref}"
+                                
                                 sdu_sheet.title = new_sdu_name
                                 sdu_sheet.sheet_state = 'visible'
                                 sdu_sheet.sheet_properties.tabColor = tab_color
                                 
                                 # Write SDU-specific metadata to SDU sheet (C/G columns)
                                 write_sdu_metadata(sdu_sheet, project_data, template_version)
-                                # Set SDU sheet title in B1
-                                sdu_sheet['B1'] = f"{level_name} - {area_name} - SDU SYSTEM"
+                                # Set SDU sheet title in B1 - include canopy reference
+                                sdu_sheet['B1'] = f"{level_name} - {area_name} - SDU SYSTEM - {canopy_ref}"
                                 
                                 # Add SDU specific dropdowns
                                 add_sdu_dropdowns(sdu_sheet)
                             else:
-                                print(f"Warning: Not enough SDU sheets in template for SDU system in area {area_name}")
+                                print(f"Warning: Not enough SDU sheets in template for SDU system in canopy {canopy.get('reference_number', 'C???')} in area {area_name}")
                         
                         # Create RECOAIR sheet if RecoAir is selected for this area
                         if has_recoair:
@@ -3135,7 +3148,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         raise Exception(f"Not enough CANOPY sheets in template for area {area_name}")
                 
                 # Handle case where UV-C, SDU, RecoAir, and/or Marvel are selected but no canopies exist (edge case)
-                elif (has_uvc or has_sdu or has_recoair or has_marvel or has_vent_clg) and not area_canopies:
+                elif (has_uvc or has_sdu or has_canopy_sdu or has_recoair or has_marvel or has_vent_clg) and not area_canopies:
                     # Create EBOX sheet if UV-C is selected
                     if has_uvc:
                         if edge_box_sheets:
@@ -3153,7 +3166,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         else:
                             print(f"Warning: Not enough EBOX sheets in template for UV-C system in area {area_name}")
                     
-                    # Create SDU sheet if SDU is selected
+                    # Create SDU sheet if area-level SDU is selected (edge case - no canopies exist)
+                    # Note: Canopy-level SDU cannot exist without canopies
                     if has_sdu:
                         if sdu_sheets:
                             sdu_sheet_name = sdu_sheets.pop(0)

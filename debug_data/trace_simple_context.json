@@ -1,0 +1,48 @@
+{
+  "client_name": "TRACE TEST",
+  "project_name": "TRACE PROJECT",
+  "canopies": [
+    {
+      "reference_number": "1223",
+      "model": "KVI",
+      "extract_static": "-",
+      "mua_volume": "-",
+      "supply_static": "-",
+      "lighting_type": "-",
+      "extract_volume": "-",
+      "length": "1000",
+      "width": "-",
+      "height": "555",
+      "sections": "-",
+      "configuration": "Wall"
+    }
+  ],
+  "levels": [
+    {
+      "level_name": "Level 1",
+      "areas": [
+        {
+          "name": "Main Kitchen",
+          "canopies": [
+            {
+              "reference_number": "1223",
+              "model": "KVI",
+              "extract_static": "-",
+              "mua_volume": "-",
+              "supply_static": "-",
+              "lighting_type": "-",
+              "extract_volume": "-",
+              "length": "1000",
+              "width": "-",
+              "height": "555",
+              "sections": "-",
+              "configuration": "Wall"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "total_canopies": 1,
+  "wall_cladding_items": []
+}

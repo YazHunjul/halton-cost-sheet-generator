@@ -835,7 +835,8 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
             # Fire suppression and cladding are separate schedules with their own subtotals
             area_canopy_schedule_subtotal = area_canopy_total + area_delivery_installation + area_commissioning
             area_uvc_price = area.get('uvc_price', 0)
-            area_sdu_price = area.get('sdu_price', 0)
+            # Calculate total SDU price from all canopies in this area
+            area_sdu_price = sum(canopy.get('sdu_price', 0) for canopy in area.get('canopies', []))
             area_recoair_price = area.get('recoair_price', 0)
             area_vent_clg_price = area.get('vent_clg_price', 0)
             area_marvel_price = area.get('marvel_price', 0)
@@ -885,7 +886,8 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 
                 # SDU pricing data (if available)
                 'sdu_pricing': area.get('sdu_pricing', {}),
-                'has_sdu': area.get('options', {}).get('sdu', False),
+                # Check if any canopy in this area has SDU
+                'has_sdu': any(canopy.get('options', {}).get('sdu', False) for canopy in area.get('canopies', [])),
                 
                 # VENT CLG data (if available)
                 'has_vent_clg': area.get('options', {}).get('vent_clg', False)
@@ -1660,7 +1662,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
             delivery_installation = area.get('delivery_installation_price', 0)
             commissioning = area.get('commissioning_price', 0)
             uvc_price = area.get('uvc_price', 0)
-            sdu_price = area.get('sdu_price', 0)  # Basic price from project data
+            # Calculate total SDU price from all canopies in this area
+            sdu_price = sum(canopy.get('sdu_price', 0) for canopy in area.get('canopies', []))
             recoair_price = area.get('recoair_price', 0)
             vent_clg_price = area.get('vent_clg_price', 0)
             marvel_price = area.get('marvel_price', 0)
@@ -1732,7 +1735,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
                     'area_total': area_total,
                     'area_subtotal': area_total,  # Alternative name for template compatibility
                     'canopies': processed_canopies,  # Use processed canopies with has_cladding flag
-                    'has_sdu': area.get('options', {}).get('sdu', False),
+                    # Check if any canopy in this area has SDU
+                    'has_sdu': any(canopy.get('options', {}).get('sdu', False) for canopy in area.get('canopies', [])),
                     'sdu_pricing': area.get('sdu_pricing', {}),
                     
                     # Additional template compatibility variables
@@ -1782,42 +1786,52 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
     print(f"   📡 Collecting SDU data for merging...")
     sdu_data_list = collect_sdu_data(project_data, excel_file_path, cached_wb)
     
-    # Create a lookup dictionary for SDU data by level_area_combined
-    sdu_lookup = {sdu['level_area_combined']: sdu for sdu in sdu_data_list}
+    # Create a lookup dictionary for SDU data by canopy reference
+    sdu_lookup = {sdu['canopy_reference']: sdu for sdu in sdu_data_list}
     
     # Update area data with actual SDU pricing and recalculate totals
     for area_data in totals['areas']:
         level_area_combined = area_data['level_area_combined']
-        if level_area_combined in sdu_lookup:
-            sdu_info = sdu_lookup[level_area_combined]
-            sdu_detailed_pricing = sdu_info.get('pricing', {})
+        
+        # Aggregate SDU pricing from all canopies in this area
+        area_sdu_subtotal = 0
+        area_has_detailed_sdu = False
+        
+        # Get all SDU data for canopies in this area
+        for level in project_data.get('levels', []):
+            if level.get('level_name') == area_data['level_name']:
+                for area in level.get('areas', []):
+                    if area.get('name') == area_data['area_name']:
+                        for canopy in area.get('canopies', []):
+                            canopy_ref = canopy.get('reference_number', '')
+                            if canopy_ref in sdu_lookup:
+                                sdu_info = sdu_lookup[canopy_ref]
+                                sdu_detailed_pricing = sdu_info.get('pricing', {})
+                                canopy_sdu_total = sdu_detailed_pricing.get('total_price', 0)
+                                if canopy_sdu_total > 0:
+                                    area_sdu_subtotal += canopy_sdu_total
+                                    area_has_detailed_sdu = True
+        
+        # Update area SDU pricing if we have detailed data
+        if area_has_detailed_sdu and area_sdu_subtotal > 0:
+            area_data['sdu_subtotal'] = area_sdu_subtotal  # Update subtotal
             
-            # Update the sdu.pricing structure with actual data
-            area_data['sdu']['pricing'] = sdu_detailed_pricing
+            # Recalculate area total using actual SDU pricing instead of basic sdu_price
+            old_sdu_price = area_data['sdu_price']  # Basic SDU price used in original calculation
+            area_data['sdu_price'] = area_sdu_subtotal   # Update to use detailed pricing
             
-            # Calculate actual SDU subtotal from detailed pricing
-            sdu_subtotal = sdu_detailed_pricing.get('total_price', 0)
+            # Update area total by replacing the old SDU price with the new detailed pricing
+            area_data['area_total'] = area_data['area_total'] - old_sdu_price + area_sdu_subtotal
+            area_data['area_subtotal'] = area_data['area_total']  # Keep alternative name in sync
             
-            # Only update pricing if we have actual detailed pricing data (> 0)
-            # Otherwise, keep the basic SDU price from project data
-            if sdu_subtotal > 0:
-                area_data['sdu_subtotal'] = sdu_subtotal  # Update subtotal
-                
-                # Recalculate area total using actual SDU pricing instead of basic sdu_price
-                old_sdu_price = area_data['sdu_price']  # Basic SDU price used in original calculation
-                area_data['sdu_price'] = sdu_subtotal   # Update to use detailed pricing
-                
-                # Update area total by replacing the old SDU price with the new detailed pricing
-                area_data['area_total'] = area_data['area_total'] - old_sdu_price + sdu_subtotal
-                area_data['area_subtotal'] = area_data['area_total']  # Keep alternative name in sync
-                
-                # Update global totals as well
-                totals['total_sdu_price'] = totals['total_sdu_price'] - old_sdu_price + sdu_subtotal
-                
-                print(f"         ✅ Updated {level_area_combined}: SDU subtotal ${sdu_subtotal}, Area total ${area_data['area_total']}")
-            else:
-                # Keep basic SDU pricing - no detailed pricing available
-                area_data['sdu_subtotal'] = area_data['sdu_price']  # Use basic price as subtotal
+            # Update global totals as well
+            totals['total_sdu_price'] = totals['total_sdu_price'] - old_sdu_price + area_sdu_subtotal
+            
+            print(f"         ✅ Updated {level_area_combined}: SDU subtotal ${area_sdu_subtotal}, Area total ${area_data['area_total']}")
+        else:
+            # Keep basic SDU pricing - no detailed pricing available
+            area_data['sdu_subtotal'] = area_data['sdu_price']  # Use basic price as subtotal
+            if area_data['sdu_price'] > 0:
                 print(f"         ℹ️  Kept basic SDU pricing for {level_area_combined}: ${area_data['sdu_price']}")
     
     sdu_merge_time = time.time() - sdu_merge_start
@@ -2099,7 +2113,7 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
 
 def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=None) -> List[Dict]:
     """
-    Collect SDU (Supply Diffusion Unit) data for areas with SDU systems.
+    Collect SDU (Supply Diffusion Unit) data for canopies with SDU systems.
     
     Args:
         project_data (Dict): Project data
@@ -2107,7 +2121,7 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
         cached_wb (optional): Pre-loaded Excel workbook to avoid reloading
         
     Returns:
-        List[Dict]: SDU data for each area that has SDU systems
+        List[Dict]: SDU data for each canopy that has SDU systems
     """
     import time
     start_time = time.time()
@@ -2115,9 +2129,9 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
     
     sdu_areas = []
     
-    # Process each level and area to find SDU systems
-    area_scan_start = time.time()
-    print(f"   🔍 Scanning areas for SDU systems...")
+    # Process each level, area, and canopy to find SDU systems
+    canopy_scan_start = time.time()
+    print(f"   🔍 Scanning canopies for SDU systems...")
     
     for level in project_data.get('levels', []):
         level_name = level.get('level_name', '')
@@ -2127,51 +2141,48 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
             level_area_combined = f"{level_name} - {area_name}"
             area_number = area_index + 1  # Areas are numbered starting from 1
             
-            # Check if this area has SDU systems
-            if not area.get('options', {}).get('sdu', False):
-                continue
-            
-            print(f"      📡 Found SDU area: {level_area_combined} (Area {area_number})")
-            
-            # Initialize SDU area data
-            sdu_area = {
-                'level_name': level_name,
-                'area_name': area_name,
-                'area_number': area_number,  # Add area number for sheet name construction
-                'level_area_combined': level_area_combined,
-                'has_sdu': True,
-                'sdu_price': area.get('sdu_price', 0),
-                'pricing': {},  # Detailed pricing from Excel
-                'electrical_services': {},  # Electrical services data from Excel
-                'gas_services': {  # Initialize gas services
-                    'gas_manifold': 0,
-                    'gas_connection_15mm': 0,
-                    'gas_connection_20mm': 0,
-                    'gas_connection_25mm': 0,
-                    'gas_connection_32mm': 0,
-                    'gas_solenoid_valve': 0
-                },
-                'water_services': {  # Initialize water services
-                    'cws_manifold_22mm': 0,
-                    'cws_manifold_15mm': 0,
-                    'hws_manifold': 0,
-                    'water_connection_15mm': 0,
-                    'water_connection_22mm': 0,
-                    'water_connection_28mm': 0
-                },
-                'pricing': {  # Initialize pricing data
-                    'final_carcass_price': 0,
-                    'final_electrical_price': 0,
-                    'live_site_test_price': 0,
-                    'has_live_test': False,
-                    'total_price': 0
+            # Process each canopy in this area
+            for canopy in area.get('canopies', []):
+                # Check if this canopy has SDU systems
+                if not canopy.get('options', {}).get('sdu', False):
+                    continue
+                
+                canopy_ref = canopy.get('reference_number', '')
+                print(f"      📡 Found SDU canopy: {canopy_ref} in {level_area_combined}")
+                
+                # Initialize SDU canopy data
+                sdu_canopy = {
+                    'level_name': level_name,
+                    'area_name': area_name,
+                    'area_number': area_number,  # Keep for compatibility
+                    'canopy_reference': canopy_ref,
+                    'level_area_combined': level_area_combined,
+                    'has_sdu': True,
+                    'sdu_price': canopy.get('sdu_price', 0),
+                    'pricing': {},  # Detailed pricing from Excel
+                    'electrical_services': {},  # Electrical services data from Excel
+                        'gas_services': {  # Initialize gas services
+                        'gas_manifold': 0,
+                        'gas_connection_15mm': 0,
+                        'gas_connection_20mm': 0,
+                        'gas_connection_25mm': 0,
+                        'gas_connection_32mm': 0,
+                        'gas_solenoid_valve': 0
+                    },
+                    'water_services': {  # Initialize water services
+                        'cws_manifold_22mm': 0,
+                        'cws_manifold_15mm': 0,
+                        'hws_manifold': 0,
+                        'water_connection_15mm': 0,
+                        'water_connection_22mm': 0,
+                        'water_connection_28mm': 0
+                    }
                 }
-            }
-            
-            sdu_areas.append(sdu_area)
+                    
+                sdu_areas.append(sdu_canopy)
     
-    area_scan_time = time.time() - area_scan_start
-    print(f"   ✅ Area scan complete: {area_scan_time:.3f}s - Found {len(sdu_areas)} SDU areas")
+    canopy_scan_time = time.time() - canopy_scan_start
+    print(f"   ✅ Canopy scan complete: {canopy_scan_time:.3f}s - Found {len(sdu_areas)} SDU canopies")
     
     # Extract detailed data from Excel if available
     if excel_file_path and os.path.exists(excel_file_path) and len(sdu_areas) > 0:
@@ -2199,8 +2210,9 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
                 level_name = sdu_area['level_name']
                 area_number = sdu_area['area_number']
                 
-                # Look for SDU sheet for this area using the correct naming pattern
-                sdu_sheet_name = f"SDU - {level_name} ({area_number})"
+                # Look for SDU sheet for this canopy using the correct naming pattern
+                canopy_ref = sdu_area['canopy_reference']
+                sdu_sheet_name = f"SDU - {canopy_ref}"
                 if sdu_sheet_name in wb.sheetnames:
                     print(f"         📊 Reading SDU sheet: {sdu_sheet_name}")
                     sdu_sheet = wb[sdu_sheet_name]
@@ -2258,17 +2270,17 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
         print(f"   ✅ Excel processing complete: {excel_time:.3f}s")
     else:
         if len(sdu_areas) == 0:
-            print(f"   ℹ️  No SDU areas found - skipping Excel processing")
+            print(f"   ℹ️  No SDU canopies found - skipping Excel processing")
         else:
             print(f"   ℹ️  No Excel file provided - using basic SDU data only")
     
     total_time = time.time() - start_time
     print(f"📡 SDU data collection COMPLETE: {total_time:.3f}s")
     print(f"   📊 Breakdown:")
-    print(f"      - Area scanning: {area_scan_time:.3f}s")
+    print(f"      - Canopy scanning: {canopy_scan_time:.3f}s")
     if excel_file_path and len(sdu_areas) > 0:
         excel_time = time.time() - (excel_start if 'excel_start' in locals() else start_time)
         print(f"      - Excel processing: {excel_time:.3f}s")
-    print(f"   ✅ Collected data for {len(sdu_areas)} SDU areas")
+    print(f"   ✅ Collected data for {len(sdu_areas)} SDU canopies")
     
     return sdu_areas 

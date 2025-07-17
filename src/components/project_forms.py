@@ -183,7 +183,7 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
             sdu = st.toggle(
                 "SDU",
                 key=sdu_key,
-                help="Toggle if SDU is needed for this area"
+                help="Toggle if SDU is needed for this area (DEPRECATED - SDU is now configured per canopy)"
             )
         
         with opt_col3:
@@ -214,7 +214,7 @@ def area_form(level_idx: int, area_idx: int, project_type: str, existing_area: D
         "name": area_name,
         "options": {
             "uvc": uvc if area_name else False,
-            "sdu": sdu if area_name else False,
+            "sdu": sdu if area_name else False,  # DEPRECATED - SDU is now configured per canopy
             "recoair": recoair if area_name else False,
             "vent_clg": vent_clg if area_name else False
         },

@@ -1,0 +1,92 @@
+{
+  "client_name": "Final Test Customer",
+  "company": "Final Test Company",
+  "address": "Final Test Address",
+  "project_name": "Final Formatting Test",
+  "location": "Final Test Location",
+  "project_number": "FINAL-2024",
+  "estimator": "Final Estimator",
+  "estimator_rank": "Lead Estimator",
+  "estimator_initials": "FE",
+  "date": "25 May 2024",
+  "halton_ref": "FINAL-2024/05/24",
+  "sales_contact_name": "Marc Byford",
+  "sales_contact_phone": "(07974 403322)",
+  "delivery_location": "Final Test Delivery",
+  "levels": [
+    {
+      "level_name": "Test Floor",
+      "areas": [
+        {
+          "name": "Test Kitchen",
+          "level_area_name": "Test Floor - Test Kitchen",
+          "canopies": [
+            {
+              "reference_number": "FINAL-001",
+              "model": "KVI",
+              "configuration": "Wall",
+              "length": "2000",
+              "width": "1200",
+              "height": "600",
+              "sections": "2",
+              "lighting_type": "LED STRIP",
+              "extract_volume": "1500.8",
+              "extract_static": "150",
+              "mua_volume": "-",
+              "supply_static": "-",
+              "cws_capacity": "-",
+              "hws_requirement": "-",
+              "hw_storage": "-",
+              "has_wash_capabilities": false,
+              "has_wall_cladding": false,
+              "wall_cladding": {
+                "type": "None",
+                "width": null,
+                "height": null,
+                "position": null
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "canopies": [
+    {
+      "level": "Test Floor",
+      "area": "Test Kitchen",
+      "level_area_combined": "Test Floor - Test Kitchen",
+      "location": "Test Floor - Test Kitchen",
+      "reference_number": "FINAL-001",
+      "model": "KVI",
+      "configuration": "Wall",
+      "length": "2000",
+      "width": "1200",
+      "height": "600",
+      "sections": "2",
+      "lighting_type": "LED STRIP",
+      "extract_volume": "1500.8",
+      "extract_static": "150",
+      "mua_volume": "-",
+      "supply_static": "-",
+      "cws_capacity": "-",
+      "hws_requirement": "-",
+      "hw_storage": "-",
+      "has_wash_capabilities": false,
+      "has_wall_cladding": false,
+      "wall_cladding": {
+        "type": "None",
+        "width": null,
+        "height": null,
+        "position": null
+      }
+    }
+  ],
+  "total_canopies": 1,
+  "dear_line": "Final Test Customer,",
+  "subject_line": "Final Formatting Test, Final Test Location",
+  "estimator_with_rank": "Final Estimator\nLead Estimator",
+  "current_date": "25 May 2025",
+  "current_year": 2025,
+  "wall_cladding_items": []
+}
