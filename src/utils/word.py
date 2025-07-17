@@ -2161,6 +2161,7 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
                     'level_area_combined': level_area_combined,
                     'has_sdu': True,
                     'sdu_price': canopy.get('sdu_price', 0),
+                    'sdu_item_number': canopy.get('sdu_item_number', ''),  # Get SDU item number from canopy data
                     'sdu_length': 'XXXX',  # Default SDU length - to be updated from Excel if available
                     'potrack': 'xxxxxxxxxxxxx',  # Default potrack - to be updated from Excel if available
                     'salamander_support': 'xxxxxxxxxxxxxx',  # Default - to be updated from Excel if available
@@ -2254,6 +2255,11 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
                     from utils.excel import extract_sdu_electrical_services
                     services_data = extract_sdu_electrical_services(sdu_sheet)
                     sdu_area['electrical_services'] = services_data.get('electrical_services', {})
+                    
+                    # Update SDU item number from Excel if available
+                    excel_sdu_item_number = services_data.get('sdu_item_number', '')
+                    if excel_sdu_item_number:
+                        sdu_area['sdu_item_number'] = excel_sdu_item_number
                     sdu_area['gas_services'] = services_data.get('gas_services', {
                         'gas_manifold': 0,
                         'gas_connection_15mm': 0,

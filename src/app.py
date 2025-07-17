@@ -1237,6 +1237,7 @@ def step3_canopy_configuration():
                             "extract_static": "",
                             "mua_volume": "",
                             "supply_static": "",
+                            "sdu_item_number": "",
                             "options": {"fire_suppression": False, "sdu": False},
                             "wall_cladding": {"type": "None", "width": None, "height": None, "position": None}
                         }
@@ -1267,6 +1268,7 @@ def step3_canopy_configuration():
                                         'width': st.session_state.get(f"{canopy_key}_width", 0),
                                         'height': st.session_state.get(f"{canopy_key}_height", 0),
                                         'sections': st.session_state.get(f"{canopy_key}_sections", 0),
+                                        'sdu_item_number': st.session_state.get(f"{canopy_key}_sdu_item", ''),
                                         'options': {
                                             'fire_suppression': st.session_state.get(f"{canopy_key}_fire", False),
                                             'sdu': st.session_state.get(f"{canopy_key}_sdu", False)
@@ -1357,6 +1359,16 @@ def step3_canopy_configuration():
                                             value=canopy.get('options', {}).get('sdu', False), 
                                             key=f"{canopy_key}_sdu",
                                             on_change=update_canopy_data)
+                        
+                        # SDU Item Number input (only show if SDU is checked)
+                        if st.session_state.get(f"{canopy_key}_sdu", False):
+                            sdu_item_number = st.text_input(
+                                "SDU Item Number",
+                                value=canopy.get('sdu_item_number', ''),
+                                key=f"{canopy_key}_sdu_item",
+                                help="Enter the item number for this SDU (will be written to B12)",
+                                on_change=update_canopy_data
+                            )
                         
                         # Wall Cladding Section  
                         st.markdown("**Wall Cladding:**")

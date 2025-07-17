@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python test_sdu_collection.py)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

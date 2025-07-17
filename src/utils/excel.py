@@ -1860,18 +1860,26 @@ def write_recoair_metadata(sheet: Worksheet, project_data: Dict, item_number: st
     except Exception as e:
         print(f"Warning: Could not write RECOAIR metadata: {str(e)}")
 
-def write_sdu_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None):
+def write_sdu_metadata(sheet: Worksheet, project_data: Dict, template_version: str = None, canopy_data: Dict = None):
     """
     Write project metadata to SDU sheet with specific cell mappings.
     
     Args:
         sheet (Worksheet): The SDU worksheet to write to
         project_data (Dict): Project data dictionary
+        template_version (str, optional): Template version
+        canopy_data (Dict, optional): Canopy data containing SDU item number
     """
     try:
         
         # Write SDU-specific data
         try:
+            # Write SDU item number to B12 (if provided), otherwise default to "SDU"
+            if canopy_data and canopy_data.get('sdu_item_number'):
+                sheet['B12'] = canopy_data['sdu_item_number']
+            else:
+                sheet['B12'] = "SDU"  # Default if no item number provided
+            
             # Write model name to C12
             sheet['C12'] = "SDU"  # Model name
             
@@ -2982,7 +2990,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 sdu_sheet.sheet_properties.tabColor = tab_color
                                 
                                 # Write SDU-specific metadata to SDU sheet (C/G columns)
-                                write_sdu_metadata(sdu_sheet, project_data, template_version)
+                                write_sdu_metadata(sdu_sheet, project_data, template_version, canopy)
                                 # Set SDU sheet title in B1 - include canopy reference
                                 sdu_sheet['B1'] = f"{level_name} - {area_name} - SDU SYSTEM - {canopy_ref}"
                                 
@@ -3178,7 +3186,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             sdu_sheet.sheet_properties.tabColor = tab_color
                             
                             # Write SDU-specific metadata to SDU sheet (C/G columns)
-                            write_sdu_metadata(sdu_sheet, project_data, template_version)
+                            # For area-level SDU (old template), we don't have canopy data
+                            write_sdu_metadata(sdu_sheet, project_data, template_version, None)
                             # Set SDU sheet title in B1
                             sdu_sheet['B1'] = f"{level_name} - {area_name} - SDU SYSTEM"
                             
@@ -4989,16 +4998,19 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
     """
     Extract electrical and gas services data from SDU sheet.
     Reads from the electrical services section (B35-B68) and gas services section (C71-C82).
+    Also reads the SDU item number from B12.
     
     Args:
         sheet (Worksheet): The SDU worksheet to read from
         
     Returns:
-        Dict: Electrical and gas services data with mapped values
+        Dict: Electrical and gas services data with mapped values, plus SDU item number
     """
     sheet_name = sheet.title
     
     try:
+        # Get SDU item number from B12
+        sdu_item_number = sheet['B12'].value or ""
         electrical_services = {
             'distribution_board': 0,
             'single_phase_switched_spur': 0,
@@ -5255,12 +5267,13 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
         pricing['final_carcass_price'] = pricing['carcass_only_price'] + half_delivery
         pricing['final_electrical_price'] = pricing['electrical_mechanical_price'] + half_delivery
         
-        # Combine electrical, gas, water services, and pricing
+        # Combine electrical, gas, water services, pricing, and SDU item number
         result = {
             'electrical_services': electrical_services,
             'gas_services': gas_services,
             'water_services': water_services,
-            'pricing': pricing
+            'pricing': pricing,
+            'sdu_item_number': sdu_item_number
         }
         
         return result
@@ -5300,7 +5313,8 @@ def extract_sdu_electrical_services(sheet: Worksheet) -> Dict:
                 'final_carcass_price': 0,
                 'final_electrical_price': 0,
                 'has_live_test': False
-            }
+            },
+            'sdu_item_number': ''
         }
 
 def validate_cell_data(sheet_name: str, cell_ref: str, value, expected_type: str, context: str = "") -> tuple:
