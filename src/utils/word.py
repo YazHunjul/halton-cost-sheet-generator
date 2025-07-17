@@ -851,6 +851,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
             # Enhanced area with transformed canopy data
             enhanced_area = {
                 'name': area_name,
+                'area_name': area_name,  # Add area_name key for consistency
                 'level_area_name': level_area_combined,
                 'level_area_combined': level_area_combined,  # Add this for template compatibility
                 'canopies': transformed_canopies,  # Use transformed data instead of raw data
@@ -1714,6 +1715,7 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
                 area_data = {
                     'level_area_combined': f"{level_name} - {area_name}",
                     'name': area_name,
+                    'area_name': area_name,  # Add area_name key for consistency
                     'level_name': level_name,
                     'has_canopies': len(area.get('canopies', [])) > 0,
                     'has_uv_extra_over': has_uv_extra_over,
@@ -2159,9 +2161,19 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
                     'level_area_combined': level_area_combined,
                     'has_sdu': True,
                     'sdu_price': canopy.get('sdu_price', 0),
+                    'sdu_length': 'XXXX',  # Default SDU length - to be updated from Excel if available
+                    'potrack': 'xxxxxxxxxxxxx',  # Default potrack - to be updated from Excel if available
+                    'salamander_support': 'xxxxxxxxxxxxxx',  # Default - to be updated from Excel if available
                     'pricing': {},  # Detailed pricing from Excel
-                    'electrical_services': {},  # Electrical services data from Excel
-                        'gas_services': {  # Initialize gas services
+                    'electrical_services': {  # Initialize electrical services with defaults
+                        'distribution_board': 0,
+                        'single_phase_switched_spur': 0,
+                        'three_phase_socket_outlet': 0,
+                        'switched_socket_outlet': 0,
+                        'emergency_knock_off': 0,
+                        'ring_main_inc_2no_sso': 0
+                    },
+                    'gas_services': {  # Initialize gas services
                         'gas_manifold': 0,
                         'gas_connection_15mm': 0,
                         'gas_connection_20mm': 0,
@@ -2212,8 +2224,29 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
                 
                 # Look for SDU sheet for this canopy using the correct naming pattern
                 canopy_ref = sdu_area['canopy_reference']
-                sdu_sheet_name = f"SDU - {canopy_ref}"
-                if sdu_sheet_name in wb.sheetnames:
+                
+                # Try multiple naming patterns to find the SDU sheet
+                possible_sheet_names = [
+                    f"SDU - {level_name} ({area_number}) - {canopy_ref}",
+                    f"SDU - L{area_number} ({area_number}) - {canopy_ref}",
+                    f"SDU - {canopy_ref}",
+                    # Also check for sheets that contain the canopy reference
+                ]
+                
+                sdu_sheet_name = None
+                for possible_name in possible_sheet_names:
+                    if possible_name in wb.sheetnames:
+                        sdu_sheet_name = possible_name
+                        break
+                
+                # If not found by exact match, search for sheets containing the canopy reference
+                if not sdu_sheet_name:
+                    for sheet_name in wb.sheetnames:
+                        if f"SDU" in sheet_name and canopy_ref in sheet_name:
+                            sdu_sheet_name = sheet_name
+                            break
+                
+                if sdu_sheet_name:
                     print(f"         📊 Reading SDU sheet: {sdu_sheet_name}")
                     sdu_sheet = wb[sdu_sheet_name]
                     

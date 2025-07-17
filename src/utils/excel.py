@@ -4078,14 +4078,21 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     area['options']['uvc'] = True
                                     break
         
-        # Check SDU sheets for SDU option
+        # Check SDU sheets for SDU option - both area-level and canopy-level
         for sheet_name in wb.sheetnames:
             if 'SDU - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value  # SDU sheets have title in B1
                 
+                # Parse the sheet name to get canopy reference
+                # Expected format: "SDU - Level Name (Area#) - CanopyRef"
+                sheet_parts = sheet_name.split(' - ')
+                canopy_ref = None
+                if len(sheet_parts) >= 3:
+                    canopy_ref = sheet_parts[-1].strip()
+                
                 if title_cell and ' - ' in title_cell and 'SDU SYSTEM' in title_cell:
-                    # Extract level and area from title like "Level 1 - Main Kitchen - SDU SYSTEM"
+                    # Extract level and area from title like "Level 1 - Main Kitchen - SDU SYSTEM - C001"
                     title_parts = title_cell.split(' - ')
                     if len(title_parts) >= 2:
                         level_name = title_parts[0]
@@ -4095,7 +4102,18 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         if level_name in levels_data:
                             for area in levels_data[level_name]:
                                 if area['name'] == area_name:
+                                    # Set area-level SDU option (for backward compatibility)
                                     area['options']['sdu'] = True
+                                    
+                                    # If we have a canopy reference, find and set the canopy-level SDU option
+                                    if canopy_ref:
+                                        for canopy in area.get('canopies', []):
+                                            if canopy.get('reference_number') == canopy_ref:
+                                                if 'options' not in canopy:
+                                                    canopy['options'] = {}
+                                                canopy['options']['sdu'] = True
+                                                print(f"✅ Set SDU option for canopy {canopy_ref} in {level_name} - {area_name}")
+                                                break
                                     break
         
         # Check RECOAIR sheets for RecoAir option
