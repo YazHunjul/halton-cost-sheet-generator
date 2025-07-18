@@ -1080,7 +1080,13 @@ def step2_project_structure():
         with st.expander(f"Level {level['level_number']}: {level['level_name']}", expanded=True):
             # Level name input with immediate update
             def update_level_name():
-                st.session_state.levels[level_idx]['level_name'] = st.session_state[f"level_name_{level_idx}"]
+                try:
+                    # Check if index is still valid before updating
+                    if level_idx < len(st.session_state.levels):
+                        st.session_state.levels[level_idx]['level_name'] = st.session_state[f"level_name_{level_idx}"]
+                except (IndexError, KeyError) as e:
+                    # Silently fail - the UI will rerender with correct indices
+                    pass
             
             new_level_name = st.text_input(f"Level Name", 
                                          value=level['level_name'], 
@@ -1129,8 +1135,15 @@ def step2_project_structure():
                             st.session_state[area_name_key] = area['name']
                         
                         def update_area_name():
-                            st.session_state.levels[level_idx]['areas'][area_idx]['name'] = st.session_state[f"{area_key}_name"]
-                            st.session_state[area_name_key] = st.session_state[f"{area_key}_name"]
+                            try:
+                                # Check if indices are still valid before updating
+                                if (level_idx < len(st.session_state.levels) and 
+                                    area_idx < len(st.session_state.levels[level_idx]['areas'])):
+                                    st.session_state.levels[level_idx]['areas'][area_idx]['name'] = st.session_state[f"{area_key}_name"]
+                                    st.session_state[area_name_key] = st.session_state[f"{area_key}_name"]
+                            except (IndexError, KeyError) as e:
+                                # If there's an error, just update the state key
+                                st.session_state[area_name_key] = st.session_state.get(f"{area_key}_name", "")
                         
                         new_area_name = st.text_input("Area Name", 
                                                     value=st.session_state[area_name_key], 
@@ -1143,13 +1156,20 @@ def step2_project_structure():
                         
                         # Initialize session state for options if not exists
                         def update_area_options():
-                            st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
-                                'uvc': st.session_state.get(f"{area_key}_uvc", False),
-                                'recoair': st.session_state.get(f"{area_key}_recoair", False),
-                                'marvel': st.session_state.get(f"{area_key}_marvel", False),
-                                'uv_extra_over': st.session_state.get(f"{area_key}_uv_extra_over", False),
-                                'vent_clg': st.session_state.get(f"{area_key}_vent_clg", False)
-                            }
+                            try:
+                                # Check if indices are still valid before updating
+                                if (level_idx < len(st.session_state.levels) and 
+                                    area_idx < len(st.session_state.levels[level_idx]['areas'])):
+                                    st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
+                                        'uvc': st.session_state.get(f"{area_key}_uvc", False),
+                                        'recoair': st.session_state.get(f"{area_key}_recoair", False),
+                                        'marvel': st.session_state.get(f"{area_key}_marvel", False),
+                                        'uv_extra_over': st.session_state.get(f"{area_key}_uv_extra_over", False),
+                                        'vent_clg': st.session_state.get(f"{area_key}_vent_clg", False)
+                                    }
+                            except (IndexError, KeyError) as e:
+                                # If there's an error, silently fail - the checkboxes will maintain their state
+                                pass
                         
                         uvc = st.checkbox("UV-C", 
                                         value=area['options'].get('uvc', False), 
@@ -1178,14 +1198,7 @@ def step2_project_structure():
                                             help="Toggle if Ventilated Ceiling is needed for this area",
                                             on_change=update_area_options)
                         
-                        # Update options immediately
-                        st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
-                            'uvc': uvc,
-                            'recoair': recoair,
-                            'marvel': marvel,
-                            'uv_extra_over': uv_extra_over,
-                            'vent_clg': vent_clg
-                        }
+                        # Options are updated via the callback, no need for direct update here
                     
                     with col3:
                         if st.button(f"Remove Area", key=f"{area_key}_remove"):
@@ -1450,30 +1463,7 @@ def step3_canopy_configuration():
                         else:
                             wall_cladding_data = {"type": "None", "width": None, "height": None, "position": None}
                         
-                        # Final update of all canopy data
-                        try:
-                            # Check if indices are still valid before final update
-                            if (level_idx < len(st.session_state.levels) and 
-                                area_idx < len(st.session_state.levels[level_idx]['areas']) and 
-                                canopy_idx < len(st.session_state.levels[level_idx]['areas'][area_idx]['canopies'])):
-                                
-                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx].update({
-                                    'reference_number': ref_num,
-                                    'configuration': configuration,
-                                    'model': model,
-                                    'length': length,
-                                    'width': width,
-                                    'height': height,
-                                    'sections': sections,
-                                    'options': {
-                                        'fire_suppression': fire_suppression,
-                                        'sdu': sdu
-                                    },
-                                    'wall_cladding': wall_cladding_data
-                                })
-                        except (IndexError, KeyError) as e:
-                            # Silently ignore index errors - the UI will rerender with correct indices
-                            pass
+                        # Canopy data is updated via callbacks - no need for final update here
                         
                         # Remove canopy button
                         if st.button(f"Remove Canopy", key=f"{canopy_key}_remove"):
