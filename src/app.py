@@ -789,7 +789,8 @@ def navigation_buttons():
         st.progress(progress)
     
     with col3:
-        if st.session_state.current_step < 4:
+        # Comment out navigation to step 4 for now
+        if st.session_state.current_step < 3:  # Changed from 4 to 3
             if st.button("Next →", key="nav_next"):
                 st.session_state.current_step += 1
                 st.rerun()
@@ -1327,8 +1328,7 @@ def step3_canopy_configuration():
                         
                         with row1_col1:
                             ref_num = st.text_input("Reference", 
-                                                   key=f"{canopy_key}_ref",
-                                                   on_change=update_canopy_data)
+                                                   key=f"{canopy_key}_ref")
                         
                         with row1_col2:
                             model_options = [""] + VALID_CANOPY_MODELS
@@ -1337,8 +1337,7 @@ def step3_canopy_configuration():
                                 model_index = model_options.index(canopy.get('model', ''))
                             
                             model = st.selectbox("Model", model_options,
-                                               key=f"{canopy_key}_model",
-                                               on_change=update_canopy_data)
+                                               key=f"{canopy_key}_model")
                         
                         with row1_col3:
                             config_options = ["Wall", "Island"]
@@ -1347,8 +1346,7 @@ def step3_canopy_configuration():
                                 config_index = config_options.index(canopy.get('configuration', ''))
                             
                             configuration = st.selectbox("Configuration", config_options,
-                                                       key=f"{canopy_key}_config",
-                                                       on_change=update_canopy_data)
+                                                       key=f"{canopy_key}_config")
                         
                         # Row 2: Dimensions - Length, Width, Height
                         st.markdown("**Dimensions:**")
@@ -1357,13 +1355,11 @@ def step3_canopy_configuration():
                         with row2_col1:
                             length = st.number_input("Length", 
                                                    key=f"{canopy_key}_length",
-                                                   on_change=update_canopy_data,
                                                    min_value=0)
                         
                         with row2_col2:
                             width = st.number_input("Width", 
                                                   key=f"{canopy_key}_width",
-                                                  on_change=update_canopy_data,
                                                   min_value=0)
                         
                         with row2_col3:
@@ -1373,7 +1369,6 @@ def step3_canopy_configuration():
                                 default_height = 555
                             height = st.number_input("Height", 
                                                    key=f"{canopy_key}_height",
-                                                   on_change=update_canopy_data,
                                                    min_value=0)
                         
                         # Row 3: Sections and Fire Suppression
@@ -1382,61 +1377,33 @@ def step3_canopy_configuration():
                         with row3_col1:
                             sections = st.number_input("Sections", 
                                                      key=f"{canopy_key}_sections",
-                                                     on_change=update_canopy_data,
                                                      min_value=0)
                         
                         with row3_col2:
                             fire_suppression = st.checkbox("Fire Suppression", 
-                                                          key=f"{canopy_key}_fire",
-                                                          on_change=update_canopy_data)
+                                                          key=f"{canopy_key}_fire")
                         
                         with row3_col3:
                             sdu = st.checkbox("SDU", 
-                                            key=f"{canopy_key}_sdu",
-                                            on_change=update_canopy_data)
+                                            key=f"{canopy_key}_sdu")
                         
                         # SDU Item Number input (only show if SDU is checked)
                         if st.session_state.get(f"{canopy_key}_sdu", False):
                             sdu_item_number = st.text_input(
                                 "SDU Item Number",
                                 key=f"{canopy_key}_sdu_item",
-                                help="Enter the item number for this SDU (will be written to B12)",
-                                on_change=update_canopy_data
+                                help="Enter the item number for this SDU (will be written to B12)"
                             )
                         
                         # Wall Cladding Section  
                         st.markdown("**Wall Cladding:**")
-                        
-                        def update_wall_cladding():
-                            try:
-                                # Check if indices are still valid before updating
-                                if (level_idx < len(st.session_state.levels) and 
-                                    area_idx < len(st.session_state.levels[level_idx]['areas']) and 
-                                    canopy_idx < len(st.session_state.levels[level_idx]['areas'][area_idx]['canopies'])):
-                                    
-                                    wall_cladding_enabled = st.session_state.get(f"{canopy_key}_wall_cladding_enabled", False)
-                                    if wall_cladding_enabled:
-                                        wall_cladding_data = {
-                                            "type": "Custom",
-                                            "width": st.session_state.get(f"{canopy_key}_clad_width", 0) or None,
-                                            "height": st.session_state.get(f"{canopy_key}_clad_height", 0) or None,
-                                            "position": st.session_state.get(f"{canopy_key}_clad_position", []) or None
-                                        }
-                                    else:
-                                        wall_cladding_data = {"type": "None", "width": None, "height": None, "position": None}
-                                    
-                                    st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['wall_cladding'] = wall_cladding_data
-                            except (IndexError, KeyError) as e:
-                                # Silently ignore index errors - the UI will rerender with correct indices  
-                                pass
                         
                         # Initialize wall cladding state if not already present
                         if f"{canopy_key}_wall_cladding_enabled" not in st.session_state:
                             st.session_state[f"{canopy_key}_wall_cladding_enabled"] = canopy.get('wall_cladding', {}).get('type') not in ['None', None, '']
                         
                         wall_cladding_enabled = st.checkbox("With Wall Cladding", 
-                                                          key=f"{canopy_key}_wall_cladding_enabled",
-                                                          on_change=update_wall_cladding)
+                                                          key=f"{canopy_key}_wall_cladding_enabled")
                         
                         if wall_cladding_enabled:
                             clad_col1, clad_col2, clad_col3 = st.columns(3)
@@ -1453,16 +1420,14 @@ def step3_canopy_configuration():
                                 cladding_width = st.number_input(
                                     "Width (mm)", 
                                     key=f"{canopy_key}_clad_width",
-                                    min_value=0,
-                                    on_change=update_wall_cladding
+                                    min_value=0
                                 )
                             
                             with clad_col2:
                                 cladding_height = st.number_input(
                                     "Height (mm)", 
                                     key=f"{canopy_key}_clad_height",
-                                    min_value=0,
-                                    on_change=update_wall_cladding
+                                    min_value=0
                                 )
                             
                             with clad_col3:
@@ -1478,8 +1443,7 @@ def step3_canopy_configuration():
                                 cladding_positions = st.multiselect(
                                     "Position",
                                     options=["rear", "left hand", "right hand"],
-                                    key=f"{canopy_key}_clad_position",
-                                    on_change=update_wall_cladding
+                                    key=f"{canopy_key}_clad_position"
                                 )
                         
                         # Canopy data is updated via callbacks
@@ -1700,6 +1664,809 @@ def populate_session_state_from_uploaded_data(extracted_data):
         print(f"❌ Error populating session state from uploaded data: {str(e)}")
         st.error(f"Error populating form data: {str(e)}")
 
+def single_page_project_builder():
+    """Single page project setup with sidebar structure builder."""
+    st.title("🏗️ Single Page Project Builder")
+    st.markdown("Build your project structure in the sidebar and configure canopies here.")
+    
+    # Initialize session state if needed
+    if 'project_info' not in st.session_state:
+        st.session_state.project_info = {}
+    if 'levels' not in st.session_state:
+        st.session_state.levels = []
+    if 'template_path' not in st.session_state:
+        st.session_state.template_path = 'templates/excel/Cost Sheet R19.2 Jun 2025.xlsx'
+    
+    # Sidebar Project Info Section
+    with st.sidebar:
+        # Excel Upload Section
+        st.markdown("### 📤 Load Existing Project")
+        with st.expander("Upload Excel (Optional)", expanded=False):
+            uploaded_file = st.file_uploader(
+                "Choose Excel file to pre-fill data",
+                type=['xlsx', 'xls'],
+                key="sp_excel_upload",
+                help="Upload a previously generated cost sheet to pre-fill the form"
+            )
+            
+            if uploaded_file is not None:
+                # Create a unique key for this file to track if we've already loaded it
+                file_key = f"{uploaded_file.name}_{uploaded_file.size}"
+                
+                # Check if we've already loaded this file
+                if 'sp_loaded_file' not in st.session_state or st.session_state.sp_loaded_file != file_key:
+                    try:
+                        # Save uploaded file temporarily
+                        temp_path = f"temp_upload_{uploaded_file.name}"
+                        with open(temp_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        
+                        # Read project data from Excel
+                        with st.spinner("Reading project data..."):
+                            extracted_data = read_excel_project_data(temp_path)
+                        
+                        # Populate session state
+                        if extracted_data:
+                            st.session_state.project_info = {
+                                'project_name': extracted_data.get('project_name', ''),
+                                'project_number': extracted_data.get('project_number', ''),
+                                'customer': extracted_data.get('customer', ''),
+                                'company': extracted_data.get('company', ''),
+                                'address': extracted_data.get('address', ''),
+                                'project_location': extracted_data.get('project_location', ''),
+                                'delivery_location': extracted_data.get('delivery_location', ''),
+                                'estimator': extracted_data.get('estimator', ''),
+                                'sales_contact': extracted_data.get('sales_contact', ''),
+                                'date': extracted_data.get('date', get_current_date()),
+                                'company_mode': 'Enter custom company' if extracted_data.get('company') not in COMPANY_ADDRESSES else 'Select from list'
+                            }
+                            
+                            if 'levels' in extracted_data:
+                                st.session_state.levels = extracted_data['levels']
+                            
+                            # Mark this file as loaded
+                            st.session_state.sp_loaded_file = file_key
+                            
+                            st.success("✅ Data loaded successfully!")
+                            
+                            # Clean up
+                            os.remove(temp_path)
+                        
+                    except Exception as e:
+                        st.error(f"Error loading file: {str(e)}")
+                else:
+                    st.info("📄 File already loaded. Remove and re-upload to reload.")
+        
+        st.markdown("---")
+        
+        # Template Selection
+        st.markdown("### 📄 Template Selection")
+        template_options = {
+            "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
+            "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
+            "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
+        }
+        
+        selected_template = st.selectbox(
+            "Select Excel Template",
+            options=list(template_options.keys()),
+            index=0,
+            key="sp_template_select",
+            help="Choose which version of the cost sheet template to use"
+        )
+        st.session_state.template_path = template_options[selected_template]
+        
+        st.markdown("---")
+        
+        # Clear All Button
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear All", key="sp_clear_all", help="Clear all data and start fresh"):
+                st.session_state.project_info = {}
+                st.session_state.levels = []
+                if 'sp_loaded_file' in st.session_state:
+                    del st.session_state.sp_loaded_file
+                st.rerun()
+        
+        with col2:
+            if st.button("➕ Add Sample", key="sp_add_sample", help="Add sample data for testing"):
+                st.session_state.project_info = {
+                    'project_name': 'Sample Kitchen Project',
+                    'project_number': 'DEMO-001',
+                    'customer': 'Demo Customer',
+                    'company': 'Halton Company Ltd',
+                    'address': COMPANY_ADDRESSES['Halton Company Ltd'],
+                    'project_location': 'London',
+                    'delivery_location': 'LONDON in FORS GOLD(varies)',
+                    'estimator': list(ESTIMATORS.keys())[0],
+                    'sales_contact': list(SALES_CONTACTS.keys())[0],
+                    'date': get_current_date(),
+                    'company_mode': 'Select from list'
+                }
+                st.session_state.levels = [{
+                    'level_number': 1,
+                    'level_name': 'Ground Floor',
+                    'areas': [{
+                        'name': 'Main Kitchen',
+                        'canopies': [],
+                        'options': {
+                            'uvc': True,
+                            'recoair': False,
+                            'marvel': False,
+                            'uv_extra_over': False,
+                            'vent_clg': False
+                        }
+                    }]
+                }]
+                st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### 📋 Project Information")
+        with st.expander("Project Details", expanded=True):
+            # Project Name
+            project_name = st.text_input(
+                "Project Name",
+                value=st.session_state.project_info.get('project_name', ''),
+                key="sp_project_name"
+            )
+            if project_name:
+                st.session_state.project_info['project_name'] = project_name
+            
+            # Customer
+            customer = st.text_input(
+                "Customer Name",
+                value=st.session_state.project_info.get('customer', ''),
+                key="sp_customer"
+            )
+            if customer:
+                st.session_state.project_info['customer'] = customer
+            
+            # Company selection mode
+            company_mode = st.radio(
+                "Company Selection *",
+                options=["Select from list", "Enter custom company"],
+                index=1 if st.session_state.project_info.get("company_mode", "Enter custom company") == "Enter custom company" else 0,
+                key="sp_company_mode",
+                help="Choose whether to select from predefined companies or enter a custom company"
+            )
+            st.session_state.project_info['company_mode'] = company_mode
+            
+            # Company and address selection based on mode
+            if company_mode == "Select from list":
+                # Get current company value and find its index
+                current_company = st.session_state.project_info.get('company', '')
+                company_options = list(COMPANY_ADDRESSES.keys())
+                default_index = 0
+                if current_company in company_options:
+                    default_index = company_options.index(current_company)
+                
+                company = st.selectbox(
+                    "Company *",
+                    options=company_options,
+                    index=default_index,
+                    key="sp_company_select",
+                    help="Select the company from the predefined list"
+                )
+                st.session_state.project_info['company'] = company
+                
+                # Auto-populate address based on selected company
+                if company in COMPANY_ADDRESSES:
+                    address = st.text_area("Address", value=COMPANY_ADDRESSES[company], key="sp_address", disabled=True, help="Address auto-populated from company selection")
+                    st.session_state.project_info['address'] = COMPANY_ADDRESSES[company]
+                else:
+                    address = st.text_area("Address", value=st.session_state.project_info.get('address', ''), key="sp_address")
+                    st.session_state.project_info['address'] = address
+            else:
+                # Custom company mode
+                custom_company_name = st.text_input(
+                    "Custom Company Name *",
+                    value=st.session_state.project_info.get('custom_company_name', st.session_state.project_info.get('company', '')),
+                    key="sp_custom_company_name",
+                    help="Enter the custom company name"
+                )
+                st.session_state.project_info['custom_company_name'] = custom_company_name
+                st.session_state.project_info['company'] = custom_company_name
+                
+                custom_company_address = st.text_area(
+                    "Custom Company Address *",
+                    value=st.session_state.project_info.get('custom_company_address', st.session_state.project_info.get('address', '')),
+                    key="sp_custom_company_address",
+                    help="Enter the full company address (use line breaks for multiple lines)",
+                    height=100
+                )
+                st.session_state.project_info['custom_company_address'] = custom_company_address
+                st.session_state.project_info['address'] = custom_company_address
+            
+            # Project Number
+            project_number = st.text_input(
+                "Project Number",
+                value=st.session_state.project_info.get('project_number', ''),
+                key="sp_project_number"
+            )
+            if project_number:
+                st.session_state.project_info['project_number'] = project_number
+            
+            # Date
+            date_str = st.session_state.project_info.get('date', get_current_date())
+            st.session_state.project_info['date'] = date_str
+            st.text_input("Date", value=date_str, disabled=True)
+            
+            # Estimator
+            estimator_options = list(ESTIMATORS.keys())
+            current_estimator = st.session_state.project_info.get('estimator', '')
+            default_estimator_index = 0
+            if current_estimator in estimator_options:
+                default_estimator_index = estimator_options.index(current_estimator)
+            
+            estimator = st.selectbox(
+                "Estimator",
+                estimator_options,
+                index=default_estimator_index,
+                key="sp_estimator"
+            )
+            st.session_state.project_info['estimator'] = estimator
+            
+            # Sales Contact
+            sales_contact_options = list(SALES_CONTACTS.keys())
+            current_sales_contact = st.session_state.project_info.get('sales_contact', '')
+            default_sales_contact_index = 0
+            if current_sales_contact in sales_contact_options:
+                default_sales_contact_index = sales_contact_options.index(current_sales_contact)
+            
+            sales_contact = st.selectbox(
+                "Sales Contact",
+                sales_contact_options,
+                index=default_sales_contact_index,
+                key="sp_sales_contact"
+            )
+            st.session_state.project_info['sales_contact'] = sales_contact
+            
+            # Project Location
+            project_location = st.text_input(
+                "Project Location",
+                value=st.session_state.project_info.get('project_location', ''),
+                key="sp_project_location"
+            )
+            if project_location:
+                st.session_state.project_info['project_location'] = project_location
+            
+            # Delivery Location
+            delivery_options = DELIVERY_LOCATIONS
+            current_delivery = st.session_state.project_info.get('delivery_location', 'Select...')
+            default_delivery_index = 0
+            if current_delivery in delivery_options:
+                default_delivery_index = delivery_options.index(current_delivery)
+            
+            delivery_location = st.selectbox(
+                "Delivery Location",
+                options=delivery_options,
+                index=default_delivery_index,
+                key="sp_delivery_location"
+            )
+            st.session_state.project_info['delivery_location'] = delivery_location
+        
+        # Project Structure Section
+        st.markdown("---")
+        st.markdown("### 🏢 Project Structure")
+        
+        # Add Level button
+        if st.button("➕ Add Level", key="sp_add_level", use_container_width=True):
+            new_level_number = len(st.session_state.levels) + 1
+            st.session_state.levels.append({
+                "level_number": new_level_number,
+                "level_name": f"Level {new_level_number}",
+                "areas": []
+            })
+            st.rerun()
+        
+        # Display levels in sidebar
+        for level_idx, level in enumerate(st.session_state.levels):
+            st.markdown(f"#### {level['level_name']}")
+            
+            # Level controls
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                def update_sp_level_name(idx):
+                    def callback():
+                        st.session_state.levels[idx]['level_name'] = st.session_state[f"sp_level_name_{idx}"]
+                    return callback
+                
+                new_level_name = st.text_input(
+                    "Name",
+                    value=level['level_name'],
+                    key=f"sp_level_name_{level_idx}",
+                    label_visibility="collapsed",
+                    on_change=update_sp_level_name(level_idx)
+                )
+            
+            with col2:
+                if st.button("➕", key=f"sp_add_area_{level_idx}", help="Add Area"):
+                    st.session_state.levels[level_idx]['areas'].append({
+                        "name": f"Area {len(level['areas']) + 1}",
+                        "canopies": [],
+                        "options": {
+                            "uvc": False,
+                            "recoair": False,
+                            "marvel": False,
+                            "uv_extra_over": False,
+                            "vent_clg": False
+                        }
+                    })
+                    st.rerun()
+            
+            with col3:
+                if st.button("🗑️", key=f"sp_del_level_{level_idx}", help="Delete Level"):
+                    del st.session_state.levels[level_idx]
+                    # Renumber remaining levels
+                    for i, remaining_level in enumerate(st.session_state.levels):
+                        remaining_level['level_number'] = i + 1
+                    st.rerun()
+            
+            # Display areas for this level
+            for area_idx, area in enumerate(level['areas']):
+                with st.container():
+                    # Area name and delete button
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        def update_sp_area_name(l_idx, a_idx):
+                            def callback():
+                                st.session_state.levels[l_idx]['areas'][a_idx]['name'] = st.session_state[f"sp_area_name_{l_idx}_{a_idx}"]
+                            return callback
+                        
+                        new_area_name = st.text_input(
+                            "Area",
+                            value=area['name'],
+                            key=f"sp_area_name_{level_idx}_{area_idx}",
+                            label_visibility="collapsed",
+                            on_change=update_sp_area_name(level_idx, area_idx)
+                        )
+                    
+                    with col2:
+                        if st.button("🗑️", key=f"sp_del_area_{level_idx}_{area_idx}", help="Delete Area"):
+                            del st.session_state.levels[level_idx]['areas'][area_idx]
+                            st.rerun()
+                    
+                    # Area options with smaller columns
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        uvc = st.checkbox("UV-C", value=area['options'].get('uvc', False), 
+                                         key=f"sp_uvc_{level_idx}_{area_idx}")
+                        recoair = st.checkbox("RecoAir", value=area['options'].get('recoair', False),
+                                            key=f"sp_recoair_{level_idx}_{area_idx}")
+                        marvel = st.checkbox("Marvel", value=area['options'].get('marvel', False),
+                                           key=f"sp_marvel_{level_idx}_{area_idx}")
+                    
+                    with col2:
+                        uv_extra = st.checkbox("UV Extra", value=area['options'].get('uv_extra_over', False),
+                                             key=f"sp_uv_extra_{level_idx}_{area_idx}")
+                        vent_clg = st.checkbox("VENT CLG", value=area['options'].get('vent_clg', False),
+                                             key=f"sp_vent_clg_{level_idx}_{area_idx}")
+                    
+                    # Update options
+                    st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
+                        'uvc': uvc,
+                        'recoair': recoair,
+                        'marvel': marvel,
+                        'uv_extra_over': uv_extra,
+                        'vent_clg': vent_clg
+                    }
+                    
+                    st.markdown("---")
+        
+        # Excel generation at bottom of sidebar
+        st.markdown("---")
+        if st.button("💾 Generate Excel", key="sp_generate_excel", use_container_width=True, type="primary"):
+            # Reuse the generate_excel_section logic
+            try:
+                final_project_data = st.session_state.project_info.copy()
+                final_project_data['levels'] = st.session_state.levels
+                
+                template_path = st.session_state.get('template_path', 'templates/excel/Cost Sheet R19.1 May 2025.xlsx')
+                with st.spinner("Generating Excel cost sheet..."):
+                    output_path = save_to_excel(final_project_data, template_path)
+                
+                st.success("Excel generated!")
+                
+                # Provide download
+                with open(output_path, "rb") as file:
+                    excel_data = file.read()
+                
+                project_number = final_project_data.get('project_number', 'unknown')
+                date_str = final_project_data.get('date', get_current_date()).replace('/', '')
+                download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
+                
+                st.download_button(
+                    label="📥 Download",
+                    data=excel_data,
+                    file_name=download_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="sp_download_excel"
+                )
+                
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                    
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+    
+    # Main area - Canopy Configuration
+    if not st.session_state.levels:
+        st.info("👈 Start by adding levels and areas in the sidebar")
+        return
+    
+    # Check if any areas exist
+    total_areas = sum(len(level.get('areas', [])) for level in st.session_state.levels)
+    if total_areas == 0:
+        st.info("👈 Add areas to your levels in the sidebar")
+        return
+    
+    st.markdown("## 🏗️ Canopy Configuration")
+    st.markdown("Configure canopies for each area below:")
+    
+    # Display canopy configuration for each level and area
+    for level_idx, level in enumerate(st.session_state.levels):
+        if level['areas']:  # Only show if level has areas
+            st.markdown(f"### {level['level_name']}")
+            
+            for area_idx, area in enumerate(level['areas']):
+                with st.expander(f"**{area['name']}** - {len(area.get('canopies', []))} canopies", expanded=True):
+                    # Show area options
+                    options = []
+                    if area['options'].get('uvc'): options.append("UV-C")
+                    if area['options'].get('recoair'): options.append("RecoAir") 
+                    if area['options'].get('marvel'): options.append("Marvel")
+                    if area['options'].get('uv_extra_over'): options.append("UV Extra Over")
+                    if area['options'].get('vent_clg'): options.append("VENT CLG")
+                    
+                    if options:
+                        st.markdown(f"**Area Options:** {', '.join(options)}")
+                    
+                    # Add canopy button
+                    if st.button(f"➕ Add Canopy", key=f"sp_add_canopy_{level_idx}_{area_idx}"):
+                        new_canopy = {
+                            "reference_number": f"C{len(area['canopies']) + 1:03d}",
+                            "configuration": "",
+                            "model": "",
+                            "length": 0,
+                            "width": 0,
+                            "height": 555,
+                            "sections": 0,
+                            "lighting_type": "",
+                            "extract_volume": "",
+                            "extract_static": "",
+                            "mua_volume": "",
+                            "supply_static": "",
+                            "sdu_item_number": "",
+                            "options": {"fire_suppression": False, "sdu": False},
+                            "wall_cladding": {"type": "None", "width": None, "height": None, "position": None}
+                        }
+                        st.session_state.levels[level_idx]['areas'][area_idx]['canopies'].append(new_canopy)
+                        st.rerun()
+                    
+                    # Display existing canopies
+                    for canopy_idx, canopy in enumerate(area.get('canopies', [])):
+                        st.markdown(f"#### Canopy {canopy_idx + 1}")
+                        
+                        # Create a unique key prefix for this canopy
+                        canopy_key = f"sp_canopy_{level_idx}_{area_idx}_{canopy_idx}"
+                        
+                        # Row 1: Basic info
+                        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                        
+                        with col1:
+                            ref_num = st.text_input(
+                                "Reference",
+                                value=canopy.get('reference_number', ''),
+                                key=f"{canopy_key}_ref"
+                            )
+                            if ref_num != canopy.get('reference_number'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['reference_number'] = ref_num
+                        
+                        with col2:
+                            model_options = [""] + VALID_CANOPY_MODELS
+                            model = st.selectbox(
+                                "Model",
+                                model_options,
+                                index=model_options.index(canopy.get('model', '')) if canopy.get('model', '') in model_options else 0,
+                                key=f"{canopy_key}_model"
+                            )
+                            if model != canopy.get('model'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['model'] = model
+                        
+                        with col3:
+                            config_options = ["Wall", "Island", "Single", "Double"]
+                            config = st.selectbox(
+                                "Configuration",
+                                config_options,
+                                index=config_options.index(canopy.get('configuration', 'Wall')) if canopy.get('configuration') in config_options else 0,
+                                key=f"{canopy_key}_config"
+                            )
+                            if config != canopy.get('configuration'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['configuration'] = config
+                        
+                        with col4:
+                            if st.button("🗑️", key=f"{canopy_key}_delete", help="Delete Canopy"):
+                                del st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]
+                                st.rerun()
+                        
+                        # Row 2: Dimensions
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            # Safe conversion to int
+                            length_val = canopy.get('length', 0)
+                            if length_val is None or length_val == '':
+                                length_val = 0
+                            try:
+                                length_val = int(length_val)
+                            except (ValueError, TypeError):
+                                length_val = 0
+                                
+                            length = st.number_input(
+                                "Length",
+                                value=length_val,
+                                key=f"{canopy_key}_length",
+                                min_value=0
+                            )
+                            if length != canopy.get('length'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['length'] = length
+                        
+                        with col2:
+                            # Safe conversion to int
+                            width_val = canopy.get('width', 0)
+                            if width_val is None or width_val == '':
+                                width_val = 0
+                            try:
+                                width_val = int(width_val)
+                            except (ValueError, TypeError):
+                                width_val = 0
+                                
+                            width = st.number_input(
+                                "Width",
+                                value=width_val,
+                                key=f"{canopy_key}_width",
+                                min_value=0
+                            )
+                            if width != canopy.get('width'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['width'] = width
+                        
+                        with col3:
+                            # Safe conversion to int
+                            height_val = canopy.get('height', 555)
+                            if height_val is None or height_val == '':
+                                height_val = 555
+                            try:
+                                height_val = int(height_val)
+                            except (ValueError, TypeError):
+                                height_val = 555
+                                
+                            height = st.number_input(
+                                "Height",
+                                value=height_val,
+                                key=f"{canopy_key}_height",
+                                min_value=0
+                            )
+                            if height != canopy.get('height'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['height'] = height
+                        
+                        with col4:
+                            # Safe conversion to int
+                            sections_val = canopy.get('sections', 0)
+                            if sections_val is None or sections_val == '':
+                                sections_val = 0
+                            try:
+                                sections_val = int(sections_val)
+                            except (ValueError, TypeError):
+                                sections_val = 0
+                                
+                            sections = st.number_input(
+                                "Sections",
+                                value=sections_val,
+                                key=f"{canopy_key}_sections",
+                                min_value=0
+                            )
+                            if sections != canopy.get('sections'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['sections'] = sections
+                        
+                        # Row 3: Options
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            fire_supp = st.checkbox(
+                                "Fire Suppression",
+                                value=canopy.get('options', {}).get('fire_suppression', False),
+                                key=f"{canopy_key}_fire"
+                            )
+                            if fire_supp != canopy.get('options', {}).get('fire_suppression'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['options']['fire_suppression'] = fire_supp
+                        
+                        with col2:
+                            sdu = st.checkbox(
+                                "SDU",
+                                value=canopy.get('options', {}).get('sdu', False),
+                                key=f"{canopy_key}_sdu"
+                            )
+                            if sdu != canopy.get('options', {}).get('sdu'):
+                                st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['options']['sdu'] = sdu
+                        
+                        with col3:
+                            if sdu:
+                                sdu_item = st.text_input(
+                                    "SDU Item Number",
+                                    value=canopy.get('sdu_item_number', ''),
+                                    key=f"{canopy_key}_sdu_item"
+                                )
+                                if sdu_item != canopy.get('sdu_item_number'):
+                                    st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['sdu_item_number'] = sdu_item
+                        
+                        # Wall Cladding Section
+                        st.markdown("**Wall Cladding:**")
+                        wall_clad = st.checkbox(
+                            "With Wall Cladding",
+                            value=canopy.get('wall_cladding', {}).get('type', 'None') != 'None',
+                            key=f"{canopy_key}_wall_clad"
+                        )
+                        
+                        if wall_clad:
+                            clad_col1, clad_col2, clad_col3 = st.columns(3)
+                            
+                            with clad_col1:
+                                # Safe conversion to int
+                                clad_width_val = canopy.get('wall_cladding', {}).get('width', 0)
+                                if clad_width_val is None or clad_width_val == '':
+                                    clad_width_val = 0
+                                try:
+                                    clad_width_val = int(clad_width_val)
+                                except (ValueError, TypeError):
+                                    clad_width_val = 0
+                                    
+                                clad_width = st.number_input(
+                                    "Width (mm)",
+                                    value=clad_width_val,
+                                    key=f"{canopy_key}_clad_width",
+                                    min_value=0
+                                )
+                            
+                            with clad_col2:
+                                # Safe conversion to int
+                                clad_height_val = canopy.get('wall_cladding', {}).get('height', 2100)
+                                if clad_height_val is None or clad_height_val == '':
+                                    clad_height_val = 2100
+                                try:
+                                    clad_height_val = int(clad_height_val)
+                                except (ValueError, TypeError):
+                                    clad_height_val = 2100
+                                    
+                                clad_height = st.number_input(
+                                    "Height (mm)",
+                                    value=clad_height_val,
+                                    key=f"{canopy_key}_clad_height",
+                                    min_value=0
+                                )
+                            
+                            with clad_col3:
+                                current_positions = canopy.get('wall_cladding', {}).get('position', [])
+                                if isinstance(current_positions, str):
+                                    current_positions = [current_positions] if current_positions else []
+                                elif current_positions is None:
+                                    current_positions = []
+                                
+                                clad_positions = st.multiselect(
+                                    "Position",
+                                    options=["rear", "left hand", "right hand"],
+                                    default=current_positions,
+                                    key=f"{canopy_key}_clad_pos"
+                                )
+                            
+                            # Update wall cladding in session state
+                            wall_cladding_data = {
+                                "type": "Custom",
+                                "width": clad_width,
+                                "height": clad_height,
+                                "position": clad_positions
+                            }
+                            st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['wall_cladding'] = wall_cladding_data
+                        else:
+                            # Update to no wall cladding
+                            st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['wall_cladding'] = {
+                                "type": "None",
+                                "width": None,
+                                "height": None,
+                                "position": None
+                            }
+                        
+                        st.markdown("---")
+    
+    # Project Summary Section
+    if st.session_state.project_info or st.session_state.levels:
+        st.markdown("---")
+        st.markdown("## 📊 Project Summary")
+        
+        # Project Information Summary
+        if st.session_state.project_info:
+            with st.expander("📋 Project Information", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**General Info:**")
+                    if st.session_state.project_info.get('project_name'):
+                        st.write(f"Project: {st.session_state.project_info['project_name']}")
+                    if st.session_state.project_info.get('project_number'):
+                        st.write(f"Number: {st.session_state.project_info['project_number']}")
+                    if st.session_state.project_info.get('customer'):
+                        st.write(f"Customer: {st.session_state.project_info['customer']}")
+                
+                with col2:
+                    st.markdown("**Company Details:**")
+                    if st.session_state.project_info.get('company'):
+                        st.write(f"Company: {st.session_state.project_info['company']}")
+                    if st.session_state.project_info.get('estimator'):
+                        st.write(f"Estimator: {st.session_state.project_info['estimator']}")
+                    if st.session_state.project_info.get('sales_contact'):
+                        st.write(f"Sales: {st.session_state.project_info['sales_contact']}")
+                
+                with col3:
+                    st.markdown("**Location Info:**")
+                    if st.session_state.project_info.get('project_location'):
+                        st.write(f"Project Location: {st.session_state.project_info['project_location']}")
+                    if st.session_state.project_info.get('delivery_location'):
+                        st.write(f"Delivery: {st.session_state.project_info['delivery_location']}")
+                    if st.session_state.project_info.get('date'):
+                        st.write(f"Date: {st.session_state.project_info['date']}")
+        
+        # Structure Summary
+        if st.session_state.levels:
+            with st.expander("🏢 Project Structure", expanded=True):
+                total_areas = sum(len(level.get('areas', [])) for level in st.session_state.levels)
+                total_canopies = sum(
+                    len(area.get('canopies', [])) 
+                    for level in st.session_state.levels 
+                    for area in level.get('areas', [])
+                )
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Levels", len(st.session_state.levels))
+                with col2:
+                    st.metric("Areas", total_areas)
+                with col3:
+                    st.metric("Canopies", total_canopies)
+                
+                # Detailed breakdown
+                st.markdown("---")
+                for level in st.session_state.levels:
+                    st.markdown(f"**{level['level_name']}**")
+                    for area in level.get('areas', []):
+                        canopy_count = len(area.get('canopies', []))
+                        options = []
+                        if area['options'].get('uvc'): options.append("UV-C")
+                        if area['options'].get('recoair'): options.append("RecoAir")
+                        if area['options'].get('marvel'): options.append("Marvel")
+                        if area['options'].get('uv_extra_over'): options.append("UV Extra")
+                        if area['options'].get('vent_clg'): options.append("VENT CLG")
+                        
+                        options_str = f" ({', '.join(options)})" if options else ""
+                        st.write(f"  • {area['name']}: {canopy_count} canopies{options_str}")
+                        
+                        # Show canopy details
+                        for canopy in area.get('canopies', []):
+                            canopy_info = []
+                            if canopy.get('reference_number'):
+                                canopy_info.append(f"Ref: {canopy['reference_number']}")
+                            if canopy.get('model'):
+                                canopy_info.append(f"Model: {canopy['model']}")
+                            if canopy.get('configuration'):
+                                canopy_info.append(f"Config: {canopy['configuration']}")
+                            if canopy.get('options', {}).get('fire_suppression'):
+                                canopy_info.append("Fire Supp")
+                            if canopy.get('options', {}).get('sdu'):
+                                canopy_info.append("SDU")
+                            if canopy.get('wall_cladding', {}).get('type') != 'None':
+                                canopy_info.append("Wall Clad")
+                            
+                            if canopy_info:
+                                st.write(f"    - {' | '.join(canopy_info)}")
+
 def main():
     st.set_page_config(page_title="Halton Quotation System", page_icon="🏭", layout="wide")
     st.title("Halton Quotation System")
@@ -1712,11 +2479,98 @@ def main():
     
     page = st.sidebar.selectbox(
         "Choose a page:",
-        ["Project Setup", "Generate Word Documents", "Create Revision"]
+        ["Single Page Setup", "Generate Word Documents", "Create Revision"]  # "Project Setup" commented out
     )
     
+    # Add project summary to sidebar
+    if page == "Project Setup" and st.session_state.project_info:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 📋 Current Project")
+        
+        # General Project Information
+        with st.sidebar.expander("General Information", expanded=True):
+            if st.session_state.project_info.get('project_name'):
+                st.sidebar.markdown(f"**Project Name:** {st.session_state.project_info.get('project_name')}")
+            if st.session_state.project_info.get('project_number'):
+                st.sidebar.markdown(f"**Project Number:** {st.session_state.project_info.get('project_number')}")
+            if st.session_state.project_info.get('customer'):
+                st.sidebar.markdown(f"**Customer:** {st.session_state.project_info.get('customer')}")
+            if st.session_state.project_info.get('company'):
+                st.sidebar.markdown(f"**Company:** {st.session_state.project_info.get('company')}")
+            if st.session_state.project_info.get('project_location'):
+                st.sidebar.markdown(f"**Location:** {st.session_state.project_info.get('project_location')}")
+            if st.session_state.project_info.get('estimator'):
+                st.sidebar.markdown(f"**Estimator:** {st.session_state.project_info.get('estimator')}")
+            if st.session_state.project_info.get('date'):
+                st.sidebar.markdown(f"**Date:** {st.session_state.project_info.get('date')}")
+            if st.session_state.project_info.get('revision'):
+                st.sidebar.markdown(f"**Revision:** {st.session_state.project_info.get('revision')}")
+            if st.session_state.project_info.get('delivery_location'):
+                st.sidebar.markdown(f"**Delivery:** {st.session_state.project_info.get('delivery_location')}")
+            if st.session_state.project_info.get('contract_option'):
+                st.sidebar.markdown(f"**Contract Sheets:** {'Yes' if st.session_state.project_info.get('contract_option') else 'No'}")
+        
+        # Structure summary
+        if st.session_state.levels:
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("### 🏗️ Project Structure")
+            
+            # Overall stats
+            total_areas = sum(len(level.get('areas', [])) for level in st.session_state.levels)
+            total_canopies = sum(
+                len(area.get('canopies', [])) 
+                for level in st.session_state.levels 
+                for area in level.get('areas', [])
+            )
+            st.sidebar.markdown(f"**Total:** {len(st.session_state.levels)} Levels, {total_areas} Areas, {total_canopies} Canopies")
+            
+            # Show level details with area options
+            with st.sidebar.expander("Detailed Structure", expanded=False):
+                for level in st.session_state.levels:
+                    st.sidebar.markdown(f"**{level['level_name']}:**")
+                    for area in level.get('areas', []):
+                        canopy_count = len(area.get('canopies', []))
+                        st.sidebar.markdown(f"**• {area['name']}** ({canopy_count} canopies)")
+                        
+                        # Show area options
+                        options = []
+                        if area.get('options', {}).get('uvc'):
+                            options.append("UV-C")
+                        if area.get('options', {}).get('recoair'):
+                            options.append("RecoAir")
+                        if area.get('options', {}).get('marvel'):
+                            options.append("Marvel")
+                        if area.get('options', {}).get('uv_extra_over'):
+                            options.append("UV Extra Over")
+                        if area.get('options', {}).get('vent_clg'):
+                            options.append("VENT CLG")
+                        
+                        if options:
+                            st.sidebar.markdown(f"  Options: {', '.join(options)}")
+                        
+                        # Show canopy details
+                        if canopy_count > 0:
+                            for canopy in area.get('canopies', []):
+                                canopy_info = []
+                                if canopy.get('reference_number'):
+                                    canopy_info.append(f"{canopy['reference_number']}")
+                                if canopy.get('model'):
+                                    canopy_info.append(f"{canopy['model']}")
+                                if canopy.get('options', {}).get('fire_suppression'):
+                                    canopy_info.append("FS")
+                                if canopy.get('options', {}).get('sdu'):
+                                    sdu_text = "SDU"
+                                    if canopy.get('sdu_item_number'):
+                                        sdu_text += f" ({canopy['sdu_item_number']})"
+                                    canopy_info.append(sdu_text)
+                                
+                                if canopy_info:
+                                    st.sidebar.markdown(f"    - {' | '.join(canopy_info)}")
+                    
+                    st.sidebar.markdown("")  # Add spacing between levels
+    
     # Page routing
-    if page == "Project Setup":
+    if False and page == "Project Setup":  # Commented out Project Setup page for now
         # Template Selection
         st.markdown("### Cost Sheet Template Selection")
         template_options = {
@@ -1916,13 +2770,17 @@ def main():
             step2_project_structure()
         elif st.session_state.current_step == 3:
             step3_canopy_configuration()
-        elif st.session_state.current_step == 4:
-            step4_review_and_generate()
+        # Comment out step 4 for now
+        # elif st.session_state.current_step == 4:
+        #     step4_review_and_generate()
         
         st.markdown("---")
         
         # Navigation buttons
         navigation_buttons()
+        
+    if page == "Single Page Setup":
+        single_page_project_builder()
         
     elif page == "Generate Word Documents":
         word_generation_page()
