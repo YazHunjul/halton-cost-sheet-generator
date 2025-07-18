@@ -1490,6 +1490,63 @@ def step3_canopy_configuration():
                             st.rerun()
                         
                         st.markdown("---")
+    
+    # Add Excel generation section at the bottom of Step 3
+    st.markdown("---")
+    st.subheader("💾 Save Your Work")
+    st.markdown("Generate an Excel file to save your current configuration. You can continue editing or proceed to the next step.")
+    
+    # Show Excel generation section
+    generate_excel_section()
+
+def generate_excel_section():
+    """Reusable Excel generation section that can be used in multiple steps."""
+    if st.button("Generate Excel Cost Sheet", type="primary", use_container_width=True):
+        try:
+            # Combine all project data
+            final_project_data = st.session_state.project_info.copy()
+            final_project_data['levels'] = st.session_state.levels
+            
+            # Generate Excel file using selected template
+            template_path = st.session_state.get('template_path', 'templates/excel/Cost Sheet R19.1 May 2025.xlsx')
+            with st.spinner("Generating Excel cost sheet..."):
+                output_path = save_to_excel(final_project_data, template_path)
+            
+            st.success(f"Excel cost sheet generated successfully!")
+            
+            # Provide download option for Excel file
+            try:
+                with open(output_path, "rb") as file:
+                    excel_data = file.read()
+                
+                # Create download filename
+                project_number = final_project_data.get('project_number', 'unknown')
+                date_str = final_project_data.get('date', '')
+                if date_str:
+                    formatted_date = date_str.replace('/', '')
+                else:
+                    formatted_date = get_current_date().replace('/', '')
+                
+                download_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
+                
+                st.download_button(
+                    label="Download Excel Cost Sheet",
+                    data=excel_data,
+                    file_name=download_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
+                
+                # Clean up
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                    
+            except Exception as e:
+                st.error(f"Error preparing download: {str(e)}")
+                
+        except Exception as e:
+            st.error(f"Error generating Excel: {str(e)}")
+            st.exception(e)
 
 def step4_review_and_generate():
     """Step 4: Review and Generate"""
@@ -1551,72 +1608,7 @@ def step4_review_and_generate():
     
     # Generate button
     st.markdown("---")
-    if st.button("Generate Excel Cost Sheet", type="primary", use_container_width=True):
-        try:
-            # Combine all project data
-            final_project_data = st.session_state.project_info.copy()
-            final_project_data['levels'] = st.session_state.levels
-            
-            # Generate Excel file using selected template
-            template_path = st.session_state.get('template_path', 'templates/excel/Cost Sheet R19.1 May 2025.xlsx')
-            with st.spinner("Generating Excel cost sheet..."):
-                output_path = save_to_excel(final_project_data, template_path)
-            
-            st.success(f"Excel cost sheet generated successfully!")
-            
-            # Provide download option for Excel file
-            try:
-                with open(output_path, "rb") as file:
-                    excel_data = file.read()
-                
-                # Create download filename
-                project_number = final_project_data.get('project_number', 'unknown')
-                date_str = final_project_data.get('date', '')
-                if date_str:
-                    formatted_date = date_str.replace('/', '')
-                else:
-                    formatted_date = get_current_date().replace('/', '')
-                
-                download_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
-                
-                st.download_button(
-                    label="Download Excel Cost Sheet",
-                    data=excel_data,
-                    file_name=download_filename,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary"
-                )
-                
-            except Exception as e:
-                st.warning(f"Excel file generated but download preparation failed: {str(e)}")
-                st.info(f"File saved to: `{output_path}`")
-            
-            # Show project summary
-            with st.expander("Generated Project Summary", expanded=True):
-                from utils.word import get_sales_contact_info, get_combined_initials, generate_reference_variable, get_customer_first_name, generate_quote_title
-                estimator_name = final_project_data.get("estimator", "")
-                sales_contact = get_sales_contact_info(estimator_name, final_project_data)
-                combined_initials = get_combined_initials(sales_contact['name'], estimator_name)
-                reference_variable = generate_reference_variable(final_project_data.get("project_number", ""), sales_contact['name'], estimator_name)
-                customer_first_name = get_customer_first_name(final_project_data.get("customer", ""))
-                quote_title = generate_quote_title(final_project_data.get('revision', ''))
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.markdown(f"**Project:** {final_project_data.get('project_name', 'N/A')}")
-                    st.markdown(f"**Customer:** {final_project_data.get('customer', 'N/A')}")
-                    st.markdown(f"**Company:** {final_project_data.get('company', 'N/A')}")
-                with col2:
-                    st.markdown(f"**Project Number:** {final_project_data.get('project_number', 'N/A')}")
-                    st.markdown(f"**Combined Initials:** {combined_initials}")
-                    st.markdown(f"**Reference Variable:** {reference_variable}")
-                with col3:
-                    st.markdown(f"**Customer First Name:** {customer_first_name}")
-                    st.markdown(f"**Quote Title:** {quote_title}")
-                    st.markdown(f"**Revision:** {final_project_data.get('revision', '') or 'Initial Version'}")
-            
-        except Exception as e:
-            st.error(f"Error generating Excel file: {str(e)}")
+    generate_excel_section()
 
 def populate_session_state_from_uploaded_data(extracted_data):
     """
