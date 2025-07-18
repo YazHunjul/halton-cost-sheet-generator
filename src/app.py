@@ -1260,6 +1260,29 @@ def step3_canopy_configuration():
                 # Display canopies
                 for canopy_idx, canopy in enumerate(area['canopies']):
                     canopy_key = f"{area_key}_canopy_{canopy_idx}"
+                    
+                    # Initialize session state for canopy fields if not already present
+                    if f"{canopy_key}_ref" not in st.session_state:
+                        st.session_state[f"{canopy_key}_ref"] = canopy.get('reference_number', '')
+                    if f"{canopy_key}_model" not in st.session_state:
+                        st.session_state[f"{canopy_key}_model"] = canopy.get('model', '')
+                    if f"{canopy_key}_config" not in st.session_state:
+                        st.session_state[f"{canopy_key}_config"] = canopy.get('configuration', '')
+                    if f"{canopy_key}_length" not in st.session_state:
+                        st.session_state[f"{canopy_key}_length"] = canopy.get('length', 0)
+                    if f"{canopy_key}_width" not in st.session_state:
+                        st.session_state[f"{canopy_key}_width"] = canopy.get('width', 0)
+                    if f"{canopy_key}_height" not in st.session_state:
+                        st.session_state[f"{canopy_key}_height"] = canopy.get('height', 555)
+                    if f"{canopy_key}_sections" not in st.session_state:
+                        st.session_state[f"{canopy_key}_sections"] = canopy.get('sections', 0)
+                    if f"{canopy_key}_fire" not in st.session_state:
+                        st.session_state[f"{canopy_key}_fire"] = canopy.get('options', {}).get('fire_suppression', False)
+                    if f"{canopy_key}_sdu" not in st.session_state:
+                        st.session_state[f"{canopy_key}_sdu"] = canopy.get('options', {}).get('sdu', False)
+                    if f"{canopy_key}_sdu_item" not in st.session_state:
+                        st.session_state[f"{canopy_key}_sdu_item"] = canopy.get('sdu_item_number', '')
+                    
                     with st.container():
                         st.markdown(f"**Canopy {canopy_idx + 1}:**")
                         
@@ -1273,7 +1296,11 @@ def step3_canopy_configuration():
                                     area_idx < len(st.session_state.levels[level_idx]['areas']) and 
                                     canopy_idx < len(st.session_state.levels[level_idx]['areas'][area_idx]['canopies'])):
                                     
-                                    st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx].update({
+                                    # Get the current canopy to preserve fields that don't have UI widgets
+                                    current_canopy = st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]
+                                    
+                                    # Update only the fields that have UI widgets, preserving all other fields
+                                    current_canopy.update({
                                         'reference_number': st.session_state.get(f"{canopy_key}_ref", ''),
                                         'model': st.session_state.get(f"{canopy_key}_model", ''),
                                         'configuration': st.session_state.get(f"{canopy_key}_config", ''),
@@ -1296,7 +1323,6 @@ def step3_canopy_configuration():
                         
                         with row1_col1:
                             ref_num = st.text_input("Reference", 
-                                                   value=canopy.get('reference_number', ''), 
                                                    key=f"{canopy_key}_ref",
                                                    on_change=update_canopy_data)
                         
@@ -1307,7 +1333,6 @@ def step3_canopy_configuration():
                                 model_index = model_options.index(canopy.get('model', ''))
                             
                             model = st.selectbox("Model", model_options,
-                                               index=model_index,
                                                key=f"{canopy_key}_model",
                                                on_change=update_canopy_data)
                         
@@ -1318,7 +1343,6 @@ def step3_canopy_configuration():
                                 config_index = config_options.index(canopy.get('configuration', ''))
                             
                             configuration = st.selectbox("Configuration", config_options,
-                                                       index=config_index,
                                                        key=f"{canopy_key}_config",
                                                        on_change=update_canopy_data)
                         
@@ -1328,14 +1352,12 @@ def step3_canopy_configuration():
                         
                         with row2_col1:
                             length = st.number_input("Length", 
-                                                   value=int(canopy.get('length', 0)) if canopy.get('length') else 0, 
                                                    key=f"{canopy_key}_length",
                                                    on_change=update_canopy_data,
                                                    min_value=0)
                         
                         with row2_col2:
                             width = st.number_input("Width", 
-                                                  value=int(canopy.get('width', 0)) if canopy.get('width') else 0, 
                                                   key=f"{canopy_key}_width",
                                                   on_change=update_canopy_data,
                                                   min_value=0)
@@ -1346,7 +1368,6 @@ def step3_canopy_configuration():
                             if default_height == 0 or default_height == "":
                                 default_height = 555
                             height = st.number_input("Height", 
-                                                   value=int(default_height), 
                                                    key=f"{canopy_key}_height",
                                                    on_change=update_canopy_data,
                                                    min_value=0)
@@ -1356,20 +1377,17 @@ def step3_canopy_configuration():
                         
                         with row3_col1:
                             sections = st.number_input("Sections", 
-                                                     value=int(canopy.get('sections', 0)) if canopy.get('sections') else 0, 
                                                      key=f"{canopy_key}_sections",
                                                      on_change=update_canopy_data,
                                                      min_value=0)
                         
                         with row3_col2:
                             fire_suppression = st.checkbox("Fire Suppression", 
-                                                          value=canopy.get('options', {}).get('fire_suppression', False), 
                                                           key=f"{canopy_key}_fire",
                                                           on_change=update_canopy_data)
                         
                         with row3_col3:
                             sdu = st.checkbox("SDU", 
-                                            value=canopy.get('options', {}).get('sdu', False), 
                                             key=f"{canopy_key}_sdu",
                                             on_change=update_canopy_data)
                         
@@ -1377,7 +1395,6 @@ def step3_canopy_configuration():
                         if st.session_state.get(f"{canopy_key}_sdu", False):
                             sdu_item_number = st.text_input(
                                 "SDU Item Number",
-                                value=canopy.get('sdu_item_number', ''),
                                 key=f"{canopy_key}_sdu_item",
                                 help="Enter the item number for this SDU (will be written to B12)",
                                 on_change=update_canopy_data
@@ -1409,18 +1426,26 @@ def step3_canopy_configuration():
                                 # Silently ignore index errors - the UI will rerender with correct indices  
                                 pass
                         
+                        # Initialize wall cladding state if not already present
+                        if f"{canopy_key}_wall_cladding_enabled" not in st.session_state:
+                            st.session_state[f"{canopy_key}_wall_cladding_enabled"] = canopy.get('wall_cladding', {}).get('type') not in ['None', None, '']
+                        
                         wall_cladding_enabled = st.checkbox("With Wall Cladding", 
-                                                          value=canopy.get('wall_cladding', {}).get('type') not in ['None', None, ''],
                                                           key=f"{canopy_key}_wall_cladding_enabled",
                                                           on_change=update_wall_cladding)
                         
                         if wall_cladding_enabled:
                             clad_col1, clad_col2, clad_col3 = st.columns(3)
                             
+                            # Initialize wall cladding dimensions if not already present
+                            if f"{canopy_key}_clad_width" not in st.session_state:
+                                st.session_state[f"{canopy_key}_clad_width"] = int(canopy.get('wall_cladding', {}).get('width', 0)) if canopy.get('wall_cladding', {}).get('width') else 0
+                            if f"{canopy_key}_clad_height" not in st.session_state:
+                                st.session_state[f"{canopy_key}_clad_height"] = int(canopy.get('wall_cladding', {}).get('height', 0)) if canopy.get('wall_cladding', {}).get('height') else 0
+                            
                             with clad_col1:
                                 cladding_width = st.number_input(
                                     "Width (mm)", 
-                                    value=int(canopy.get('wall_cladding', {}).get('width', 0)) if canopy.get('wall_cladding', {}).get('width') else 0,
                                     key=f"{canopy_key}_clad_width",
                                     min_value=0,
                                     on_change=update_wall_cladding
@@ -1429,41 +1454,29 @@ def step3_canopy_configuration():
                             with clad_col2:
                                 cladding_height = st.number_input(
                                     "Height (mm)", 
-                                    value=int(canopy.get('wall_cladding', {}).get('height', 0)) if canopy.get('wall_cladding', {}).get('height') else 0,
                                     key=f"{canopy_key}_clad_height",
                                     min_value=0,
                                     on_change=update_wall_cladding
                                 )
                             
                             with clad_col3:
-                                # Position can be multiple selections
-                                current_positions = canopy.get('wall_cladding', {}).get('position', [])
-                                if isinstance(current_positions, str):
-                                    current_positions = [current_positions] if current_positions else []
-                                elif current_positions is None:
-                                    current_positions = []
+                                # Initialize position if not already present
+                                if f"{canopy_key}_clad_position" not in st.session_state:
+                                    current_positions = canopy.get('wall_cladding', {}).get('position', [])
+                                    if isinstance(current_positions, str):
+                                        current_positions = [current_positions] if current_positions else []
+                                    elif current_positions is None:
+                                        current_positions = []
+                                    st.session_state[f"{canopy_key}_clad_position"] = current_positions
                                 
                                 cladding_positions = st.multiselect(
                                     "Position",
                                     options=["rear", "left hand", "right hand"],
-                                    default=current_positions,
                                     key=f"{canopy_key}_clad_position",
                                     on_change=update_wall_cladding
                                 )
                         
-                        # Update canopy data immediately (this ensures all changes are persisted)
-                        current_wall_cladding = canopy.get('wall_cladding', {})
-                        if wall_cladding_enabled:
-                            wall_cladding_data = {
-                                "type": "Custom",
-                                "width": st.session_state.get(f"{canopy_key}_clad_width", 0) or None,
-                                "height": st.session_state.get(f"{canopy_key}_clad_height", 0) or None,
-                                "position": st.session_state.get(f"{canopy_key}_clad_position", []) or None
-                            }
-                        else:
-                            wall_cladding_data = {"type": "None", "width": None, "height": None, "position": None}
-                        
-                        # Canopy data is updated via callbacks - no need for final update here
+                        # Canopy data is updated via callbacks
                         
                         # Remove canopy button
                         if st.button(f"Remove Canopy", key=f"{canopy_key}_remove"):

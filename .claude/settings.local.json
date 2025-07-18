@@ -4,7 +4,8 @@
       "Bash(python test_sdu_collection.py)",
       "Bash(python:*)",
       "Bash(grep:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
