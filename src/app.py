@@ -1241,10 +1241,10 @@ def step3_canopy_configuration():
                             "reference_number": f"C{len(area['canopies']) + 1:03d}",
                             "configuration": "",
                             "model": "",
-                            "length": "",
-                            "width": "",
+                            "length": 0,
+                            "width": 0,
                             "height": 555,  # Default height set to 555
-                            "sections": "",
+                            "sections": 0,
                             "lighting_type": "",
                             "extract_volume": "",
                             "extract_static": "",
@@ -1269,13 +1269,17 @@ def step3_canopy_configuration():
                     if f"{canopy_key}_config" not in st.session_state:
                         st.session_state[f"{canopy_key}_config"] = canopy.get('configuration', '')
                     if f"{canopy_key}_length" not in st.session_state:
-                        st.session_state[f"{canopy_key}_length"] = canopy.get('length', 0)
+                        length_val = canopy.get('length', 0)
+                        st.session_state[f"{canopy_key}_length"] = int(length_val) if length_val and str(length_val).strip() else 0
                     if f"{canopy_key}_width" not in st.session_state:
-                        st.session_state[f"{canopy_key}_width"] = canopy.get('width', 0)
+                        width_val = canopy.get('width', 0)
+                        st.session_state[f"{canopy_key}_width"] = int(width_val) if width_val and str(width_val).strip() else 0
                     if f"{canopy_key}_height" not in st.session_state:
-                        st.session_state[f"{canopy_key}_height"] = canopy.get('height', 555)
+                        height_val = canopy.get('height', 555)
+                        st.session_state[f"{canopy_key}_height"] = int(height_val) if height_val and str(height_val).strip() else 555
                     if f"{canopy_key}_sections" not in st.session_state:
-                        st.session_state[f"{canopy_key}_sections"] = canopy.get('sections', 0)
+                        sections_val = canopy.get('sections', 0)
+                        st.session_state[f"{canopy_key}_sections"] = int(sections_val) if sections_val and str(sections_val).strip() else 0
                     if f"{canopy_key}_fire" not in st.session_state:
                         st.session_state[f"{canopy_key}_fire"] = canopy.get('options', {}).get('fire_suppression', False)
                     if f"{canopy_key}_sdu" not in st.session_state:
@@ -1439,9 +1443,11 @@ def step3_canopy_configuration():
                             
                             # Initialize wall cladding dimensions if not already present
                             if f"{canopy_key}_clad_width" not in st.session_state:
-                                st.session_state[f"{canopy_key}_clad_width"] = int(canopy.get('wall_cladding', {}).get('width', 0)) if canopy.get('wall_cladding', {}).get('width') else 0
+                                width_val = canopy.get('wall_cladding', {}).get('width', 0)
+                                st.session_state[f"{canopy_key}_clad_width"] = int(width_val) if width_val and str(width_val).strip() else 0
                             if f"{canopy_key}_clad_height" not in st.session_state:
-                                st.session_state[f"{canopy_key}_clad_height"] = int(canopy.get('wall_cladding', {}).get('height', 0)) if canopy.get('wall_cladding', {}).get('height') else 0
+                                height_val = canopy.get('wall_cladding', {}).get('height', 0)
+                                st.session_state[f"{canopy_key}_clad_height"] = int(height_val) if height_val and str(height_val).strip() else 0
                             
                             with clad_col1:
                                 cladding_width = st.number_input(
