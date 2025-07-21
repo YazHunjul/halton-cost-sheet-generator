@@ -1944,6 +1944,15 @@ def single_page_project_builder():
                 key="sp_delivery_location"
             )
             st.session_state.project_info['delivery_location'] = delivery_location
+            
+            # Contract Option
+            contract_option = st.checkbox(
+                "Include Contract Sheets",
+                value=st.session_state.project_info.get('contract_option', False),
+                key="sp_contract_option",
+                help="Include CONTRACT, EXTRACT DUCT, SUPPLY DUCT, and SPIRAL DUCT sheets in the Excel file"
+            )
+            st.session_state.project_info['contract_option'] = contract_option
         
         # Project Structure Section
         st.markdown("---")
@@ -2413,6 +2422,8 @@ def single_page_project_builder():
                         st.write(f"Delivery: {st.session_state.project_info['delivery_location']}")
                     if st.session_state.project_info.get('date'):
                         st.write(f"Date: {st.session_state.project_info['date']}")
+                    if st.session_state.project_info.get('contract_option') is not None:
+                        st.write(f"Contract Sheets: {'Yes' if st.session_state.project_info.get('contract_option', False) else 'No'}")
         
         # Structure Summary
         if st.session_state.levels:
