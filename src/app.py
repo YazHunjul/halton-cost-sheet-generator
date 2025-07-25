@@ -550,7 +550,7 @@ def word_generation_page():
             
             # Check if this is a validation error with detailed information
             if "Data validation errors found:" in error_message:
-                st.error("No **Excel File Validation Errors**")
+                st.error("❌ **Excel File Validation Errors**")
                 st.markdown("The following data validation errors were found in your Excel file:")
                 
                 # Split the error message to extract the validation details
@@ -571,15 +571,19 @@ def word_generation_page():
                 st.info(" **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
                 
             else:
-                st.error(f"No Error reading Excel file: {error_message}")
+                st.error(f"❌ Error reading Excel file: {error_message}")
+                # Show detailed traceback for debugging
+                with st.expander("🔍 Technical Details", expanded=False):
+                    import traceback
+                    st.code(traceback.format_exc())
             
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
 def revision_page():
-    """Page for creating new revisions from existing Excel files."""
-    st.header(" Create New Revision")
-    st.markdown("Upload an existing Excel cost sheet to create a new revision with the same data.")
+    """Page for creating new revisions from existing Excel files with full editing capabilities."""
+    st.header(" Create & Edit Revision")
+    st.markdown("Upload an existing Excel cost sheet to create a new revision. You can edit all aspects of the project before generating the revision.")
     
     uploaded_file = st.file_uploader(
         "Choose Excel file to revise",
@@ -599,120 +603,625 @@ def revision_page():
                 project_data = read_excel_project_data(temp_path)
             
             # Display summary of extracted data
-            st.success("Yes Successfully extracted project data from Excel!")
+            st.success("✅ Successfully extracted project data from Excel!")
             
             # Show current revision info
             current_revision = project_data.get('revision', '')
             revision_display = current_revision if current_revision else 'Initial Version'
-            st.info(f" **Current Revision:** {revision_display}")
             
-            # Display project summary
-            with st.expander(" Project Information", expanded=False):
+            # Reset session state for new file upload (use filename as key to detect changes)
+            current_file_key = f"{uploaded_file.name}_{uploaded_file.size}"
+            if 'revision_file_key' not in st.session_state or st.session_state.revision_file_key != current_file_key:
+                # Clear old data
+                if 'revision_project_data' in st.session_state:
+                    del st.session_state.revision_project_data
+                if 'revision_levels' in st.session_state:
+                    del st.session_state.revision_levels
+                st.session_state.revision_file_key = current_file_key
+            
+            # Store project data in session state for editing
+            if 'revision_project_data' not in st.session_state:
+                st.session_state.revision_project_data = project_data.copy()
+                # Convert levels data to match the format used in the main editor
+                if 'levels' in project_data:
+                    # Convert from Excel format to editor format
+                    st.session_state.revision_levels = []
+                    try:
+                        for level in project_data['levels']:
+                            converted_level = {
+                                'name': level.get('level_name', f"Level {level.get('level_number', '')}"),
+                                'areas': []
+                            }
+                            # Safely process areas
+                            if 'areas' in level and level['areas']:
+                                for area in level['areas']:
+                                    # Ensure each area has required fields
+                                    if isinstance(area, dict):
+                                        converted_level['areas'].append(area)
+                            st.session_state.revision_levels.append(converted_level)
+                    except Exception as e:
+                        st.error(f"Error processing levels data: {str(e)}")
+                        st.write("Level structure that caused error:")
+                        st.json(project_data['levels'])
+                        st.session_state.revision_levels = []
+                else:
+                    st.session_state.revision_levels = []
+            
+            # Tabs for different editing sections
+            tab1, tab2, tab3, tab4 = st.tabs([
+                " Project Info", 
+                " Levels & Areas", 
+                " Canopy Configuration",
+                " Generate Revision"
+            ])
+            
+            with tab1:
+                st.subheader("Edit Project Information")
                 col1, col2 = st.columns(2)
+                
                 with col1:
-                    st.write("**Project Name:**", project_data.get("project_name"))
-                    st.write("**Project Number:**", project_data.get("project_number"))
-                    st.write("**Date:**", format_date_for_display(project_data.get("date")))
-                    st.write("**Customer:**", project_data.get("customer"))
-                    st.write("**Company:**", project_data.get("company"))
+                    st.session_state.revision_project_data['project_name'] = st.text_input(
+                        "Project Name",
+                        value=st.session_state.revision_project_data.get('project_name', ''),
+                        key="rev_project_name"
+                    )
+                    st.session_state.revision_project_data['project_number'] = st.text_input(
+                        "Project Number",
+                        value=st.session_state.revision_project_data.get('project_number', ''),
+                        key="rev_project_number"
+                    )
+                    st.session_state.revision_project_data['customer'] = st.text_input(
+                        "Customer",
+                        value=st.session_state.revision_project_data.get('customer', ''),
+                        key="rev_customer"
+                    )
+                    st.session_state.revision_project_data['company'] = st.text_input(
+                        "Company",
+                        value=st.session_state.revision_project_data.get('company', ''),
+                        key="rev_company"
+                    )
                 
                 with col2:
-                    st.write("**Project Location:**", project_data.get("project_location") or project_data.get("location"))
-                    st.write("**Delivery Location:**", project_data.get("delivery_location"))
-                    st.write("**Estimator:**", project_data.get("estimator"))
-                    st.write("**Current Revision:**", current_revision)
-                    
-                    # Show project analysis
-                    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg = analyze_project_areas(project_data)
-                    st.write("**Has Canopies:**", "Yes" if has_canopies else "No")
-                    st.write("**Has RecoAir:**", "Yes" if has_recoair else "No")
-                    st.write("**Has UV Canopies:**", "Yes" if has_uv else "No")
-                    st.write("**Levels Found:**", len(project_data.get("levels", [])))
-            
-            # Revision options
-            st.markdown("---")
-            st.subheader(" Revision Options")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Auto-increment revision
-                if current_revision == '':
-                    next_revision = 'A'  # First revision from blank should be A
-                else:
-                    next_revision = chr(ord(current_revision) + 1) if current_revision and len(current_revision) == 1 and current_revision < 'Z' else 'B'
-                st.write(f"**Suggested Next Revision:** {next_revision}")
-                
-                revision_choice = st.radio(
-                    "Choose revision method:",
-                    ["Auto-increment (recommended)", "Custom revision letter"],
-                    help="Auto-increment will automatically suggest the next revision letter"
-                )
-            
-            with col2:
-                if revision_choice == "Custom revision letter":
-                    new_revision = st.text_input(
-                        "Enter new revision letter:",
-                        value=next_revision,
-                        max_chars=3,
-                        help="Enter a revision letter (e.g., B, C, D, etc.)"
-                    ).upper()
-                else:
-                    new_revision = next_revision
-                    st.write(f"**New Revision will be:** {new_revision}")
-            
-            # Optional: Update date
-            update_date = st.checkbox("Update date to today", value=True)
-            
-            if update_date:
-                new_date = get_current_date()
-                st.write(f"**New Date:** {new_date}")
-            else:
-                new_date = project_data.get("date", "")
-                st.write(f"**Date will remain:** {format_date_for_display(new_date)}")
-            
-            # Generate new revision
-            if st.button(" Create New Revision", type="primary"):
-                try:
-                    with st.spinner(f"Generating revision {new_revision}..."):
-                        from utils.excel import create_revision_from_existing
-                        
-                        # Create new revision from existing file (preserves all data)
-                        output_path = create_revision_from_existing(
-                            temp_path, 
-                            new_revision, 
-                            new_date if update_date else None
-                        )
-                        
-                        # Read the file for download
-                        with open(output_path, "rb") as file:
-                            excel_data = file.read()
-                    
-                    st.success(f"Yes Revision {new_revision} created successfully!")
-                    
-                    # Create download filename: "Project Number Cost Sheet Date"
-                    project_number = project_data.get('project_number', 'unknown')
-                    date_str = new_date.replace('/', '') if new_date else ''
-                    download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
-                    
-                    st.download_button(
-                        label=f" Download Revision {new_revision}",
-                        data=excel_data,
-                        file_name=download_filename,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    st.session_state.revision_project_data['project_location'] = st.text_input(
+                        "Project Location",
+                        value=st.session_state.revision_project_data.get('project_location') or st.session_state.revision_project_data.get('location', ''),
+                        key="rev_project_location"
                     )
                     
-                    # Show what changed
-                    st.info(f" **Changes Made:**")
-                    st.write(f"• Revision updated: {current_revision} → {new_revision}")
-                    if update_date:
-                        st.write(f"• Date updated: {format_date_for_display(project_data.get('date', 'N/A'))} → {new_date}")
-                    st.write("• Yes All existing data preserved (canopies, pricing, formulas)")
-                    st.write("• Yes Dynamic pricing formulas maintained")
-                    st.write("• Yes All manual entries and calculations preserved")
+                    # Delivery location dropdown
+                    from config.business_data import DELIVERY_LOCATIONS
+                    current_delivery = st.session_state.revision_project_data.get('delivery_location', '')
+                    if current_delivery and current_delivery not in DELIVERY_LOCATIONS:
+                        delivery_options = [current_delivery] + DELIVERY_LOCATIONS
+                    else:
+                        delivery_options = DELIVERY_LOCATIONS
                     
-                except Exception as e:
-                    st.error(f"No Error creating revision: {str(e)}")
+                    st.session_state.revision_project_data['delivery_location'] = st.selectbox(
+                        "Delivery Location",
+                        options=delivery_options,
+                        index=delivery_options.index(current_delivery) if current_delivery in delivery_options else 0,
+                        key="rev_delivery_location"
+                    )
+                    
+                    st.session_state.revision_project_data['estimator'] = st.text_input(
+                        "Estimator",
+                        value=st.session_state.revision_project_data.get('estimator', ''),
+                        key="rev_estimator"
+                    )
+                    
+                    # Show current revision (read-only)
+                    st.text_input(
+                        "Current Revision",
+                        value=revision_display,
+                        disabled=True,
+                        key="rev_current_revision"
+                    )
+            
+            with tab2:
+                st.subheader("Edit Levels & Areas")
+                
+                # Function to edit levels and areas for revision
+                if 'revision_levels' not in st.session_state:
+                    st.session_state.revision_levels = []
+                
+                # Add new level button
+                if st.button(" Add New Level", key="rev_add_level"):
+                    new_level = {
+                        'name': f"Level {len(st.session_state.revision_levels) + 1}",
+                        'areas': []
+                    }
+                    st.session_state.revision_levels.append(new_level)
+                    st.rerun()
+                
+                # Display and edit existing levels
+                for level_idx, level in enumerate(st.session_state.revision_levels):
+                    # Ensure level has a name
+                    if 'name' not in level:
+                        level['name'] = level.get('level_name', f"Level {level_idx + 1}")
+                    
+                    with st.expander(f" {level['name']}", expanded=True):
+                        col1, col2 = st.columns([3, 1])
+                        
+                        with col1:
+                            # Edit level name
+                            level['name'] = st.text_input(
+                                "Level Name",
+                                value=level['name'],
+                                key=f"rev_level_name_{level_idx}"
+                            )
+                        
+                        with col2:
+                            # Remove level button
+                            if st.button("No Remove Level", key=f"rev_remove_level_{level_idx}"):
+                                st.session_state.revision_levels.pop(level_idx)
+                                st.rerun()
+                        
+                        # Areas for this level
+                        st.write("**Areas:**")
+                        
+                        # Add area button
+                        if st.button(f" Add Area to {level['name']}", key=f"rev_add_area_{level_idx}"):
+                            new_area = {
+                                'name': f"Area {len(level['areas']) + 1}",
+                                'canopies': []
+                            }
+                            level['areas'].append(new_area)
+                            st.rerun()
+                        
+                        # Display areas
+                        for area_idx, area in enumerate(level['areas']):
+                            # Ensure area has required fields
+                            if 'name' not in area:
+                                area['name'] = f"Area {area_idx + 1}"
+                            if 'options' not in area:
+                                area['options'] = {}
+                            
+                            with st.container():
+                                col1, col2 = st.columns([3, 1])
+                                
+                                with col1:
+                                    area['name'] = st.text_input(
+                                        f"Area Name",
+                                        value=area.get('name', f"Area {area_idx + 1}"),
+                                        key=f"rev_area_name_{level_idx}_{area_idx}"
+                                    )
+                                
+                                with col2:
+                                    if st.button("❌ Remove", key=f"rev_remove_area_{level_idx}_{area_idx}"):
+                                        level['areas'].pop(area_idx)
+                                        st.rerun()
+                                
+                                # Area options
+                                st.write("**Area Options:**")
+                                opt_col1, opt_col2, opt_col3, opt_col4 = st.columns(4)
+                                
+                                with opt_col1:
+                                    area['options']['uvc'] = st.checkbox(
+                                        "UV-C",
+                                        value=area.get('options', {}).get('uvc', False),
+                                        key=f"rev_area_uvc_{level_idx}_{area_idx}"
+                                    )
+                                
+                                with opt_col2:
+                                    area['options']['recoair'] = st.checkbox(
+                                        "RecoAir",
+                                        value=area.get('options', {}).get('recoair', False),
+                                        key=f"rev_area_recoair_{level_idx}_{area_idx}"
+                                    )
+                                
+                                with opt_col3:
+                                    area['options']['marvel'] = st.checkbox(
+                                        "Marvel",
+                                        value=area.get('options', {}).get('marvel', False),
+                                        key=f"rev_area_marvel_{level_idx}_{area_idx}"
+                                    )
+                                
+                                with opt_col4:
+                                    area['options']['vent_clg'] = st.checkbox(
+                                        "Vent CLG",
+                                        value=area.get('options', {}).get('vent_clg', False),
+                                        key=f"rev_area_vent_{level_idx}_{area_idx}"
+                                    )
+                                
+                                st.markdown("---")  # Separator between areas
+            
+            with tab3:
+                st.subheader("Edit Canopy Configuration")
+                
+                if not st.session_state.revision_levels:
+                    st.info("Please add levels and areas in the Levels & Areas tab first.")
+                else:
+                    # Display canopy configuration for each area
+                    for level_idx, level in enumerate(st.session_state.revision_levels):
+                        if level['areas']:
+                            st.write(f"### {level['name']}")
+                            
+                            for area_idx, area in enumerate(level['areas']):
+                                # Ensure area has a name
+                                area_name = area.get('name', f"Area {area_idx + 1}")
+                                with st.expander(f" {area_name}", expanded=True):
+                                    # Add canopy button
+                                    if st.button(f"➕ Add Canopy", key=f"rev_add_canopy_{level_idx}_{area_idx}"):
+                                        if 'canopies' not in area:
+                                            area['canopies'] = []
+                                        new_canopy = {
+                                            "reference_number": f"C{len(area['canopies']) + 1:03d}",
+                                            "configuration": "",
+                                            "model": "",
+                                            "length": 1000,
+                                            "width": 1000,
+                                            "height": 555,
+                                            "sections": 1,
+                                            "options": {
+                                                "fire_suppression": False,
+                                                "sdu": False
+                                            },
+                                            "wall_cladding": {
+                                                "type": "None",
+                                                "width": 0,
+                                                "height": 2100,
+                                                "position": []
+                                            },
+                                            "sdu_item_number": ""
+                                        }
+                                        area['canopies'].append(new_canopy)
+                                        st.rerun()
+                                    
+                                    # Display existing canopies
+                                    if 'canopies' in area and area['canopies']:
+                                        for canopy_idx, canopy in enumerate(area['canopies']):
+                                            canopy_key = f"rev_canopy_{level_idx}_{area_idx}_{canopy_idx}"
+                                            
+                                            with st.container():
+                                                # Header with remove button
+                                                header_col1, header_col2 = st.columns([5, 1])
+                                                with header_col1:
+                                                    st.write(f"**Canopy {canopy_idx + 1} - {canopy.get('reference_number', f'C{canopy_idx + 1:03d}')}**")
+                                                with header_col2:
+                                                    if st.button("❌", key=f"{canopy_key}_remove"):
+                                                        area['canopies'].pop(canopy_idx)
+                                                        st.rerun()
+                                                
+                                                # Basic info
+                                                col1, col2, col3, col4 = st.columns(4)
+                                                
+                                                with col1:
+                                                    canopy['reference_number'] = st.text_input(
+                                                        "Reference No.",
+                                                        value=canopy.get('reference_number', f'C{canopy_idx + 1:03d}'),
+                                                        key=f"{canopy_key}_ref"
+                                                    )
+                                                    
+                                                with col2:
+                                                    from config.business_data import VALID_CANOPY_MODELS
+                                                    model_options = [""] + VALID_CANOPY_MODELS
+                                                    canopy['model'] = st.selectbox(
+                                                        "Model",
+                                                        options=model_options,
+                                                        index=0 if canopy.get('model', '') == '' else (model_options.index(canopy.get('model', '')) if canopy.get('model', '') in model_options else 0),
+                                                        key=f"{canopy_key}_model"
+                                                    )
+                                                
+                                                with col3:
+                                                    # Configuration can be edited
+                                                    configuration_options = ["WALL", "ISLAND"]
+                                                    current_config = canopy.get('configuration', '')
+                                                    if current_config and current_config not in configuration_options:
+                                                        configuration_options.insert(0, current_config)
+                                                    canopy['configuration'] = st.selectbox(
+                                                        "Configuration",
+                                                        options=configuration_options,
+                                                        index=configuration_options.index(current_config) if current_config in configuration_options else 0,
+                                                        key=f"{canopy_key}_config"
+                                                    )
+                                                
+                                                with col4:
+                                                    canopy['sections'] = st.number_input(
+                                                        "Sections",
+                                                        value=int(canopy.get('sections', 1)),
+                                                        min_value=1,
+                                                        max_value=10,
+                                                        key=f"{canopy_key}_sections"
+                                                    )
+                                                
+                                                # Dimensions
+                                                col1, col2, col3 = st.columns(3)
+                                                
+                                                with col1:
+                                                    canopy['length'] = st.number_input(
+                                                        "Length (mm)",
+                                                        value=int(canopy.get('length', 1000)),
+                                                        min_value=0,
+                                                        step=100,
+                                                        key=f"{canopy_key}_length"
+                                                    )
+                                                
+                                                with col2:
+                                                    canopy['width'] = st.number_input(
+                                                        "Width (mm)",
+                                                        value=int(canopy.get('width', 1000)),
+                                                        min_value=0,
+                                                        step=100,
+                                                        key=f"{canopy_key}_width"
+                                                    )
+                                                
+                                                with col3:
+                                                    canopy['height'] = st.number_input(
+                                                        "Height (mm)",
+                                                        value=int(canopy.get('height', 555)),
+                                                        min_value=0,
+                                                        step=50,
+                                                        key=f"{canopy_key}_height"
+                                                    )
+                                                
+                                                # Options
+                                                st.write("**Canopy Options:**")
+                                                opt_col1, opt_col2, opt_col3, opt_col4 = st.columns(4)
+                                                
+                                                with opt_col1:
+                                                    if 'options' not in canopy:
+                                                        canopy['options'] = {}
+                                                    canopy['options']['fire_suppression'] = st.checkbox(
+                                                        "Fire Suppression",
+                                                        value=canopy.get('options', {}).get('fire_suppression', False),
+                                                        key=f"{canopy_key}_fire"
+                                                    )
+                                                
+                                                with opt_col2:
+                                                    canopy['options']['sdu'] = st.checkbox(
+                                                        "SDU",
+                                                        value=canopy.get('options', {}).get('sdu', False),
+                                                        key=f"{canopy_key}_sdu"
+                                                    )
+                                                    
+                                                with opt_col3:
+                                                    # If SDU is selected, show item number
+                                                    if canopy['options']['sdu']:
+                                                        canopy['sdu_item_number'] = st.text_input(
+                                                            "SDU Item No.",
+                                                            value=canopy.get('sdu_item_number', ''),
+                                                            key=f"{canopy_key}_sdu_item"
+                                                        )
+                                                
+                                                # Wall Cladding
+                                                st.write("**Wall Cladding:**")
+                                                if 'wall_cladding' not in canopy:
+                                                    canopy['wall_cladding'] = {"type": "None", "width": 0, "height": 0, "position": []}
+                                                
+                                                # Check if wall cladding is enabled (not 'None' and has some data)
+                                                wall_cladding_data = canopy.get('wall_cladding', {})
+                                                has_wall_cladding = (
+                                                    wall_cladding_data.get('type', 'None') not in ['None', None] or
+                                                    wall_cladding_data.get('width', 0) or
+                                                    wall_cladding_data.get('height', 0) or
+                                                    wall_cladding_data.get('position', [])
+                                                )
+                                                
+                                                wall_clad_enabled = st.checkbox(
+                                                    "With Wall Cladding",
+                                                    value=has_wall_cladding,
+                                                    key=f"{canopy_key}_wall_clad"
+                                                )
+                                                
+                                                if wall_clad_enabled:
+                                                    clad_col1, clad_col2, clad_col3 = st.columns(3)
+                                                    
+                                                    # Set type to Stainless Steel by default (no UI input)
+                                                    canopy['wall_cladding']['type'] = 'Stainless Steel'
+                                                    
+                                                    with clad_col1:
+                                                        # Handle None values for width
+                                                        width_value = canopy['wall_cladding'].get('width', 0)
+                                                        if width_value is None:
+                                                            width_value = 0
+                                                        canopy['wall_cladding']['width'] = st.number_input(
+                                                            "Width (mm)",
+                                                            value=int(width_value),
+                                                            min_value=0,
+                                                            step=100,
+                                                            key=f"{canopy_key}_clad_width"
+                                                        )
+                                                    
+                                                    with clad_col2:
+                                                        # Handle None values for height, default to 2100
+                                                        height_value = canopy['wall_cladding'].get('height', 2100)
+                                                        if height_value is None or height_value == 0:
+                                                            height_value = 2100
+                                                        canopy['wall_cladding']['height'] = st.number_input(
+                                                            "Height (mm)",
+                                                            value=int(height_value),
+                                                            min_value=0,
+                                                            step=100,
+                                                            key=f"{canopy_key}_clad_height"
+                                                        )
+                                                    
+                                                    with clad_col3:
+                                                        cladding_positions = ["rear", "left hand", "right hand"]
+                                                        position_value = canopy['wall_cladding'].get('position', [])
+                                                        if isinstance(position_value, str):
+                                                            position_value = [position_value]
+                                                        elif not isinstance(position_value, list):
+                                                            position_value = []
+                                                        
+                                                        selected_positions = st.multiselect(
+                                                            "Position",
+                                                            options=cladding_positions,
+                                                            default=position_value,
+                                                            key=f"{canopy_key}_clad_pos"
+                                                        )
+                                                        canopy['wall_cladding']['position'] = selected_positions
+                                                else:
+                                                    canopy['wall_cladding'] = {"type": "None", "width": 0, "height": 2100, "position": []}
+                                                
+                                                st.markdown("---")  # Separator between canopies
+            
+            with tab4:
+                st.subheader(" Generate Revision")
+                
+                # Auto-increment revision
+                if current_revision == '':
+                    next_revision = 'A'
+                else:
+                    next_revision = chr(ord(current_revision) + 1) if current_revision and len(current_revision) == 1 and current_revision < 'Z' else 'B'
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**Current Revision:** {revision_display}")
+                    st.write(f"**Suggested Next Revision:** {next_revision}")
+                    
+                    revision_choice = st.radio(
+                        "Choose revision method:",
+                        ["Auto-increment (recommended)", "Custom revision letter"],
+                        help="Auto-increment will automatically suggest the next revision letter"
+                    )
+                
+                with col2:
+                    if revision_choice == "Custom revision letter":
+                        new_revision = st.text_input(
+                            "Enter new revision letter:",
+                            value=next_revision,
+                            max_chars=3,
+                            help="Enter a revision letter (e.g., B, C, D, etc.)"
+                        ).upper()
+                    else:
+                        new_revision = next_revision
+                        st.write(f"**New Revision will be:** {new_revision}")
+                    
+                    # Update date option
+                    update_date = st.checkbox("Update date to today", value=True)
+                    
+                    if update_date:
+                        new_date = get_current_date()
+                        st.write(f"**New Date:** {new_date}")
+                    else:
+                        new_date = st.session_state.revision_project_data.get("date", "")
+                        st.write(f"**Date will remain:** {format_date_for_display(new_date)}")
+                
+                st.markdown("---")
+                
+                # Generate button
+                if st.button(f" Generate Revision {new_revision}", type="primary", use_container_width=True):
+                    try:
+                        with st.spinner(f"Generating revision {new_revision} with your edits..."):
+                            # Convert levels back to Excel format
+                            converted_levels = []
+                            for idx, level in enumerate(st.session_state.revision_levels):
+                                converted_level = {
+                                    'level_number': idx + 1,
+                                    'level_name': level['name'],
+                                    'areas': level.get('areas', [])
+                                }
+                                converted_levels.append(converted_level)
+                            
+                            # Update the project data with edited levels
+                            st.session_state.revision_project_data['levels'] = converted_levels
+                            st.session_state.revision_project_data['revision'] = new_revision
+                            if update_date:
+                                st.session_state.revision_project_data['date'] = new_date
+                            
+                            # First create revision with updated revision/date
+                            from utils.excel import create_revision_from_existing
+                            output_path = create_revision_from_existing(
+                                temp_path,
+                                new_revision,
+                                new_date if update_date else None
+                            )
+                            
+                            # Then update the canopy data in the new file
+                            from openpyxl import load_workbook
+                            wb = load_workbook(output_path, data_only=False)
+                            
+                            # Update canopy data in CANOPY sheets
+                            for sheet_name in wb.sheetnames:
+                                if 'CANOPY' in sheet_name:
+                                    sheet = wb[sheet_name]
+                                    
+                                    # Extract level and area from sheet name
+                                    for level in st.session_state.revision_levels:
+                                        level_name = level.get('name', '')
+                                        if level_name in sheet_name:
+                                            # Find area number
+                                            for area_idx, area in enumerate(level.get('areas', [])):
+                                                if f"AREA {area_idx + 1}" in sheet_name:
+                                                    # Update canopies for this area
+                                                    for canopy_idx, canopy in enumerate(area.get('canopies', [])):
+                                                        base_row = 14 + (canopy_idx * 17)  # Each canopy block is 17 rows
+                                                        
+                                                        # Update model, config, dimensions
+                                                        if 'model' in canopy:
+                                                            sheet[f'B{base_row}'] = canopy['model']
+                                                        if 'configuration' in canopy:
+                                                            sheet[f'C{base_row}'] = canopy['configuration']
+                                                        if 'length' in canopy:
+                                                            sheet[f'E{base_row}'] = canopy['length']
+                                                        if 'width' in canopy:
+                                                            sheet[f'G{base_row}'] = canopy['width']
+                                                        if 'height' in canopy:
+                                                            sheet[f'I{base_row}'] = canopy['height']
+                                                        if 'sections' in canopy:
+                                                            sheet[f'K{base_row}'] = canopy['sections']
+                                                        
+                                                        # Update wall cladding
+                                                        if 'wall_cladding' in canopy:
+                                                            wall_cladding = canopy['wall_cladding']
+                                                            cladding_row = base_row + 6  # Row 20 for first canopy
+                                                            
+                                                            if wall_cladding.get('type') != 'None':
+                                                                # Update width, height, position
+                                                                if 'width' in wall_cladding:
+                                                                    sheet[f'P{cladding_row}'] = wall_cladding['width']
+                                                                if 'height' in wall_cladding:
+                                                                    sheet[f'Q{cladding_row}'] = wall_cladding['height']
+                                                                if 'position' in wall_cladding:
+                                                                    position_list = wall_cladding['position']
+                                                                    if isinstance(position_list, list):
+                                                                        position_str = " and ".join(position_list)
+                                                                        sheet[f'S{cladding_row}'] = position_str
+                                                            else:
+                                                                # Clear wall cladding data
+                                                                sheet[f'P{cladding_row}'] = None
+                                                                sheet[f'Q{cladding_row}'] = None
+                                                                sheet[f'S{cladding_row}'] = None
+                                                    break
+                                            break
+                            
+                            # Save the updated workbook
+                            wb.save(output_path)
+                            wb.close()
+                            
+                            # Read the file for download
+                            with open(output_path, "rb") as file:
+                                excel_data = file.read()
+                        
+                        st.success(f"Yes Revision {new_revision} created successfully with all your edits!")
+                        
+                        # Create download filename
+                        project_number = st.session_state.revision_project_data.get('project_number', 'unknown')
+                        date_str = new_date.replace('/', '') if update_date else st.session_state.revision_project_data.get('date', '').replace('/', '')
+                        download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
+                        
+                        st.download_button(
+                            label=f" Download Revision {new_revision}",
+                            data=excel_data,
+                            file_name=download_filename,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                        
+                        # Show summary of changes
+                        st.info(" **Summary of Changes:**")
+                        st.write(f"• Revision updated: {current_revision} → {new_revision}")
+                        if update_date:
+                            st.write(f"• Date updated to: {new_date}")
+                        st.write(f"• Total levels: {len(st.session_state.revision_levels)}")
+                        total_areas = sum(len(level['areas']) for level in st.session_state.revision_levels)
+                        st.write(f"• Total areas: {total_areas}")
+                        st.write("• Yes All edits have been applied")
+                        st.write("• Yes All existing data preserved (lights, formulas, etc.)")
+                        st.write("• Yes Only edited fields were updated")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error creating revision: {str(e)}")
             
             # Clean up temp file
             if os.path.exists(temp_path):
@@ -723,7 +1232,7 @@ def revision_page():
             
             # Check if this is a validation error with detailed information
             if "Data validation errors found:" in error_message:
-                st.error("No **Excel File Validation Errors**")
+                st.error("❌ **Excel File Validation Errors**")
                 st.markdown("The following data validation errors were found in your Excel file:")
                 
                 # Split the error message to extract the validation details
@@ -744,7 +1253,11 @@ def revision_page():
                 st.info(" **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
                 
             else:
-                st.error(f"No Error reading Excel file: {error_message}")
+                st.error(f"❌ Error reading Excel file: {error_message}")
+                # Show detailed traceback for debugging
+                with st.expander("🔍 Technical Details", expanded=False):
+                    import traceback
+                    st.code(traceback.format_exc())
             
             if os.path.exists(temp_path):
                 os.remove(temp_path)

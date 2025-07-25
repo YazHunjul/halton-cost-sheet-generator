@@ -5841,3 +5841,135 @@ def write_metadata_with_mappings(sheet: Worksheet, project_data: Dict, cell_mapp
     except Exception as e:
         print(f"Warning: Could not write metadata with mappings: {str(e)}")
 
+def update_revision_with_edits(excel_path: str, edited_data: Dict, new_revision: str, new_date: str = None) -> str:
+    """
+    Update an existing Excel file with edited data while preserving all other content.
+    This function specifically updates canopy configurations while keeping lights, formulas, etc.
+    
+    Args:
+        excel_path (str): Path to the existing Excel file
+        edited_data (Dict): Edited project data with canopy changes
+        new_revision (str): New revision letter
+        new_date (str, optional): New date in DD/MM/YYYY format
+    
+    Returns:
+        str: Path to the updated Excel file
+    """
+    import tempfile
+    from openpyxl import load_workbook
+    
+    # Create a temporary file for the output
+    output_fd, output_path = tempfile.mkstemp(suffix='.xlsx')
+    os.close(output_fd)
+    
+    try:
+        # Load the existing workbook
+        wb = load_workbook(excel_path, data_only=False)  # Keep formulas
+        
+        # Update revision and date in all sheets
+        sheets_to_update = []
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            
+            # Update revision based on sheet patterns
+            if 'JOB TOTAL' in sheet_name or 'CANOPY' in sheet_name:
+                sheet['K7'] = new_revision
+                if new_date:
+                    sheet['G7'] = new_date
+            elif any(x in sheet_name for x in ['FIRE SUPP', 'CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']):
+                sheet['K7'] = new_revision
+                if new_date:
+                    sheet['G7'] = new_date
+            elif any(x in sheet_name for x in ['EBOX', 'EDGE BOX', 'RECOAIR']):
+                sheet['K7'] = new_revision
+                if new_date:
+                    sheet['H7'] = new_date
+            elif any(x in sheet_name for x in ['MARVEL', 'SDU']):
+                sheet['K7'] = new_revision
+                if new_date:
+                    sheet['F7'] = new_date
+            
+            # Check if revision was in O7 instead
+            if sheet['O7'].value and str(sheet['O7'].value).strip():
+                sheet['O7'] = new_revision
+        
+        # Update canopy data in CANOPY sheets
+        for sheet_name in wb.sheetnames:
+            if 'CANOPY' in sheet_name:
+                sheet = wb[sheet_name]
+                
+                # Extract level and area from sheet name
+                level_num = None
+                area_num = None
+                for level in edited_data.get('levels', []):
+                    level_name = level.get('level_name', '')
+                    if level_name in sheet_name:
+                        level_num = level.get('level_number')
+                        # Find area number
+                        for area_idx, area in enumerate(level.get('areas', [])):
+                            if f"AREA {area_idx + 1}" in sheet_name:
+                                area_num = area_idx + 1
+                                
+                                # Update canopies for this area
+                                for canopy_idx, canopy in enumerate(area.get('canopies', [])):
+                                    base_row = 14 + (canopy_idx * 17)  # Each canopy block is 17 rows
+                                    
+                                    # Update model (B14, B31, etc.)
+                                    if 'model' in canopy:
+                                        sheet[f'B{base_row}'] = canopy['model']
+                                    
+                                    # Update configuration (C14, C31, etc.)
+                                    if 'configuration' in canopy:
+                                        sheet[f'C{base_row}'] = canopy['configuration']
+                                    
+                                    # Update dimensions
+                                    if 'length' in canopy:
+                                        sheet[f'E{base_row}'] = canopy['length']
+                                    if 'width' in canopy:
+                                        sheet[f'G{base_row}'] = canopy['width']
+                                    if 'height' in canopy:
+                                        sheet[f'I{base_row}'] = canopy['height']
+                                    if 'sections' in canopy:
+                                        sheet[f'K{base_row}'] = canopy['sections']
+                                    
+                                    # Update wall cladding if edited
+                                    if 'wall_cladding' in canopy:
+                                        wall_cladding = canopy['wall_cladding']
+                                        cladding_row = base_row + 6  # Row 20 for first canopy
+                                        
+                                        # Only update if wall cladding is enabled
+                                        if wall_cladding.get('type') != 'None':
+                                            # Update width (P20, P37, etc.)
+                                            if 'width' in wall_cladding:
+                                                sheet[f'P{cladding_row}'] = wall_cladding['width']
+                                            
+                                            # Update height (Q20, Q37, etc.)
+                                            if 'height' in wall_cladding:
+                                                sheet[f'Q{cladding_row}'] = wall_cladding['height']
+                                            
+                                            # Update position (S20, S37, etc.)
+                                            if 'position' in wall_cladding:
+                                                position_list = wall_cladding['position']
+                                                if isinstance(position_list, list):
+                                                    position_str = " and ".join(position_list)
+                                                    sheet[f'S{cladding_row}'] = position_str
+                                        else:
+                                            # Clear wall cladding data if disabled
+                                            sheet[f'P{cladding_row}'] = None
+                                            sheet[f'Q{cladding_row}'] = None
+                                            sheet[f'S{cladding_row}'] = None
+                                break
+                        break
+        
+        # Save the updated workbook
+        wb.save(output_path)
+        wb.close()
+        
+        return output_path
+        
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        raise e
+
