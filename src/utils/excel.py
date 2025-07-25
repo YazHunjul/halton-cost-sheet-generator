@@ -2550,7 +2550,7 @@ def add_delivery_location_dropdown_to_sheet(sheet: Worksheet, selected_delivery_
         elif "VENT CLG" in sheet_name:
             cell = "D44"  # VENT CLG sheets use D44 for delivery location
         elif "FIRE" in sheet_name and "SUPP" in sheet_name:
-            cell = "D183"
+            cell = "D186"
         elif "CANOPY" in sheet_name:
             cell = "D183"
         else:
@@ -4889,40 +4889,82 @@ def create_revision_from_existing(excel_path: str, new_revision: str, new_date: 
         # Load the existing workbook (without data_only to preserve formulas)
         wb = load_workbook(excel_path)
         
-        # Update revision in all sheets that have the revision field (O7)
+        # Update revision in all sheets that have the revision field (K7 or O7)
         sheets_to_update = []
+        revision_cells = {}  # Track which cell contains revision for each sheet
+        date_cells = {}  # Track which cell contains date for each sheet
+        
+        # Define the patterns for different sheet types
+        sheet_patterns = {
+            'G7_date': ['JOB TOTAL', 'CANOPY', 'FIRE SUPP', 'CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT'],
+            'H7_date': ['EBOX', 'EDGE BOX', 'RECOAIR'],
+            'F7_date': ['MARVEL', 'SDU']
+        }
         
         # Check all visible sheets for revision field
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
             if sheet.sheet_state == 'visible':
                 try:
-                    # Check if O7 exists and has a value (indicating it's a sheet with revision field)
-                    if sheet['O7'].value is not None:
+                    # Determine date cell based on sheet type
+                    date_cell = 'G7'  # Default
+                    for pattern_key, patterns in sheet_patterns.items():
+                        if any(pattern in sheet_name.upper() for pattern in patterns):
+                            date_cell = pattern_key.split('_')[0]
+                            break
+                    
+                    # Check K7 first (most common location)
+                    has_revision = False
+                    if sheet['K7'].value is not None:
                         sheets_to_update.append(sheet_name)
+                        revision_cells[sheet_name] = 'K7'
+                        date_cells[sheet_name] = date_cell
+                        has_revision = True
+                    # Then check O7 (some sheets use this)
+                    elif sheet['O7'].value is not None:
+                        sheets_to_update.append(sheet_name)
+                        revision_cells[sheet_name] = 'O7'
+                        date_cells[sheet_name] = date_cell
+                        has_revision = True
+                    
+                    # If no revision field but has a date field, still include for date update
+                    if not has_revision and sheet[date_cell].value is not None:
+                        sheets_to_update.append(sheet_name)
+                        date_cells[sheet_name] = date_cell
                 except:
-                    # Skip sheets that don't have O7 or can't access it
+                    # Skip sheets that don't have these cells or can't access them
                     continue
+        
+        print(f"DEBUG: Found {len(sheets_to_update)} sheets to update: {sheets_to_update}")
+        print(f"DEBUG: Revision cells: {revision_cells}")
+        print(f"DEBUG: Date cells: {date_cells}")
         
         # Update revision in all identified sheets
         for sheet_name in sheets_to_update:
             sheet = wb[sheet_name]
-            try:
-                sheet['O7'] = new_revision
-                print(f"Updated revision to {new_revision} in sheet: {sheet_name}")
-            except Exception as e:
-                print(f"Warning: Could not update revision in sheet {sheet_name}: {str(e)}")
+            if sheet_name in revision_cells:  # Only update revision if the sheet has a revision field
+                try:
+                    revision_cell = revision_cells[sheet_name]
+                    sheet[revision_cell] = new_revision
+                    print(f"Updated revision to {new_revision} in cell {revision_cell} of sheet: {sheet_name}")
+                except Exception as e:
+                    print(f"Warning: Could not update revision in sheet {sheet_name}: {str(e)}")
         
         # Update date if provided
         if new_date:
+            print(f"DEBUG: Updating date to '{new_date}' in {len(sheets_to_update)} sheets")
             for sheet_name in sheets_to_update:
                 sheet = wb[sheet_name]
                 try:
-                    # Update date in G7 (standard date field)
-                    sheet['G7'] = new_date
-                    print(f"Updated date to {new_date} in sheet: {sheet_name}")
+                    # Use the correct date cell for this sheet
+                    date_cell = date_cells.get(sheet_name, 'G7')  # Default to G7 if not found
+                    old_value = sheet[date_cell].value
+                    sheet[date_cell] = new_date
+                    print(f"Updated date from '{old_value}' to '{new_date}' in cell {date_cell} of sheet: {sheet_name}")
                 except Exception as e:
                     print(f"Warning: Could not update date in sheet {sheet_name}: {str(e)}")
+        else:
+            print(f"DEBUG: No new date provided, keeping existing dates")
         
         # Update revision in ProjectData sheet if it exists
         if 'ProjectData' in wb.sheetnames:
@@ -4966,7 +5008,10 @@ def create_revision_from_existing(excel_path: str, new_revision: str, new_date: 
                 if 'JOB TOTAL' in wb.sheetnames:
                     existing_date = wb['JOB TOTAL']['G7'].value or ""
                 elif sheets_to_update:
-                    existing_date = wb[sheets_to_update[0]]['G7'].value or ""
+                    # Get date from first sheet using the correct cell
+                    first_sheet_name = sheets_to_update[0]
+                    date_cell = date_cells.get(first_sheet_name, 'G7')
+                    existing_date = wb[first_sheet_name][date_cell].value or ""
                 else:
                     existing_date = ""
                 
