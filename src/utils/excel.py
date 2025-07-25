@@ -33,6 +33,19 @@ OUTPUT_SHEET_NAMES = {
     FIRE_SUPPRESSION_SHEET_NAME: "FIRE SUPP"  # Map template name to output name
 }
 
+def safe_upper(value):
+    """
+    Safely convert a value to uppercase only if it contains letters.
+    Numbers like "1.2" will be returned as-is.
+    """
+    if value is None:
+        return value
+    str_value = str(value)
+    # Check if the string contains any letters
+    if any(c.isalpha() for c in str_value):
+        return str_value.upper()
+    return str_value
+
 # Cell mappings for different data points (CANOPY, FIRE SUPP, JOB TOTAL, etc.)
 CELL_MAPPINGS = {
     "project_number": "C3",  # Job No
@@ -1131,7 +1144,7 @@ def write_canopy_data(sheet: Worksheet, canopy: Dict, row_index: int):
         ref_number = canopy.get("reference_number", "")
         if ref_number:
             try:
-                sheet[f"B{ref_row}"] = ref_number.upper()
+                sheet[f"B{ref_row}"] = safe_upper(ref_number)
             except Exception as e:
                 print(f"Warning: Could not write reference number to B{ref_row}: {str(e)}")
         
@@ -1338,7 +1351,7 @@ def write_fire_suppression_canopy_data(sheet: Worksheet, canopy: Dict, row_index
     try:
         # Reference number starts 2 rows before configuration/model (same pattern as canopy sheets)
         ref_row = row_index - 2  # If row_index is 14, ref_row will be 12
-        sheet[f"B{ref_row}"] = canopy["reference_number"].upper()
+        sheet[f"B{ref_row}"] = safe_upper(canopy["reference_number"])
     except Exception as e:
         raise Exception(f"Failed to write fire suppression canopy data: {str(e)}")
 
@@ -3593,10 +3606,10 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                 model = sheet[f'D{base_row}'].value or ""
                                 
                                 # Skip placeholder rows
-                                if (ref_number.upper() == "ITEM" or 
-                                    model.upper() == "CANOPY TYPE" or
-                                    ref_number.upper().strip() == "ITEM" or
-                                    model.upper().strip() == "CANOPY TYPE"):
+                                if (safe_upper(ref_number) == "ITEM" or 
+                                    safe_upper(model) == "CANOPY TYPE" or
+                                    safe_upper(str(ref_number).strip()) == "ITEM" or
+                                    safe_upper(str(model).strip()) == "CANOPY TYPE"):
                                     continue
                                 
                                 canopy_info = {
@@ -3709,8 +3722,8 @@ def read_excel_project_data(excel_path: str) -> Dict:
                             # Only count actual fire suppression units, not template entries
                             # Exclude entries with "ITEM" reference OR "TANK INSTALL"/"TANK INSTALLATION" tank values
                             if (ref_number and tank_value and 
-                                str(ref_number).upper() != "ITEM" and 
-                                str(tank_value).upper() not in ["TANK INSTALL", "TANK INSTALLATION"]):
+                                safe_upper(str(ref_number)) != "ITEM" and 
+                                safe_upper(str(tank_value)) not in ["TANK INSTALL", "TANK INSTALLATION"]):
                                 
                                 tank_quantity = extract_tank_quantity(tank_value)
 
