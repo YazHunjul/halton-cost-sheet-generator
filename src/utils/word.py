@@ -2231,7 +2231,10 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
                     f"SDU - {level_name} ({area_number}) - {canopy_ref}",
                     f"SDU - L{area_number} ({area_number}) - {canopy_ref}",
                     f"SDU - {canopy_ref}",
-                    # Also check for sheets that contain the canopy reference
+                    # Also try with lowercase canopy reference
+                    f"SDU - {level_name} ({area_number}) - {canopy_ref.lower()}",
+                    f"SDU - L{area_number} ({area_number}) - {canopy_ref.lower()}",
+                    f"SDU - {canopy_ref.lower()}",
                 ]
                 
                 sdu_sheet_name = None
@@ -2243,7 +2246,8 @@ def collect_sdu_data(project_data: Dict, excel_file_path: str = None, cached_wb=
                 # If not found by exact match, search for sheets containing the canopy reference
                 if not sdu_sheet_name:
                     for sheet_name in wb.sheetnames:
-                        if f"SDU" in sheet_name and canopy_ref in sheet_name:
+                        # Case-insensitive search for SDU sheets with canopy reference
+                        if "SDU" in sheet_name.upper() and canopy_ref.upper() in sheet_name.upper():
                             sdu_sheet_name = sheet_name
                             break
                 

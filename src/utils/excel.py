@@ -4130,7 +4130,8 @@ def read_excel_project_data(excel_path: str) -> Dict:
                                     # If we have a canopy reference, find and set the canopy-level SDU option
                                     if canopy_ref:
                                         for canopy in area.get('canopies', []):
-                                            if canopy.get('reference_number') == canopy_ref:
+                                            # Case-insensitive comparison for canopy references
+                                            if canopy.get('reference_number', '').upper() == canopy_ref.upper():
                                                 if 'options' not in canopy:
                                                     canopy['options'] = {}
                                                 canopy['options']['sdu'] = True
