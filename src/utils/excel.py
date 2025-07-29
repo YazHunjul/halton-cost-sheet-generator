@@ -5734,6 +5734,9 @@ def normalize_reference_number(ref_num: str) -> str:
     """
     Normalize a reference number for matching by removing variations that don't affect identity.
     
+    This function now preserves uppercase letters that are part of the reference (like A, B in 30.13A, 30.13B)
+    while only normalizing case differences.
+    
     Args:
         ref_num (str): The reference number to normalize
         
@@ -5747,22 +5750,15 @@ def normalize_reference_number(ref_num: str) -> str:
     ref_str = str(ref_num).strip()
     
     # Convert to uppercase for case-insensitive matching
-    ref_str = ref_str.upper()
-    
-    # Remove trailing letters that are just variants (e.g., "1.01A" -> "1.01")
-    # This handles cases where fire suppression sheets have "1.01a" but canopy sheets have "1.01"
-    import re
-    # Match pattern: base number (digits, dots, hyphens) + optional trailing letters
-    match = re.match(r'^([0-9\.\-]+)', ref_str)
-    if match:
-        return match.group(1)
-    
-    return ref_str
+    # This preserves important distinctions like 30.13A vs 30.13B
+    return ref_str.upper()
 
 def references_match(canopy_ref: str, fire_supp_ref: str) -> bool:
     """
     Check if two reference numbers should be considered a match.
-    Handles variations like "1.01" matching "1.01a", "1.01A", etc.
+    
+    Exact matches are required for references like "30.13A" vs "30.13B".
+    Flexible matching is allowed for minor variants like "1.01" vs "1.01a".
     
     Args:
         canopy_ref (str): Reference number from canopy sheet
@@ -5774,25 +5770,46 @@ def references_match(canopy_ref: str, fire_supp_ref: str) -> bool:
     if not canopy_ref or not fire_supp_ref:
         return False
     
-    # Normalize both references
+    # Normalize both references (now just uppercases them)
     normalized_canopy = normalize_reference_number(canopy_ref)
     normalized_fire_supp = normalize_reference_number(fire_supp_ref)
     
-    # Check if normalized versions match
+    # Check if normalized versions match exactly
     if normalized_canopy == normalized_fire_supp:
-        # print(f"🔗 Reference match (normalized): '{canopy_ref}' ({normalized_canopy}) ↔ '{fire_supp_ref}' ({normalized_fire_supp})")
+        # print(f"🔗 Reference match (exact): '{canopy_ref}' ↔ '{fire_supp_ref}'")
         return True
     
-    # Additional flexible matching logic
-    # Handle cases where one might have extra characters
-    canopy_clean = str(canopy_ref).strip().upper()
-    fire_supp_clean = str(fire_supp_ref).strip().upper()
+    # For backward compatibility, allow flexible matching only for lowercase suffix variants
+    # e.g., "1.01" should match "1.01a" but "30.13A" should NOT match "30.13B"
+    import re
     
-    # Check if one is a prefix of the other (e.g., "1.01" matches "1.01A")
-    if (canopy_clean and fire_supp_clean and 
-        (canopy_clean.startswith(fire_supp_clean) or fire_supp_clean.startswith(canopy_clean))):
-        # print(f"🔗 Reference match (prefix): '{canopy_ref}' ↔ '{fire_supp_ref}'")
-        return True
+    # Extract base numbers without any letters
+    canopy_base = re.match(r'^([0-9\.\-]+)', normalized_canopy)
+    fire_supp_base = re.match(r'^([0-9\.\-]+)', normalized_fire_supp)
+    
+    if canopy_base and fire_supp_base:
+        canopy_base_str = canopy_base.group(1)
+        fire_supp_base_str = fire_supp_base.group(1)
+        
+        # If the base numbers match and one has a lowercase letter suffix in the original
+        if canopy_base_str == fire_supp_base_str:
+            # Check if the difference is just a lowercase letter suffix
+            canopy_suffix = normalized_canopy[len(canopy_base_str):]
+            fire_supp_suffix = normalized_fire_supp[len(fire_supp_base_str):]
+            
+            # Allow match if one has no suffix and the other has a single lowercase letter
+            # (when uppercased, we check if it's a single letter)
+            if (not canopy_suffix and len(fire_supp_suffix) == 1 and fire_supp_suffix.isalpha()) or \
+               (not fire_supp_suffix and len(canopy_suffix) == 1 and canopy_suffix.isalpha()):
+                # Check original refs to see if suffix was lowercase
+                orig_canopy = str(canopy_ref).strip()
+                orig_fire_supp = str(fire_supp_ref).strip()
+                
+                # Only allow if the suffix was originally lowercase
+                if (not canopy_suffix and orig_fire_supp.endswith(('a','b','c','d','e','f'))) or \
+                   (not fire_supp_suffix and orig_canopy.endswith(('a','b','c','d','e','f'))):
+                    # print(f"🔗 Reference match (lowercase suffix variant): '{canopy_ref}' ↔ '{fire_supp_ref}'")
+                    return True
     
     return False
 

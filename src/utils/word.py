@@ -744,7 +744,9 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
                 
                 # Check for fire suppression on this canopy
                 fire_suppression_tank_quantity = canopy.get('fire_suppression_tank_quantity', 0)
-                if fire_suppression_tank_quantity > 0:
+                fire_suppression_price = canopy.get('fire_suppression_price', 0)
+                # Display fire suppression if either tank quantity > 0 OR price > 0
+                if fire_suppression_tank_quantity > 0 or fire_suppression_price > 0:
                     # Generate fire suppression system description
                     system_type = canopy.get('fire_suppression_system_type', '')
                     fs_system_desc = get_fire_suppression_system_description(system_type)
@@ -1709,6 +1711,12 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
                                (cladding_price > 0 or wall_cladding.get('price', 0) > 0))
                 
                 processed_canopy['has_cladding'] = has_cladding
+                
+                # Ensure fire suppression system description is included
+                if processed_canopy.get('fire_suppression_system_type'):
+                    fs_type = processed_canopy.get('fire_suppression_system_type', '')
+                    processed_canopy['fire_suppression_system_description'] = get_fire_suppression_system_description(fs_type)
+                
                 processed_canopies.append(processed_canopy)
             
                             # Store area data for template access
