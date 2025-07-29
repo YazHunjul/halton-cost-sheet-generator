@@ -16,6 +16,7 @@ from openpyxl import load_workbook
 # from components.project_forms import project_structure_form
 # from config.constants import SessionKeys, PROJECT_TYPES
 from utils.word import analyze_project_areas
+from utils.state_manager import load_from_url, add_save_progress_button
 
 def display_project_summary(project_data: dict):
     """Display a formatted summary of the project data."""
@@ -2182,6 +2183,11 @@ def single_page_project_builder():
     st.title("🏗️ Single Page Project Builder")
     st.markdown("Build your project structure in the sidebar and configure canopies here.")
     
+    # Load state from URL if present
+    loaded_from_url = load_from_url()
+    if loaded_from_url:
+        st.success("✅ Progress loaded from saved link!")
+    
     # Initialize session state if needed
     if 'project_info' not in st.session_state:
         st.session_state.project_info = {}
@@ -2189,6 +2195,9 @@ def single_page_project_builder():
         st.session_state.levels = []
     if 'template_path' not in st.session_state:
         st.session_state.template_path = 'templates/excel/Cost Sheet R19.2 Jun 2025.xlsx'
+    
+    # Add save progress button
+    add_save_progress_button()
     
     # Sidebar Project Info Section
     with st.sidebar:
