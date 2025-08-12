@@ -3463,14 +3463,15 @@ def read_excel_project_data(excel_path: str) -> Dict:
     try:
         wb = load_workbook(excel_path, data_only=True)
         
-        # Try to get data from JOB TOTAL sheet first, then any canopy sheet
+        # Try to get data from JOB TOTAL sheet first, then any system sheet
         data_sheet = None
         if 'JOB TOTAL' in wb.sheetnames:
             data_sheet = wb['JOB TOTAL']
         else:
-            # Find first CANOPY sheet
+            # Find first suitable system sheet (CANOPY, VENT CLG, RECOAIR, etc.)
+            system_prefixes = ['CANOPY', 'VENT CLG', 'RECOAIR', 'MARVEL', 'SDU', 'FIRE SUPP']
             for sheet_name in wb.sheetnames:
-                if 'CANOPY' in sheet_name:
+                if any(prefix in sheet_name for prefix in system_prefixes):
                     data_sheet = wb[sheet_name]
                     break
         
@@ -3541,21 +3542,23 @@ def read_excel_project_data(excel_path: str) -> Dict:
         levels_data = {}
         canopy_data = {}
         
-        # First pass: Create areas from all sheet types (CANOPY, FIRE SUPP, EBOX, RECOAIR, SDU)
+        # First pass: Create areas from all sheet types (CANOPY, FIRE SUPP, EBOX, RECOAIR, SDU, VENT CLG, MARVEL)
         for sheet_name in wb.sheetnames:
-            if any(prefix in sheet_name for prefix in ['CANOPY - ', 'CANOPY (UV) - ', 'FIRE SUPP - ', 'EBOX - ', 'RECOAIR - ', 'SDU - ']):
+            if any(prefix in sheet_name for prefix in ['CANOPY - ', 'CANOPY (UV) - ', 'FIRE SUPP - ', 'EBOX - ', 'RECOAIR - ', 'SDU - ', 'VENT CLG - ', 'MARVEL - ']):
                 sheet = wb[sheet_name]
                 
                 # Determine which cell contains the title based on sheet type
                 if 'EBOX - ' in sheet_name or 'RECOAIR - ' in sheet_name:
                     title_cell = sheet['C1'].value  # EBOX and RECOAIR sheets have title in C1
+                elif 'VENT CLG - ' in sheet_name or 'MARVEL - ' in sheet_name:
+                    title_cell = sheet['B1'].value  # VENT CLG and MARVEL sheets have title in B1
                 else:
                     title_cell = sheet['B1'].value  # CANOPY, FIRE SUPP, and SDU sheets have title in B1
                 
                 if title_cell and ' - ' in title_cell:
                     # Handle different title formats
-                    if 'UV-C SYSTEM' in title_cell or 'RECOAIR SYSTEM' in title_cell or 'SDU SYSTEM' in title_cell:
-                        # For EBOX/RECOAIR/SDU: "Level 1 - Main Kitchen - UV-C SYSTEM" or "Level 1 - Main Kitchen - RECOAIR SYSTEM" or "Level 1 - Main Kitchen - SDU SYSTEM"
+                    if any(system in title_cell for system in ['UV-C SYSTEM', 'RECOAIR SYSTEM', 'SDU SYSTEM', 'VENT CLG SYSTEM', 'MARVEL SYSTEM']):
+                        # For EBOX/RECOAIR/SDU/VENT CLG/MARVEL: "Level 1 - Main Kitchen - [SYSTEM_TYPE] SYSTEM"
                         title_parts = title_cell.split(' - ')
                         if len(title_parts) >= 2:
                             level_name = title_parts[0]

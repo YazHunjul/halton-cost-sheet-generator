@@ -1,0 +1,53 @@
+{
+  "template_used": "R19.2",
+  "project_number": "36398",
+  "company": "Electrolux Professional Ltd",
+  "estimator_initials": "KP/SS",
+  "project_name": "Heart Building Tesco Plc",
+  "project_location": "Welwyn Garden City",
+  "location": "Welwyn Garden City",
+  "date": "11/08/2025",
+  "revision": "",
+  "customer": "Steve Bowler",
+  "address": "Addington Way,\nLuton.\nLU4 9QQ",
+  "estimator": "Simon Still",
+  "estimator_rank": "Lead Estimator",
+  "sales_contact": "Kent Phillips",
+  "delivery_location": "ST ALBANS 62",
+  "contract_option": false,
+  "levels": [
+    {
+      "level_number": 1,
+      "level_name": "Level 00",
+      "areas": [
+        {
+          "name": "Kitchen",
+          "canopies": [],
+          "vent_clg_price": 59784.029177749646,
+          "vent_clg_cost": 33476.452999999994,
+          "vent_clg_detailed_pricing": {
+            "item_number": "",
+            "coverage_sqm": 1.0,
+            "unit_price": 33978.43827220239,
+            "delivery_installation_price": 23916.603442860698,
+            "commissioning_price": 1888.9874626865674,
+            "total_price": 59784.029177749646,
+            "total_cost": 33476.452999999994,
+            "sheet_name": "VENT CLG - Level 00 (1)"
+          },
+          "options": {
+            "uvc": false,
+            "sdu": false,
+            "recoair": false,
+            "marvel": false,
+            "vent_clg": true,
+            "uv_extra_over": false
+          },
+          "uv_extra_over_cost": 0,
+          "extra_over_price": 0,
+          "extra_overs": false
+        }
+      ]
+    }
+  ]
+}

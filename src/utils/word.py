@@ -1274,8 +1274,8 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
             if area.get('options', {}).get('vent_clg', False):
                 has_vent_clg = True
     
-    # Determine if project is RecoAir-only
-    is_recoair_only = has_recoair and not has_canopies
+    # Determine if project is RecoAir-only (has RecoAir but no other systems)
+    is_recoair_only = has_recoair and not (has_canopies or has_vent_clg or has_marvel or has_uv)
     
     return has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg
 
@@ -1395,9 +1395,9 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
         # Case 2: Mixed project or canopy-only project
         documents_to_generate = []
         
-        # Always generate main quotation if there are canopies
+        # Generate main quotation if there are canopies OR ventilated ceilings (or other non-RecoAir systems)
         # Format: "Project Number Quotation Date"
-        if has_canopies:
+        if has_canopies or has_vent_clg or has_marvel or has_uv:
             main_filename = f"{project_number} Quotation {date_str}.docx"
             documents_to_generate.append((WORD_TEMPLATE_PATH, main_filename, "Main Quotation"))
         
@@ -1719,52 +1719,52 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
                 
                 processed_canopies.append(processed_canopy)
             
-                            # Store area data for template access
-                area_data = {
-                    'level_area_combined': f"{level_name} - {area_name}",
-                    'name': area_name,
-                    'area_name': area_name,  # Add area_name key for consistency
-                    'level_name': level_name,
-                    'has_canopies': len(area.get('canopies', [])) > 0,
-                    'has_uv_extra_over': has_uv_extra_over,
-                    'uv_extra_over_cost': uv_extra_over_cost,
-                    'options': area.get('options', {}),
-                    'delivery_installation_price': delivery_installation,
-                    'commissioning_price': commissioning,
-                    'uvc_price': uvc_price,
-                    'sdu_price': sdu_price,
-                    'recoair_price': recoair_price,
-                    'vent_clg_price': vent_clg_price,
-                    'marvel_price': marvel_price,
-                    'vent_clg_detailed_pricing': area.get('vent_clg_detailed_pricing', {}),
-                    'recoair_units': area.get('recoair_units', []),
-                    'canopy_total': area_canopy_total,
-                    'fire_suppression_total': area_fire_supp_total,
-                    'cladding_total': area_cladding_total,
-                    'canopy_schedule_subtotal': area_canopy_schedule_subtotal,
-                    'area_total': area_total,
-                    'area_subtotal': area_total,  # Alternative name for template compatibility
-                    'canopies': processed_canopies,  # Use processed canopies with has_cladding flag
-                    # Check if any canopy in this area has SDU
-                    'has_sdu': any(canopy.get('options', {}).get('sdu', False) for canopy in area.get('canopies', [])),
-                    'sdu_pricing': area.get('sdu_pricing', {}),
-                    
-                    # Additional template compatibility variables
-                    'has_marvel': area.get('options', {}).get('marvel', False),
-                    'marvel_pricing': area.get('marvel_pricing', {}),
-                    'has_vent_clg': area.get('options', {}).get('vent_clg', False),
-                    'uve_price': uvc_price,  # Alternative spelling for template compatibility
-                    'sdu_subtotal': sdu_price,  # SDU subtotal for template compatibility
-                    'sdu': {  # SDU data object with pricing structure that matches template expectations
-                        'pricing': {
-                            'final_carcass_price': 0,
-                            'final_electrical_price': 0,
-                            'live_site_test_price': 0,
-                            'has_live_test': False,
-                            'total_price': 0
-                        }
-                    },
-                }
+            # Store area data for template access (moved outside canopy loop)
+            area_data = {
+                'level_area_combined': f"{level_name} - {area_name}",
+                'name': area_name,
+                'area_name': area_name,  # Add area_name key for consistency
+                'level_name': level_name,
+                'has_canopies': len(area.get('canopies', [])) > 0,
+                'has_uv_extra_over': has_uv_extra_over,
+                'uv_extra_over_cost': uv_extra_over_cost,
+                'options': area.get('options', {}),
+                'delivery_installation_price': delivery_installation,
+                'commissioning_price': commissioning,
+                'uvc_price': uvc_price,
+                'sdu_price': sdu_price,
+                'recoair_price': recoair_price,
+                'vent_clg_price': vent_clg_price,
+                'marvel_price': marvel_price,
+                'vent_clg_detailed_pricing': area.get('vent_clg_detailed_pricing', {}),
+                'recoair_units': area.get('recoair_units', []),
+                'canopy_total': area_canopy_total,
+                'fire_suppression_total': area_fire_supp_total,
+                'cladding_total': area_cladding_total,
+                'canopy_schedule_subtotal': area_canopy_schedule_subtotal,
+                'area_total': area_total,
+                'area_subtotal': area_total,  # Alternative name for template compatibility
+                'canopies': processed_canopies,  # Use processed canopies with has_cladding flag
+                # Check if any canopy in this area has SDU
+                'has_sdu': any(canopy.get('options', {}).get('sdu', False) for canopy in area.get('canopies', [])),
+                'sdu_pricing': area.get('sdu_pricing', {}),
+                
+                # Additional template compatibility variables
+                'has_marvel': area.get('options', {}).get('marvel', False),
+                'marvel_pricing': area.get('marvel_pricing', {}),
+                'has_vent_clg': area.get('options', {}).get('vent_clg', False),
+                'uve_price': uvc_price,  # Alternative spelling for template compatibility
+                'sdu_subtotal': sdu_price,  # SDU subtotal for template compatibility
+                'sdu': {  # SDU data object with pricing structure that matches template expectations
+                    'pricing': {
+                        'final_carcass_price': 0,
+                        'final_electrical_price': 0,
+                        'live_site_test_price': 0,
+                        'has_live_test': False,
+                        'total_price': 0
+                    }
+                },
+            }
             totals['areas'].append(area_data)
     
     area_process_time = time.time() - area_process_start
