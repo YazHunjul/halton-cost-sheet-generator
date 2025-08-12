@@ -3891,11 +3891,14 @@ def read_excel_project_data(excel_path: str) -> Dict:
                         # Read RecoAir commissioning price from N46
                         recoair_commissioning_price = sheet['N46'].value or 0
                         
-                        # Calculate total RecoAir price (sum of all unit prices + delivery + commissioning + flat pack)
+                        # Calculate total RecoAir price (sum of all unit prices)
+                        # FLAT PACK IS NOT INCLUDED - it's shown separately as "ADDITIONAL ITEMS"  
+                        # Note: unit['unit_price'] already includes base price + delivery + commissioning per unit
                         total_unit_price = sum(unit['unit_price'] for unit in recoair_units)
                         total_delivery_price = sum(unit['delivery_installation_price'] for unit in recoair_units)
                         flat_pack_price = flat_pack_data['price'] if flat_pack_data['has_flat_pack'] else 0
-                        recoair_price = total_unit_price + total_delivery_price + recoair_commissioning_price + flat_pack_price
+                        recoair_price = total_unit_price  # Don't double-count delivery and commissioning
+                        # Note: flat_pack_price is stored separately in recoair_flat_pack for template use
                         
                         # Find the area and add RecoAir data
                         area_found = False

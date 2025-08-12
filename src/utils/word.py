@@ -1579,12 +1579,12 @@ def collect_recoair_pricing_schedule_data(project_data: Dict) -> Dict:
                 job_totals['total_areas'] += 1
                 job_totals['total_units'] += len(recoair_items)
     
-    # Calculate overall job total
+    # Calculate overall job total (excluding flat pack - flat pack is shown separately as "Additional Items")
     job_totals['job_total'] = (
         job_totals['total_units_price'] + 
         job_totals['total_delivery_price'] + 
-        job_totals['total_commissioning_price'] + 
-        job_totals['total_flat_pack_price']
+        job_totals['total_commissioning_price']
+        # Note: flat_pack_price excluded from main total to match Excel
     )
     
     return {
