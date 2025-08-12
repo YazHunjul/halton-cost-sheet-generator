@@ -1121,75 +1121,24 @@ def revision_page():
                             if update_date:
                                 st.session_state.revision_project_data['date'] = new_date
                             
-                            # First create revision with updated revision/date
-                            from utils.excel import create_revision_from_existing
-                            output_path = create_revision_from_existing(
-                                temp_path,
-                                new_revision,
-                                new_date if update_date else None
+                            # Create revision by properly regenerating the Excel file with all changes
+                            # This ensures all canopy additions, modifications, and other changes are saved
+                            from utils.excel import save_to_excel
+                            
+                            # Determine the template to use based on original file or default to latest
+                            template_used = st.session_state.revision_project_data.get('template_used', 'R19.2')
+                            if template_used == 'R19.1':
+                                template_path = 'templates/excel/Cost Sheet R19.1 May 2025.xlsx'
+                            elif template_used == 'R18.1':
+                                template_path = 'templates/excel/Halton Cost Sheet Jan 2025.xlsx'
+                            else:
+                                template_path = 'templates/excel/Cost Sheet R19.2 Jun 2025.xlsx'  # Default to latest
+                            
+                            # Generate the Excel file with all the edited data
+                            output_path = save_to_excel(
+                                st.session_state.revision_project_data,
+                                template_path=template_path
                             )
-                            
-                            # Then update the canopy data in the new file
-                            from openpyxl import load_workbook
-                            wb = load_workbook(output_path, data_only=False)
-                            
-                            # Update canopy data in CANOPY sheets
-                            for sheet_name in wb.sheetnames:
-                                if 'CANOPY' in sheet_name:
-                                    sheet = wb[sheet_name]
-                                    
-                                    # Extract level and area from sheet name
-                                    for level in st.session_state.revision_levels:
-                                        level_name = level.get('name', '')
-                                        if level_name in sheet_name:
-                                            # Find area number
-                                            for area_idx, area in enumerate(level.get('areas', [])):
-                                                if f"AREA {area_idx + 1}" in sheet_name:
-                                                    # Update canopies for this area
-                                                    for canopy_idx, canopy in enumerate(area.get('canopies', [])):
-                                                        base_row = 14 + (canopy_idx * 17)  # Each canopy block is 17 rows
-                                                        
-                                                        # Update model, config, dimensions
-                                                        if 'model' in canopy:
-                                                            sheet[f'B{base_row}'] = canopy['model']
-                                                        if 'configuration' in canopy:
-                                                            sheet[f'C{base_row}'] = canopy['configuration']
-                                                        if 'length' in canopy:
-                                                            sheet[f'E{base_row}'] = canopy['length']
-                                                        if 'width' in canopy:
-                                                            sheet[f'G{base_row}'] = canopy['width']
-                                                        if 'height' in canopy:
-                                                            sheet[f'I{base_row}'] = canopy['height']
-                                                        if 'sections' in canopy:
-                                                            sheet[f'K{base_row}'] = canopy['sections']
-                                                        
-                                                        # Update wall cladding
-                                                        if 'wall_cladding' in canopy:
-                                                            wall_cladding = canopy['wall_cladding']
-                                                            cladding_row = base_row + 6  # Row 20 for first canopy
-                                                            
-                                                            if wall_cladding.get('type') != 'None':
-                                                                # Update width, height, position
-                                                                if 'width' in wall_cladding:
-                                                                    sheet[f'P{cladding_row}'] = wall_cladding['width']
-                                                                if 'height' in wall_cladding:
-                                                                    sheet[f'Q{cladding_row}'] = wall_cladding['height']
-                                                                if 'position' in wall_cladding:
-                                                                    position_list = wall_cladding['position']
-                                                                    if isinstance(position_list, list):
-                                                                        position_str = " and ".join(position_list)
-                                                                        sheet[f'S{cladding_row}'] = position_str
-                                                            else:
-                                                                # Clear wall cladding data
-                                                                sheet[f'P{cladding_row}'] = None
-                                                                sheet[f'Q{cladding_row}'] = None
-                                                                sheet[f'S{cladding_row}'] = None
-                                                    break
-                                            break
-                            
-                            # Save the updated workbook
-                            wb.save(output_path)
-                            wb.close()
                             
                             # Read the file for download
                             with open(output_path, "rb") as file:
