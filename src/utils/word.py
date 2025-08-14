@@ -1977,6 +1977,8 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
     Returns:
         List[Dict]: List of scope items with counts and descriptions
     """
+    from config.constants import is_feature_enabled
+    
     scope_items = []
     
     # 1. Count canopies by model and lighting type
@@ -1985,7 +1987,15 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
     areas_with_sdu = set()
     areas_with_vent_clg = set()
     areas_with_marvel = set()
-    areas_with_fire_suppression = set()
+    areas_with_recoair = set()
+    areas_with_reactaway = set()
+    
+    # Track fire suppression by type
+    fire_suppression_by_type = {
+        'NOBEL': set(),
+        'AMAREX': set(),
+        'ANSUL': set()
+    }
     
     for level in project_data.get('levels', []):
         level_name = level.get('level_name', '')
@@ -2002,9 +2012,16 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
             if area.get('options', {}).get('marvel', False):
                 areas_with_marvel.add(area_identifier)
             
+            # Check for RecoAir system
+            if area.get('options', {}).get('recoair', False):
+                areas_with_recoair.add(area_identifier)
+            
+            # Check for Reactaway unit (if feature enabled)
+            if is_feature_enabled('reactaway_unit') and area.get('options', {}).get('reactaway', False):
+                areas_with_reactaway.add(area_identifier)
+            
             area_has_cladding = False
             area_has_sdu = False
-            area_has_fire_suppression = False
             
             for canopy in area.get('canopies', []):
                 model = canopy.get('model', '').upper().strip()
@@ -2019,11 +2036,19 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
                 if canopy.get('options', {}).get('sdu', False):
                     area_has_sdu = True
                 
-                # Check for fire suppression
+                # Check for fire suppression and track by type
                 fire_supp_qty = canopy.get('fire_suppression_tank_quantity', 0)
                 fire_supp_price = canopy.get('fire_suppression_price', 0)
                 if fire_supp_qty > 0 or fire_supp_price > 0:
-                    area_has_fire_suppression = True
+                    # Determine fire suppression type
+                    fs_type = canopy.get('fire_suppression_system_type', '').upper().strip()
+                    if 'NOBEL' in fs_type:
+                        fire_suppression_by_type['NOBEL'].add(area_identifier)
+                    elif 'AMAREX' in fs_type:
+                        fire_suppression_by_type['AMAREX'].add(area_identifier)
+                    else:
+                        # Default to Ansul R102 for any other type
+                        fire_suppression_by_type['ANSUL'].add(area_identifier)
                 
                 if model:
                     # Normalize lighting type
@@ -2050,8 +2075,6 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
                 areas_with_cladding.add(area_identifier)
             if area_has_sdu:
                 areas_with_sdu.add(area_identifier)
-            if area_has_fire_suppression:
-                areas_with_fire_suppression.add(area_identifier)
     
     # 2. Generate canopy scope items
     for (model, lighting), count in sorted(model_lighting_counts.items()):
@@ -2135,13 +2158,40 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
             'description': description
         })
     
-    # 6. Add fire suppression systems if present
-    if areas_with_fire_suppression:
-        count = len(areas_with_fire_suppression)
+    # 6. Add fire suppression systems by type
+    # NOBEL systems
+    if fire_suppression_by_type['NOBEL']:
+        count = len(fire_suppression_by_type['NOBEL'])
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} NOBEL Fire Suppression System{'s' if count > 1 else ''}"
+        scope_items.append({
+            'model': 'FIRE_NOBEL',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # AMAREX systems
+    if fire_suppression_by_type['AMAREX']:
+        count = len(fire_suppression_by_type['AMAREX'])
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} AMAREX Fire Suppression System{'s' if count > 1 else ''}"
+        scope_items.append({
+            'model': 'FIRE_AMAREX',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # Ansul R102 systems (default)
+    if fire_suppression_by_type['ANSUL']:
+        count = len(fire_suppression_by_type['ANSUL'])
         count_str = f"{count}no" if count > 1 else "1no"
         description = f"{count_str} Ansul R102 Fire Suppression System{'s' if count > 1 else ''}"
         scope_items.append({
-            'model': 'FIRE_SUPP',
+            'model': 'FIRE_ANSUL',
             'lighting': None,
             'count': count,
             'count_str': count_str,
@@ -2162,7 +2212,33 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
             'areas': list(areas_with_cladding)
         })
     
-    # 8. Add extract/supply systems if defined
+    # 8. Add RecoAir systems if present
+    if areas_with_recoair:
+        count = len(areas_with_recoair)
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} RecoAir Air Handling Unit{'s' if count > 1 else ''}"
+        scope_items.append({
+            'model': 'RECOAIR',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # 9. Add Reactaway units if present (and feature enabled)
+    if areas_with_reactaway:
+        count = len(areas_with_reactaway)
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} Reactaway UV-C Filtration Unit{'s' if count > 1 else ''}"
+        scope_items.append({
+            'model': 'REACTAWAY',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # 10. Add extract/supply systems if defined
     if project_data.get('has_extract_system', False):
         scope_items.append({
             'model': 'EXTRACT_SYS',
