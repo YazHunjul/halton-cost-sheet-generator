@@ -147,68 +147,23 @@ def transform_lighting_type(lighting_type: str) -> str:
     
     # Check for LED strip variations (any string containing "LED STRIP")
     if "LED STRIP" in lighting_str:
-        if "DALI" in lighting_str:
-            # Return specific LED STRIP type with DALI
-            if "L6" in lighting_str:
-                return "LED STRIP L6 Inc DALI"
-            elif "L12" in lighting_str:
-                return "LED STRIP L12 Inc DALI"
-            elif "L18" in lighting_str:
-                return "LED STRIP L18 Inc DALI"
-            else:
-                return "LED STRIP Inc DALI"
-        elif "EM" in lighting_str:
-            # Return specific LED STRIP type with EM
-            if "L6" in lighting_str:
-                return "LED STRIP L6EM"
-            elif "L12" in lighting_str:
-                return "LED STRIP L12EM"
-            elif "L18" in lighting_str:
-                return "LED STRIP L18EM"
-            else:
-                return "LED STRIP EM"
-        else:
-            # Return specific LED STRIP type without DALI/EM
-            if "LM6" in lighting_str or "LM-6" in lighting_str:
-                return "LM6"
-            elif "LM12" in lighting_str or "LM-12" in lighting_str:
-                return "LM12"
-            elif "LM18" in lighting_str or "LM-18" in lighting_str:
-                return "LM18"
-            else:
-                return "LED STRIP"
+        # Always return just "LED STRIP" regardless of variations (L6, L12, L18, DALI, EM, etc.)
+        return "LED STRIP"
     
     # Check for spots variations
     elif "SPOTS" in lighting_str or "SPOT" in lighting_str:
-        if "DALI" in lighting_str:
-            if "SMALL" in lighting_str:
-                return "Small LED Spots Inc DALI"
-            elif "LARGE" in lighting_str:
-                return "Large LED Spots Inc DALI"
-            else:
-                return "LED SPOTS Inc DALI"
-        else:
-            return "LED SPOTS"
+        # Always return just "LED SPOTS" regardless of variations (Small, Large, DALI, etc.)
+        return "LED SPOTS"
     
     # Check for HCL variations
     elif lighting_str.startswith("HCL"):
-        if "600" in lighting_str:
-            return "HCL600 DALI"
-        elif "1200" in lighting_str:
-            return "HCL1200 DALI"
-        elif "1800" in lighting_str:
-            return "HCL1800 DALI"
-        else:
-            return "HCL DALI"
+        # Always return "HCL DALI" regardless of the number (600, 1200, 1800, etc.)
+        return "HCL DALI"
     
     # Check for EL variations
     elif lighting_str.startswith("EL"):
-        if "215" in lighting_str:
-            return "EL215"
-        elif "218" in lighting_str:
-            return "EL218"
-        else:
-            return "EL"
+        # Always return "EL" regardless of the number (215, 218, etc.)
+        return "EL"
     
     # For any other value or unrecognized lighting type, return "-"
     return "-"
@@ -2014,85 +1969,124 @@ def format_currency(amount) -> str:
 
 def generate_scope_of_works(project_data: Dict) -> List[Dict]:
     """
-    Generate scope of works based on canopy models, counts, and lighting types.
+    Generate comprehensive scope of works including all equipment types.
     
     Args:
-        project_data (Dict): Project data with canopy information
+        project_data (Dict): Project data with all equipment information
         
     Returns:
         List[Dict]: List of scope items with counts and descriptions
     """
-    # Count canopies by model and lighting type across the entire project
+    scope_items = []
+    
+    # 1. Count canopies by model and lighting type
     model_lighting_counts = {}
     areas_with_cladding = set()
+    areas_with_sdu = set()
+    areas_with_vent_clg = set()
+    areas_with_marvel = set()
+    areas_with_fire_suppression = set()
     
     for level in project_data.get('levels', []):
+        level_name = level.get('level_name', '')
+        
         for area in level.get('areas', []):
+            area_name = area.get('name', '')
+            area_identifier = f"{level_name} - {area_name}"
+            
+            # Check for ventilated ceiling
+            if area.get('options', {}).get('vent_clg', False):
+                areas_with_vent_clg.add(area_identifier)
+            
+            # Check for MARVEL system
+            if area.get('options', {}).get('marvel', False):
+                areas_with_marvel.add(area_identifier)
+            
             area_has_cladding = False
+            area_has_sdu = False
+            area_has_fire_suppression = False
             
             for canopy in area.get('canopies', []):
                 model = canopy.get('model', '').upper().strip()
                 lighting_type = canopy.get('lighting_type', '').upper().strip()
                 
-                # Check if this canopy has wall cladding
+                # Check for wall cladding
                 wall_cladding = canopy.get('wall_cladding', {})
                 if wall_cladding.get('type') not in ['None', None, ''] and wall_cladding.get('type'):
                     area_has_cladding = True
                 
+                # Check for SDU
+                if canopy.get('options', {}).get('sdu', False):
+                    area_has_sdu = True
+                
+                # Check for fire suppression
+                fire_supp_qty = canopy.get('fire_suppression_tank_quantity', 0)
+                fire_supp_price = canopy.get('fire_suppression_price', 0)
+                if fire_supp_qty > 0 or fire_supp_price > 0:
+                    area_has_fire_suppression = True
+                
                 if model:
-                    # Normalize lighting type - only include if it's a real lighting selection
+                    # Normalize lighting type
                     if lighting_type and lighting_type not in ['-', 'NONE', 'LIGHT SELECTION', '']:
-                        # Simplify lighting type names
                         if 'LED STRIP' in lighting_type:
                             lighting_normalized = 'LED STRIP'
                         elif 'SPOT' in lighting_type:
                             lighting_normalized = 'LED SPOTS'
+                        elif lighting_type.startswith('HCL'):
+                            lighting_normalized = 'HCL DALI'
+                        elif lighting_type.startswith('EL'):
+                            lighting_normalized = 'EL'
                         else:
                             lighting_normalized = lighting_type
                     else:
-                        lighting_normalized = None  # No lighting
+                        lighting_normalized = None
                     
                     # Create key combining model and lighting
                     key = (model, lighting_normalized)
                     model_lighting_counts[key] = model_lighting_counts.get(key, 0) + 1
             
-            # Track areas with cladding
+            # Track areas with additional equipment
             if area_has_cladding:
-                level_name = level.get('level_name', '')
-                area_name = area.get('name', '')
-                areas_with_cladding.add(f"{level_name} - {area_name}")
+                areas_with_cladding.add(area_identifier)
+            if area_has_sdu:
+                areas_with_sdu.add(area_identifier)
+            if area_has_fire_suppression:
+                areas_with_fire_suppression.add(area_identifier)
     
-    # Generate scope descriptions based on model types and lighting
-    scope_items = []
-    
-    for (model, lighting), count in model_lighting_counts.items():
+    # 2. Generate canopy scope items
+    for (model, lighting), count in sorted(model_lighting_counts.items()):
         count_str = f"{count}no"
         
-        # Base description based on model type
+        # Create concise descriptions based on model type
         if model.startswith('CMW'):
             if 'F' in model:
-                base_description = f"{count_str} Extract/Supply Canopy c/w Capture Jet Tech and Water Wash Function"
+                base_desc = f"Water Wash Extract/Supply Canopies"
             else:
-                base_description = f"{count_str} Extract Canopy c/w Capture Jet Tech and Water Wash Function"
+                base_desc = f"Water Wash Extract Canopies"
         elif model.startswith('UV'):
             if 'F' in model:
-                base_description = f"{count_str} Extract/Supply Canopies c/w Capture Jet Tech and UV-c Filtration"
+                base_desc = f"UV-C Extract/Supply Canopies"
             else:
-                base_description = f"{count_str} Extract Canopies c/w Capture Jet Tech and UV-c Filtration"
+                base_desc = f"UV-C Extract Canopies"
         elif model.startswith('CXW'):
-            base_description = f"{count_str} Condense Canopies c/w Extract"
-        else:
-            # Standard canopies (KV, etc)
+            base_desc = f"Condense Extract Canopies"
+        elif model.startswith('KV'):
             if 'F' in model:
-                base_description = f"{count_str} Extract/Supply Canopies c/w Capture Jet Tech"
+                base_desc = f"Extract/Supply Canopies"
             else:
-                base_description = f"{count_str} Extract Canopies c/w Capture Jet Tech"
-        
-        # Add lighting type if present
-        if lighting:
-            description = f"{base_description} with {lighting}"
+                base_desc = f"Extract Canopies"
         else:
-            description = base_description
+            # Generic for other models
+            if 'F' in model:
+                base_desc = f"Extract/Supply Canopies ({model})"
+            else:
+                base_desc = f"Extract Canopies ({model})"
+        
+        # Add lighting if present
+        if lighting:
+            description = f"{count_str} {base_desc} with {lighting}"
+        else:
+            description = f"{count_str} {base_desc}"
         
         scope_items.append({
             'model': model,
@@ -2102,22 +2096,90 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
             'description': description
         })
     
-    # Add wall cladding areas if any exist
+    # 3. Add ventilated ceiling if present
+    if areas_with_vent_clg:
+        count = len(areas_with_vent_clg)
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} Ventilated Ceiling System{'s' if count > 1 else ''}"
+        scope_items.append({
+            'model': 'VENT_CLG',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # 4. Add SDU systems if present
+    if areas_with_sdu:
+        count = len(areas_with_sdu)
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} Service Distribution Unit{'s' if count > 1 else ''} (SDU)"
+        scope_items.append({
+            'model': 'SDU',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # 5. Add MARVEL system if present
+    if areas_with_marvel:
+        count = len(areas_with_marvel)
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} M.A.R.V.E.L. Demand Control System{'s' if count > 1 else ''}"
+        scope_items.append({
+            'model': 'MARVEL',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # 6. Add fire suppression systems if present
+    if areas_with_fire_suppression:
+        count = len(areas_with_fire_suppression)
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} Ansul R102 Fire Suppression System{'s' if count > 1 else ''}"
+        scope_items.append({
+            'model': 'FIRE_SUPP',
+            'lighting': None,
+            'count': count,
+            'count_str': count_str,
+            'description': description
+        })
+    
+    # 7. Add wall cladding if present
     if areas_with_cladding:
-        cladding_count = len(areas_with_cladding)
-        cladding_count_str = f"{cladding_count}no"
-        
+        count = len(areas_with_cladding)
+        count_str = f"{count}no" if count > 1 else "1no"
+        description = f"{count_str} Stainless Steel Wall Cladding Area{'s' if count > 1 else ''}"
         scope_items.append({
             'model': 'CLADDING',
             'lighting': None,
-            'count': cladding_count,
-            'count_str': cladding_count_str,
-            'description': f"{cladding_count_str} Areas with Stainless Steel Cladding",
-            'areas': list(areas_with_cladding)  # Include list of areas for reference
+            'count': count,
+            'count_str': count_str,
+            'description': description,
+            'areas': list(areas_with_cladding)
         })
     
-    # Sort by model name for consistent ordering (put cladding at the end)
-    scope_items.sort(key=lambda x: (x['model'] == 'CLADDING', x['model'], x.get('lighting') or ''))
+    # 8. Add extract/supply systems if defined
+    if project_data.get('has_extract_system', False):
+        scope_items.append({
+            'model': 'EXTRACT_SYS',
+            'lighting': None,
+            'count': 1,
+            'count_str': '1no',
+            'description': 'Extract System with Ductwork and Controls'
+        })
+    
+    if project_data.get('has_supply_system', False):
+        scope_items.append({
+            'model': 'SUPPLY_SYS',
+            'lighting': None,
+            'count': 1,
+            'count_str': '1no',
+            'description': 'Supply Air System with Ductwork and Controls'
+        })
     
     return scope_items
 
