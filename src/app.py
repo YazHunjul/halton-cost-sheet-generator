@@ -1099,6 +1099,27 @@ def revision_page():
                         new_date = st.session_state.revision_project_data.get("date", "")
                         st.write(f"**Date will remain:** {format_date_for_display(new_date)}")
                 
+                # Contract sheets option
+                st.markdown("---")
+                st.subheader("📋 Contract Options")
+                
+                # Initialize contract option in session state if not present
+                if 'revision_contract_option' not in st.session_state:
+                    st.session_state.revision_contract_option = st.session_state.revision_project_data.get('contract_option', False)
+                
+                include_contract_sheets = st.checkbox(
+                    "Include Contract Sheets",
+                    value=st.session_state.revision_contract_option,
+                    key="rev_contract_checkbox",
+                    help="Include CONTRACT, EXTRACT DUCT, SUPPLY DUCT, and SPIRAL DUCT sheets in the Excel file"
+                )
+                st.session_state.revision_contract_option = include_contract_sheets
+                
+                if include_contract_sheets:
+                    st.info("✅ Contract sheets will be included in the revision")
+                else:
+                    st.info("ℹ️ Contract sheets will not be included in the revision")
+                
                 st.markdown("---")
                 
                 # Generate button
@@ -1120,6 +1141,9 @@ def revision_page():
                             st.session_state.revision_project_data['revision'] = new_revision
                             if update_date:
                                 st.session_state.revision_project_data['date'] = new_date
+                            
+                            # Update contract option
+                            st.session_state.revision_project_data['contract_option'] = include_contract_sheets
                             
                             # Create revision by properly regenerating the Excel file with all changes
                             # This ensures all canopy additions, modifications, and other changes are saved
@@ -1166,6 +1190,7 @@ def revision_page():
                         st.write(f"• Total levels: {len(st.session_state.revision_levels)}")
                         total_areas = sum(len(level['areas']) for level in st.session_state.revision_levels)
                         st.write(f"• Total areas: {total_areas}")
+                        st.write(f"• Contract sheets: {'Included' if include_contract_sheets else 'Not included'}")
                         st.write("• Yes All edits have been applied")
                         st.write("• Yes All existing data preserved (lights, formulas, etc.)")
                         st.write("• Yes Only edited fields were updated")
