@@ -972,16 +972,30 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict, template_versio
         project_data (Dict): Project metadata
         template_version (str, optional): Template version to use for cost sheet identifier
     """
-    # Define cell mappings
-    CELL_MAPPINGS = {
-        "project_number": "C3",    # Job No
-        "company": "C5",           # Company (changed from customer)
-        "estimator": "C7",         # Sales Manager / Estimator Initials
-        "project_name": "G3",      # Project Name (changed from F3)
-        "project_location": "G5",  # Project Location (changed from F5)
-        "date": "G7",             # Date (changed from F7)
-        "revision": "K7",         # Revision
-    }
+    # Check if this is a CONTRACT sheet - use column F for project info
+    is_contract_sheet = sheet.title == "CONTRACT" or sheet.title.startswith("CONTRACT")
+    
+    # Define cell mappings - CONTRACT sheets use column F, others use column G
+    if is_contract_sheet:
+        CELL_MAPPINGS = {
+            "project_number": "C3",    # Job No
+            "company": "C5",           # Company (changed from customer)
+            "estimator": "C7",         # Sales Manager / Estimator Initials
+            "project_name": "F3",      # Project Name (CONTRACT sheet uses F)
+            "project_location": "F5",  # Project Location (CONTRACT sheet uses F)
+            "date": "F7",             # Date (CONTRACT sheet uses F)
+            "revision": "K7",         # Revision
+        }
+    else:
+        CELL_MAPPINGS = {
+            "project_number": "C3",    # Job No
+            "company": "C5",           # Company (changed from customer)
+            "estimator": "C7",         # Sales Manager / Estimator Initials
+            "project_name": "G3",      # Project Name (other sheets use G)
+            "project_location": "G5",  # Project Location (other sheets use G)
+            "date": "G7",             # Date (other sheets use G)
+            "revision": "K7",         # Revision
+        }
     
     for field, cell in CELL_MAPPINGS.items():
         value = project_data.get(field)
