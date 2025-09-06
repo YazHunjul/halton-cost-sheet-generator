@@ -6,51 +6,57 @@ The Halton Cost Sheet Generator now uses standardized filename conventions for a
 
 ## 📊 Excel Cost Sheets
 
-### Format: `Project Number Cost Sheet Date`
+### Format: `Project Number Cost Sheet Date [Rev X]`
 
 **Examples:**
 
-- `P12345 Cost Sheet 15012025.xlsx`
-- `HAL001 Cost Sheet 28022025.xlsx`
-- `PROJ789 Cost Sheet 10032025.xlsx`
+- `P12345 Cost Sheet 15012025.xlsx` (Initial version)
+- `P12345 Cost Sheet 15012025 Rev A.xlsx` (Revision A)
+- `HAL001 Cost Sheet 28022025 Rev B.xlsx` (Revision B)
+- `PROJ789 Cost Sheet 10032025.xlsx` (No revision)
 
 **Components:**
 
 - **Project Number**: From project data (e.g., "P12345")
 - **"Cost Sheet"**: Fixed identifier
 - **Date**: DDMMYYYY format (e.g., "15012025" for 15/01/2025)
+- **Rev X**: Optional revision letter (e.g., "Rev A", "Rev B")
 
 **Notes:**
 
 - Date format removes slashes for filename compatibility
 - If no date provided, uses current date
-- Revision information is stored internally but not in filename
+- Revision letter is included in filename when present
+- Initial versions without revisions omit the "Rev X" suffix
 
 ## 📄 Word Quotation Documents
 
-### Main Quotation Format: `Project Number Quotation Date`
+### Main Quotation Format: `Project Number Quotation Date [Rev X]`
 
 **Examples:**
 
-- `P12345 Quotation 15012025.docx`
-- `HAL001 Quotation 28022025.docx`
-- `PROJ789 Quotation 10032025.docx`
+- `P12345 Quotation 15012025.docx` (Initial version)
+- `P12345 Quotation 15012025 Rev A.docx` (Revision A)
+- `HAL001 Quotation 28022025 Rev B.docx` (Revision B)
+- `PROJ789 Quotation 10032025.docx` (No revision)
 
-### RecoAir Quotation Format: `Project Number RecoAir Quotation Date`
-
-**Examples:**
-
-- `P12345 RecoAir Quotation 15012025.docx`
-- `HAL001 RecoAir Quotation 28022025.docx`
-- `PROJ789 RecoAir Quotation 10032025.docx`
-
-### Multiple Documents (ZIP) Format: `Project Number Quotations Date`
+### RecoAir Quotation Format: `Project Number RecoAir Quotation Date [Rev X]`
 
 **Examples:**
 
-- `P12345 Quotations 15012025.zip`
-- `HAL001 Quotations 28022025.zip`
-- `PROJ789 Quotations 10032025.zip`
+- `P12345 RecoAir Quotation 15012025.docx` (Initial version)
+- `P12345 RecoAir Quotation 15012025 Rev A.docx` (Revision A)
+- `HAL001 RecoAir Quotation 28022025 Rev B.docx` (Revision B)
+- `PROJ789 RecoAir Quotation 10032025.docx` (No revision)
+
+### Multiple Documents (ZIP) Format: `Project Number Quotations Date [Rev X]`
+
+**Examples:**
+
+- `P12345 Quotations 15012025.zip` (Initial version)
+- `P12345 Quotations 15012025 Rev A.zip` (Revision A)
+- `HAL001 Quotations 28022025 Rev B.zip` (Revision B)
+- `PROJ789 Quotations 10032025.zip` (No revision)
 
 **ZIP Contents:**
 
@@ -63,18 +69,18 @@ The Halton Cost Sheet Generator now uses standardized filename conventions for a
 
 1. **Canopy-only projects**: Generate main quotation only
 
-   - Filename: `Project Number Quotation Date.docx`
+   - Filename: `Project Number Quotation Date [Rev X].docx`
 
 2. **RecoAir-only projects**: Generate RecoAir quotation only
-   - Filename: `Project Number RecoAir Quotation Date.docx`
+   - Filename: `Project Number RecoAir Quotation Date [Rev X].docx`
 
 ### Multiple Document Scenarios
 
 3. **Mixed projects** (Canopies + RecoAir): Generate both documents in ZIP
-   - ZIP filename: `Project Number Quotations Date.zip`
+   - ZIP filename: `Project Number Quotations Date [Rev X].zip`
    - Contains:
-     - `Project Number Quotation Date.docx` (main quotation)
-     - `Project Number RecoAir Quotation Date.docx` (RecoAir quotation)
+     - `Project Number Quotation Date [Rev X].docx` (main quotation)
+     - `Project Number RecoAir Quotation Date [Rev X].docx` (RecoAir quotation)
 
 ## 📅 Date Formatting
 
@@ -95,21 +101,33 @@ The Halton Cost Sheet Generator now uses standardized filename conventions for a
 ### Excel Generation
 
 ```python
-# Format: "Project Number Cost Sheet Date"
-output_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
+# Format: "Project Number Cost Sheet Date Rev X"
+if revision and revision.strip():
+    output_filename = f"{project_number} Cost Sheet {formatted_date} Rev {revision}.xlsx"
+else:
+    output_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
 ```
 
 ### Word Generation
 
 ```python
-# Main quotation: "Project Number Quotation Date"
-main_filename = f"{project_number} Quotation {date_str}.docx"
+# Main quotation: "Project Number Quotation Date Rev X"
+if revision and revision.strip():
+    main_filename = f"{project_number} Quotation {date_str} Rev {revision}.docx"
+else:
+    main_filename = f"{project_number} Quotation {date_str}.docx"
 
-# RecoAir quotation: "Project Number RecoAir Quotation Date"
-recoair_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
+# RecoAir quotation: "Project Number RecoAir Quotation Date Rev X"
+if revision and revision.strip():
+    recoair_filename = f"{project_number} RecoAir Quotation {date_str} Rev {revision}.docx"
+else:
+    recoair_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
 
-# ZIP file: "Project Number Quotations Date"
-zip_filename = f"{project_number} Quotations {date_str}.zip"
+# ZIP file: "Project Number Quotations Date Rev X"
+if revision and revision.strip():
+    zip_filename = f"{project_number} Quotations {date_str} Rev {revision}.zip"
+else:
+    zip_filename = f"{project_number} Quotations {date_str}.zip"
 ```
 
 ### Date Formatting Function
@@ -152,39 +170,48 @@ def format_date_for_filename(date_str: str) -> str:
 
 ### Excel Revisions
 
-- Filename format remains: `Project Number Cost Sheet Date.xlsx`
-- Revision letter stored internally in spreadsheet
-- New revision creates new file with updated date
+- Filename format: `Project Number Cost Sheet Date Rev X.xlsx`
+- Revision letter included in filename when present
+- Initial versions without revision omit the "Rev X" suffix
+- Revision also stored internally in spreadsheet
 
 ### Word Document Revisions
 
 - Generate new documents from updated Excel file
-- Revision information included in document content
-- Filename reflects the date of generation
+- Filename format: `Project Number [Type] Date Rev X.docx`
+- Revision included in both filename and document content
+- Quote reference format: `ProjectNumber/SI/EI/X` (where X is revision)
 
 ## 📝 Examples by Project Type
 
-### Canopy Project
+### Canopy Project (Initial)
 
 ```
 P12345 Cost Sheet 15012025.xlsx
 P12345 Quotation 15012025.docx
 ```
 
-### RecoAir Project
+### Canopy Project (Revision A)
 
 ```
-P12345 Cost Sheet 15012025.xlsx
-P12345 RecoAir Quotation 15012025.docx
+P12345 Cost Sheet 15012025 Rev A.xlsx
+P12345 Quotation 15012025 Rev A.docx
 ```
 
-### Mixed Project
+### RecoAir Project (Revision B)
 
 ```
-P12345 Cost Sheet 15012025.xlsx
-P12345 Quotations 15012025.zip
-  ├── P12345 Quotation 15012025.docx
-  └── P12345 RecoAir Quotation 15012025.docx
+P12345 Cost Sheet 15012025 Rev B.xlsx
+P12345 RecoAir Quotation 15012025 Rev B.docx
+```
+
+### Mixed Project (Revision C)
+
+```
+P12345 Cost Sheet 15012025 Rev C.xlsx
+P12345 Quotations 15012025 Rev C.zip
+  ├── P12345 Quotation 15012025 Rev C.docx
+  └── P12345 RecoAir Quotation 15012025 Rev C.docx
 ```
 
 ## 🎯 Quality Assurance

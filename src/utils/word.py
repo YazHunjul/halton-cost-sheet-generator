@@ -75,13 +75,14 @@ def get_sales_contact_info(estimator_name: str, project_data: Dict = None) -> Di
         'phone': first_contact[1]
     }
 
-def format_halton_reference(project_number: str, date: str) -> str:
+def format_halton_reference(project_number: str, date: str, revision: str = None) -> str:
     """
     Format the Halton reference number.
     
     Args:
         project_number (str): Project number
         date (str): Project date
+        revision (str, optional): Revision letter
         
     Returns:
         str: Formatted Halton reference
@@ -93,9 +94,15 @@ def format_halton_reference(project_number: str, date: str) -> str:
         else:
             year = str(datetime.now().year)[-2:]
         
-        # Format as project_number/month/year
+        # Format as project_number/month/year/revision
         month = datetime.now().strftime("%m")
-        return f"{project_number}/{month}/{year}"
+        reference = f"{project_number}/{month}/{year}"
+        
+        # Add revision if present
+        if revision and revision.strip():
+            reference = f"{reference}/{revision}"
+            
+        return reference
     except:
         return f"{project_number}/XX/XX"
 
@@ -299,25 +306,32 @@ def get_customer_first_name(customer_name: str) -> str:
     else:
         return ""
 
-def generate_reference_variable(project_number: str, sales_contact_name: str, estimator_name: str) -> str:
+def generate_reference_variable(project_number: str, sales_contact_name: str, estimator_name: str, revision: str = None) -> str:
     """
-    Generate reference variable in format: projectnumber/salesinitials/estimatorintials
+    Generate reference variable in format: projectnumber/salesinitials/estimatorintials/revision
     
     Args:
         project_number (str): Project number
         sales_contact_name (str): Full name of sales contact
         estimator_name (str): Full name of estimator
+        revision (str, optional): Revision letter
         
     Returns:
-        str: Reference variable (e.g., "P12345/YH/JS")
+        str: Reference variable (e.g., "P12345/YH/JS" or "P12345/YH/JS/A")
     """
     from utils.excel import get_initials
     
     sales_initials = get_initials(sales_contact_name) if sales_contact_name else ""
     estimator_initials = get_initials(estimator_name) if estimator_name else ""
     
-    # Format: projectnumber/salesinitials/estimatorintials
-    return f"{project_number}/{sales_initials}/{estimator_initials}"
+    # Format: projectnumber/salesinitials/estimatorintials/revision
+    reference = f"{project_number}/{sales_initials}/{estimator_initials}"
+    
+    # Add revision if present
+    if revision and revision.strip():
+        reference = f"{reference}/{revision}"
+        
+    return reference
 
 def generate_quote_title(revision: str) -> str:
     """
@@ -862,11 +876,12 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     # Generate combined initials (Sales Contact / Estimator)
     combined_initials = get_combined_initials(sales_contact['name'], estimator)
     
-    # Generate reference variable (projectnumber/salesinitials/estimatorintials)
+    # Generate reference variable (projectnumber/salesinitials/estimatorintials/revision)
     reference_variable = generate_reference_variable(
         project_data.get('project_number', ''), 
         sales_contact['name'], 
-        estimator
+        estimator,
+        project_data.get('revision', '')
     )
     
     # Generate quote title based on revision
@@ -928,7 +943,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         
         # Formatted data
         'date': format_date_for_display(project_data.get('date', '')),
-        'halton_ref': format_halton_reference(project_data.get('project_number', ''), project_data.get('date', '')),
+        'halton_ref': format_halton_reference(project_data.get('project_number', ''), project_data.get('date', ''), project_data.get('revision', '')),
         
         # Sales contact information
         'sales_contact_name': sales_contact['name'],
@@ -1342,24 +1357,34 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
         date_str = format_date_for_filename(project_data.get('date', ''))
         
         # Case 1: RecoAir-only project - generate only RecoAir quotation
-        # Format: "Project Number RecoAir Quotation Date"
+        # Format: "Project Number RecoAir Quotation Date Rev X"
+        revision = project_data.get('revision', '')
         if is_recoair_only:
-            output_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
+            if revision and revision.strip():
+                output_filename = f"{project_number} RecoAir Quotation {date_str} Rev {revision}.docx"
+            else:
+                output_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
             return generate_single_document(project_data, RECOAIR_TEMPLATE_PATH, output_filename, excel_file_path)
         
         # Case 2: Mixed project or canopy-only project
         documents_to_generate = []
         
         # Generate main quotation if there are canopies OR ventilated ceilings (or other non-RecoAir systems)
-        # Format: "Project Number Quotation Date"
+        # Format: "Project Number Quotation Date Rev X"
         if has_canopies or has_vent_clg or has_marvel or has_uv:
-            main_filename = f"{project_number} Quotation {date_str}.docx"
+            if revision and revision.strip():
+                main_filename = f"{project_number} Quotation {date_str} Rev {revision}.docx"
+            else:
+                main_filename = f"{project_number} Quotation {date_str}.docx"
             documents_to_generate.append((WORD_TEMPLATE_PATH, main_filename, "Main Quotation"))
         
         # Generate RecoAir quotation if there are RecoAir areas
-        # Format: "Project Number RecoAir Quotation Date"
+        # Format: "Project Number RecoAir Quotation Date Rev X"
         if has_recoair:
-            recoair_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
+            if revision and revision.strip():
+                recoair_filename = f"{project_number} RecoAir Quotation {date_str} Rev {revision}.docx"
+            else:
+                recoair_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
             documents_to_generate.append((RECOAIR_TEMPLATE_PATH, recoair_filename, "RecoAir Quotation"))
         
         # If only one document to generate, return it directly
@@ -1382,7 +1407,10 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
             
             # Create zip file if we have multiple documents
             if len(generated_files) > 1:
-                zip_filename = f"{project_number} Quotations {date_str}.zip"
+                if revision and revision.strip():
+                    zip_filename = f"{project_number} Quotations {date_str} Rev {revision}.zip"
+                else:
+                    zip_filename = f"{project_number} Quotations {date_str}.zip"
                 zip_path = f"output/{zip_filename}"
                 
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -1397,7 +1425,10 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
                 return generated_files[0][0]
         
         # Fallback: generate main quotation only
-        main_filename = f"{project_number} Quotation {date_str}.docx"
+        if revision and revision.strip():
+            main_filename = f"{project_number} Quotation {date_str} Rev {revision}.docx"
+        else:
+            main_filename = f"{project_number} Quotation {date_str}.docx"
         return generate_single_document(project_data, WORD_TEMPLATE_PATH, main_filename, excel_file_path)
         
     except Exception as e:

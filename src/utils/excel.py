@@ -972,10 +972,13 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict, template_versio
         project_data (Dict): Project metadata
         template_version (str, optional): Template version to use for cost sheet identifier
     """
-    # Check if this is a CONTRACT sheet - use column F for project info
-    is_contract_sheet = sheet.title == "CONTRACT" or sheet.title.startswith("CONTRACT")
+    # Check sheet type for proper cell mappings
+    sheet_name = sheet.title
+    is_contract_sheet = sheet_name == "CONTRACT" or sheet_name.startswith("CONTRACT")
+    is_canopy_sheet = "CANOPY" in sheet_name
+    is_job_total_sheet = "JOB TOTAL" in sheet_name
     
-    # Define cell mappings - CONTRACT sheets use column F, others use column G
+    # Define cell mappings based on sheet type
     if is_contract_sheet:
         CELL_MAPPINGS = {
             "project_number": "C3",    # Job No
@@ -986,7 +989,19 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict, template_versio
             "date": "F7",             # Date (CONTRACT sheet uses F)
             "revision": "K7",         # Revision
         }
+    elif is_canopy_sheet or is_job_total_sheet:
+        # CANOPY and JOB TOTAL sheets use O7 for revision
+        CELL_MAPPINGS = {
+            "project_number": "C3",    # Job No
+            "company": "C5",           # Company (changed from customer)
+            "estimator": "C7",         # Sales Manager / Estimator Initials
+            "project_name": "G3",      # Project Name
+            "project_location": "G5",  # Project Location
+            "date": "G7",             # Date
+            "revision": "O7",         # Revision (O7 for CANOPY and JOB TOTAL)
+        }
     else:
+        # Other sheets use K7 for revision
         CELL_MAPPINGS = {
             "project_number": "C3",    # Job No
             "company": "C5",           # Company (changed from customer)
@@ -994,7 +1009,7 @@ def write_project_metadata(sheet: Worksheet, project_data: Dict, template_versio
             "project_name": "G3",      # Project Name (other sheets use G)
             "project_location": "G5",  # Project Location (other sheets use G)
             "date": "G7",             # Date (other sheets use G)
-            "revision": "K7",         # Revision
+            "revision": "K7",         # Revision (K7 for other sheets)
         }
     
     for field, cell in CELL_MAPPINGS.items():
@@ -3385,6 +3400,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         # Save the workbook
         project_number = project_data.get('project_number', 'unknown')
         date_str = project_data.get('date', '')
+        revision = project_data.get('revision', '')
         
         # Format date for filename (remove slashes and make it filename-safe)
         if date_str:
@@ -3394,7 +3410,11 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
             # Use current date if no date provided
             formatted_date = get_current_date().replace('/', '')
         
-        output_path = f"output/{project_number} Cost Sheet {formatted_date}.xlsx"
+        # Include revision in filename if present
+        if revision and revision.strip():
+            output_path = f"output/{project_number} Cost Sheet {formatted_date} Rev {revision}.xlsx"
+        else:
+            output_path = f"output/{project_number} Cost Sheet {formatted_date}.xlsx"
         os.makedirs("output", exist_ok=True)
         wb.save(output_path)
         
@@ -3519,7 +3539,11 @@ def read_excel_project_data(excel_path: str) -> Dict:
         else:
             project_data['date'] = ""
             
-        project_data['revision'] = data_sheet['K7'].value or ""  # Revision from K7, leave blank if not set
+        # Read revision from appropriate cell based on sheet type
+        if 'JOB TOTAL' in data_sheet.title or 'CANOPY' in data_sheet.title:
+            project_data['revision'] = data_sheet['O7'].value or ""  # CANOPY and JOB TOTAL use O7
+        else:
+            project_data['revision'] = data_sheet['K7'].value or ""  # Other sheets use K7
         
         # Read company and estimator data from hidden ProjectData sheet
         if 'ProjectData' in wb.sheetnames:
@@ -5056,8 +5080,11 @@ def create_revision_from_existing(excel_path: str, new_revision: str, new_date: 
             except:
                 formatted_date = get_current_date().replace('/', '')
         
-        # Create output filename: "Project Number Cost Sheet Date"
-        output_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
+        # Create output filename with revision: "Project Number Cost Sheet Date Rev X"
+        if new_revision and new_revision.strip():
+            output_filename = f"{project_number} Cost Sheet {formatted_date} Rev {new_revision}.xlsx"
+        else:
+            output_filename = f"{project_number} Cost Sheet {formatted_date}.xlsx"
         output_path = f"output/{output_filename}"
         
         # Ensure output directory exists
@@ -5924,7 +5951,8 @@ def update_revision_with_edits(excel_path: str, edited_data: Dict, new_revision:
             
             # Update revision based on sheet patterns
             if 'JOB TOTAL' in sheet_name or 'CANOPY' in sheet_name:
-                sheet['K7'] = new_revision
+                # CANOPY and JOB TOTAL sheets use O7 for revision
+                sheet['O7'] = new_revision
                 if new_date:
                     sheet['G7'] = new_date
             elif any(x in sheet_name for x in ['FIRE SUPP', 'CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']):
@@ -5932,17 +5960,17 @@ def update_revision_with_edits(excel_path: str, edited_data: Dict, new_revision:
                 if new_date:
                     sheet['G7'] = new_date
             elif any(x in sheet_name for x in ['EBOX', 'EDGE BOX', 'RECOAIR']):
-                sheet['K7'] = new_revision
+                # Check if revision was in O7 (for EBOX/RECOAIR)
+                if sheet['O7'].value and str(sheet['O7'].value).strip():
+                    sheet['O7'] = new_revision
+                else:
+                    sheet['K7'] = new_revision
                 if new_date:
                     sheet['H7'] = new_date
             elif any(x in sheet_name for x in ['MARVEL', 'SDU']):
                 sheet['K7'] = new_revision
                 if new_date:
                     sheet['F7'] = new_date
-            
-            # Check if revision was in O7 instead
-            if sheet['O7'].value and str(sheet['O7'].value).strip():
-                sheet['O7'] = new_revision
         
         # Update canopy data in CANOPY sheets
         for sheet_name in wb.sheetnames:

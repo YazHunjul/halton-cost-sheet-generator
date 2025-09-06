@@ -1170,10 +1170,13 @@ def revision_page():
                         
                         st.success(f"Yes Revision {new_revision} created successfully with all your edits!")
                         
-                        # Create download filename
+                        # Create download filename with revision
                         project_number = st.session_state.revision_project_data.get('project_number', 'unknown')
                         date_str = new_date.replace('/', '') if update_date else st.session_state.revision_project_data.get('date', '').replace('/', '')
-                        download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
+                        if new_revision and new_revision.strip():
+                            download_filename = f"{project_number} Cost Sheet {date_str} Rev {new_revision}.xlsx"
+                        else:
+                            download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
                         
                         st.download_button(
                             label=f" Download Revision {new_revision}",
