@@ -816,8 +816,9 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
             # Area total includes: canopy schedule + fire suppression + cladding + other systems
             # Note: area_delivery_installation and area_commissioning are already included in area_canopy_schedule_subtotal
             # Note: RecoAir pricing should NOT be included in area totals - it has its own separate pricing schedule
+            # Note: UV Extra Over cost should NOT be included in area totals - it's a comparison/information only
             area_total = (area_canopy_schedule_subtotal + area_fire_suppression_total + area_cladding_total + 
-                         area_uvc_price + area_sdu_price + area_vent_clg_price + area_marvel_price + area_uv_extra_over_cost)
+                         area_uvc_price + area_sdu_price + area_vent_clg_price + area_marvel_price)  # Removed uv_extra_over_cost
 
             # Enhanced area with transformed canopy data
             enhanced_area = {
@@ -1036,7 +1037,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
             pricing_totals.get('total_sdu_price', 0) +
             pricing_totals.get('total_vent_clg_price', 0) +
             pricing_totals.get('total_marvel_price', 0) +
-            pricing_totals.get('total_uv_extra_over_cost', 0) +
+            # UV Extra Over cost excluded from project total - it's comparison/information only
             pricing_totals.get('contract_total_price', 0)  # Include contract total from J9
         ),
         
@@ -1680,8 +1681,9 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
             # Area total includes: canopy schedule + fire suppression + cladding + other systems
             # Note: delivery_installation and commissioning are already included in area_canopy_schedule_subtotal
             # Note: RecoAir pricing should NOT be included in area totals - it has its own separate pricing schedule
+            # Note: UV Extra Over cost should NOT be included in area totals - it's a comparison/information only
             area_total = (area_canopy_schedule_subtotal + area_fire_supp_total + area_cladding_total + 
-                         uvc_price + sdu_price + vent_clg_price + marvel_price + uv_extra_over_cost)
+                         uvc_price + sdu_price + vent_clg_price + marvel_price)  # Removed uv_extra_over_cost
 
             # Process canopies to add has_cladding flag for template compatibility
             processed_canopies = []
@@ -1760,7 +1762,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
     base_calc_start = time.time()
     print(f"   🧮 Calculating base project total...")
     
-    # Base project total calculation
+    # Base project total calculation (excluding UV Extra Over)
+    # UV Extra Over is excluded as it's for comparison/information only
     base_project_total = (
         totals['total_canopy_price'] +
         totals['total_fire_suppression_price'] +
@@ -1770,8 +1773,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
         totals['total_uvc_price'] +
         totals['total_sdu_price'] +
         totals['total_vent_clg_price'] +
-        totals.get('total_marvel_price', 0) +
-        totals['total_uv_extra_over_cost']
+        totals.get('total_marvel_price', 0)
+        # UV Extra Over cost excluded from project total
     )
     
     base_calc_time = time.time() - base_calc_start
@@ -1935,6 +1938,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
     
     # Recalculate base project total with updated SDU pricing
     final_calc_start = time.time()
+    # Recalculate base total (excluding UV Extra Over)
+    # UV Extra Over is excluded as it's for comparison/information only
     updated_base_total = (
         totals['total_canopy_price'] +
         totals['total_fire_suppression_price'] +
@@ -1944,8 +1949,8 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
         totals['total_uvc_price'] +
         totals['total_sdu_price'] +  # This now includes updated detailed SDU pricing
         totals['total_vent_clg_price'] +
-        totals.get('total_marvel_price', 0) +
-        totals['total_uv_extra_over_cost']
+        totals.get('total_marvel_price', 0)
+        # UV Extra Over cost excluded from project total
     )
     
     # Add contract systems total and contract total price to project total
