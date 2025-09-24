@@ -3,7 +3,7 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from openpyxl import load_workbook
 from utils.excel import validate_cell_data, clear_validation_errors

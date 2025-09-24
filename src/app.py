@@ -860,7 +860,7 @@ def revision_page():
                                             "wall_cladding": {
                                                 "type": "None",
                                                 "width": 0,
-                                                "height": 2100,
+                                                "height": 0,
                                                 "position": []
                                             },
                                             "sdu_item_number": ""
@@ -989,13 +989,12 @@ def revision_page():
                                                 if 'wall_cladding' not in canopy:
                                                     canopy['wall_cladding'] = {"type": "None", "width": 0, "height": 0, "position": []}
                                                 
-                                                # Check if wall cladding is enabled (not 'None' and has some data)
+                                                # Check if wall cladding is enabled (not 'None' and has meaningful data)
                                                 wall_cladding_data = canopy.get('wall_cladding', {})
                                                 has_wall_cladding = (
-                                                    wall_cladding_data.get('type', 'None') not in ['None', None] or
-                                                    wall_cladding_data.get('width', 0) or
-                                                    wall_cladding_data.get('height', 0) or
-                                                    wall_cladding_data.get('position', [])
+                                                    wall_cladding_data.get('type', 'None') not in ['None', None] and
+                                                    (wall_cladding_data.get('width', 0) > 0 or
+                                                     wall_cladding_data.get('position', []))
                                                 )
                                                 
                                                 wall_clad_enabled = st.checkbox(

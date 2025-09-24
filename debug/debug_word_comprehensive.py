@@ -8,7 +8,7 @@ import os
 import json
 
 # Add the src directory to the path so we can import our modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 def debug_word_comprehensive():
     """Comprehensive debugging of Word template processing."""

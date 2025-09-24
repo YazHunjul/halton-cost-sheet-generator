@@ -8,7 +8,7 @@ import sys
 import os
 
 # Add src directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from utils.excel import read_excel_project_data
 from utils.word import prepare_template_context

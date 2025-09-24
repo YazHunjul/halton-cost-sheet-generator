@@ -3,7 +3,7 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from utils.excel import transform_recoair_model, get_recoair_specifications
 

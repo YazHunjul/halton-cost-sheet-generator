@@ -8,7 +8,7 @@ import os
 import json
 
 # Add the src directory to the path so we can import our modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 def trace_word_data_flow():
     """Trace the complete data flow to identify where values are lost."""

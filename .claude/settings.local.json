@@ -10,7 +10,10 @@
       "Bash(pkill:*)",
       "Bash(source:*)",
       "Bash(ls:*)",
-      "mcp__ide__executeCode"
+      "mcp__ide__executeCode",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }
