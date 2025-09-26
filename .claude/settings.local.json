@@ -13,7 +13,11 @@
       "mcp__ide__executeCode",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(pip install:*)",
+      "Bash(streamlit run:*)",
+      "Bash(cp:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }

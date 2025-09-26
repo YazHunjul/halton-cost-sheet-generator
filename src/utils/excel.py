@@ -17,9 +17,10 @@ from utils.date_utils import format_date_for_display, get_current_date
 # Constants for Excel operations
 TEMPLATE_PATHS = {
     "R19.1": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
-    "R19.2": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx"
+    "R19.2": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
+    "R19.2-Sep": "templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx"
 }
-DEFAULT_TEMPLATE_PATH = TEMPLATE_PATHS["R19.2"]  # Default to latest version
+DEFAULT_TEMPLATE_PATH = TEMPLATE_PATHS["R19.2-Sep"]  # Default to latest version
 
 # Other constants
 BASE_SHEET_NAME = "CANOPY"  # The template sheet to copy from
@@ -151,6 +152,19 @@ def load_template_workbook(template_path: str = None, version: str = None) -> Wo
             try:
                 wb = load_workbook(path)
                 print(f"✅ Successfully loaded template: {path}")
+
+                # Ensure POLLUSTOP and AEROLYS template sheets are unhidden if they exist
+                print(f"   Checking template sheets for unhiding...")
+                for sheet_name in wb.sheetnames:
+                    if 'POLLUSTOP' in sheet_name or 'AEROLYS' in sheet_name:
+                        sheet = wb[sheet_name]
+                        print(f"   Found template sheet: '{sheet_name}' - Current state: {sheet.sheet_state}")
+                        if sheet.sheet_state != 'visible':
+                            sheet.sheet_state = 'visible'
+                            print(f"   ✅ Unhidden template sheet: {sheet_name}")
+                        else:
+                            print(f"   ℹ️ Template sheet already visible: {sheet_name}")
+
                 break
             except FileNotFoundError:
                 continue
@@ -917,7 +931,7 @@ def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str, template_vers
     """
     try:
         # Use provided version or try to detect from B1
-        version = template_version or "R19.2"  # Default version
+        version = template_version or "R19.2-Sep"  # Default version
         
         if not template_version:
             # Fallback: try to get version from B1 of this sheet
@@ -952,6 +966,10 @@ def write_cost_sheet_identifier(sheet: Worksheet, sheet_name: str, template_vers
                 sheet_type = "MARVEL"
             elif "VENT CLG" in sheet_name:
                 sheet_type = "VENT CLG"
+            elif "POLLUSTOP" in sheet_name:
+                sheet_type = "POLLUSTOP"
+            elif "AEROLYS" in sheet_name:
+                sheet_type = "AEROLYS"
             else:
                 sheet_type = "SYSTEM"  # Default fallback
             
@@ -2439,8 +2457,12 @@ def organize_sheets_by_area(wb: Workbook):
                 return 6  # MARVEL seventh
             elif 'VENT CLG' in sheet_name:
                 return 7  # VENT CLG eighth
+            elif 'POLLUSTOP' in sheet_name:
+                return 8  # Pollustop ninth
+            elif 'AEROLYS' in sheet_name:
+                return 9  # Aerolys tenth
             else:
-                return 8  # Any other system types
+                return 10  # Any other system types
         
         # Sort sheets within each area
         for area_id in area_sheets:
@@ -2591,6 +2613,10 @@ def add_delivery_location_dropdown_to_sheet(sheet: Worksheet, selected_delivery_
             cell = "D54"  # MARVEL sheets use D54 for delivery location
         elif "VENT CLG" in sheet_name:
             cell = "D44"  # VENT CLG sheets use D44 for delivery location
+        elif "POLLUSTOP" in sheet_name:
+            cell = "D44"  # POLLUSTOP sheets use D44 for delivery location (same as VENT CLG)
+        elif "AEROLYS" in sheet_name:
+            cell = "D44"  # AEROLYS sheets use D44 for delivery location (same as VENT CLG)
         elif "FIRE" in sheet_name and "SUPP" in sheet_name:
             cell = "D186"
         elif "CANOPY" in sheet_name:
@@ -2670,6 +2696,10 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         marvel_sheets = [sheet for sheet in all_sheets if 'MARVEL' in sheet]
         # VENT CLG template sheets (for ventilated ceiling systems)
         vent_clg_sheets = [sheet for sheet in all_sheets if 'VENT CLG' in sheet or 'VENTILATED CEILING' in sheet]
+        # Pollustop template sheets (for Pollustop filtration systems)
+        pollustop_sheets = [sheet for sheet in all_sheets if 'POLLUSTOP' in sheet]
+        # Aerolys template sheets (for Aerolys air purification systems)
+        aerolys_sheets = [sheet for sheet in all_sheets if 'AEROLYS' in sheet]
         # Contract template sheets - handle exact matches and numbered variants
         contract_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'CONTRACT' or sheet.startswith('CONTRACT')]
         spiral_duct_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'SPIRAL DUCT' or sheet.startswith('SPIRAL DUCT')]
@@ -2934,6 +2964,15 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                 
                 # Check if area has UV Extra Over option
                 has_uv_extra_over = area.get("options", {}).get("uv_extra_over", False)
+
+                # Check if area has Pollustop system (area-level option)
+                has_pollustop = area.get("options", {}).get("pollustop", False)
+
+                # Check if area has Aerolys system (area-level option)
+                has_aerolys = area.get("options", {}).get("aerolys", False)
+
+                # Check if area has XEU system (area-level option)
+                has_xeu = area.get("options", {}).get("xeu", False)
                 
                 # Check if area has UV canopies for UV Extra Over
                 uv_canopies = [canopy for canopy in area_canopies if canopy.get('model', '').upper().startswith('UV')]
@@ -3104,7 +3143,86 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                     print(f"Warning: Could not write title to B1 on MARVEL sheet: {str(e)}")
                             else:
                                 print(f"Warning: Not enough MARVEL sheets in template for Marvel system in area {area_name}")
-                        
+
+                        # Create Pollustop sheet if Pollustop is selected for this area
+                        if has_pollustop:
+                            if pollustop_sheets:
+                                pollustop_sheet_name = pollustop_sheets.pop(0)
+                                pollustop_sheet = wb[pollustop_sheet_name]
+                                new_pollustop_name = f"POLLUSTOP - {level_name} ({area_number})"
+                                pollustop_sheet.title = new_pollustop_name
+                                pollustop_sheet.sheet_state = 'visible'
+                                pollustop_sheet.sheet_properties.tabColor = tab_color
+
+                                # Write Pollustop-specific metadata
+                                write_project_metadata(pollustop_sheet, project_data, template_version)
+                                # Set Pollustop sheet title in B1
+                                try:
+                                    pollustop_sheet['B1'] = f"{level_name} - {area_name} - POLLUSTOP SYSTEM"
+                                except Exception as e:
+                                    print(f"Warning: Could not write title to B1 on Pollustop sheet: {str(e)}")
+                            else:
+                                print(f"Warning: Not enough POLLUSTOP sheets in template for Pollustop system in area {area_name}")
+
+                        # Create Aerolys sheet if Aerolys is selected for this area
+                        if has_aerolys:
+                            if aerolys_sheets:
+                                aerolys_sheet_name = aerolys_sheets.pop(0)
+                                aerolys_sheet = wb[aerolys_sheet_name]
+                                new_aerolys_name = f"AEROLYS - {level_name} ({area_number})"
+                                aerolys_sheet.title = new_aerolys_name
+                                aerolys_sheet.sheet_state = 'visible'
+                                aerolys_sheet.sheet_properties.tabColor = tab_color
+
+                                # Write Aerolys-specific metadata
+                                write_project_metadata(aerolys_sheet, project_data, template_version)
+                                # Set Aerolys sheet title in B1
+                                try:
+                                    aerolys_sheet['B1'] = f"{level_name} - {area_name} - AEROLYS SYSTEM"
+                                except Exception as e:
+                                    print(f"Warning: Could not write title to B1 on Aerolys sheet: {str(e)}")
+                            else:
+                                print(f"Warning: Not enough AEROLYS sheets in template for Aerolys system in area {area_name}")
+
+                        # Create both Pollustop and Aerolys sheets if XEU is selected for this area
+                        if has_xeu:
+                            # XEU uses both Pollustop and Aerolys sheets
+                            if pollustop_sheets:
+                                pollustop_sheet_name = pollustop_sheets.pop(0)
+                                pollustop_sheet = wb[pollustop_sheet_name]
+                                new_pollustop_name = f"POLLUSTOP (XEU) - {level_name} ({area_number})"
+                                pollustop_sheet.title = new_pollustop_name
+                                pollustop_sheet.sheet_state = 'visible'
+                                pollustop_sheet.sheet_properties.tabColor = tab_color
+
+                                # Write Pollustop-specific metadata for XEU
+                                write_project_metadata(pollustop_sheet, project_data, template_version)
+                                # Set Pollustop sheet title in B1 for XEU
+                                try:
+                                    pollustop_sheet['B1'] = f"{level_name} - {area_name} - XEU POLLUSTOP SYSTEM"
+                                except Exception as e:
+                                    print(f"Warning: Could not write title to B1 on XEU Pollustop sheet: {str(e)}")
+                            else:
+                                print(f"Warning: Not enough POLLUSTOP sheets in template for XEU system (Pollustop part) in area {area_name}")
+
+                            if aerolys_sheets:
+                                aerolys_sheet_name = aerolys_sheets.pop(0)
+                                aerolys_sheet = wb[aerolys_sheet_name]
+                                new_aerolys_name = f"AEROLYS (XEU) - {level_name} ({area_number})"
+                                aerolys_sheet.title = new_aerolys_name
+                                aerolys_sheet.sheet_state = 'visible'
+                                aerolys_sheet.sheet_properties.tabColor = tab_color
+
+                                # Write Aerolys-specific metadata for XEU
+                                write_project_metadata(aerolys_sheet, project_data, template_version)
+                                # Set Aerolys sheet title in B1 for XEU
+                                try:
+                                    aerolys_sheet['B1'] = f"{level_name} - {area_name} - XEU AEROLYS SYSTEM"
+                                except Exception as e:
+                                    print(f"Warning: Could not write title to B1 on XEU Aerolys sheet: {str(e)}")
+                            else:
+                                print(f"Warning: Not enough AEROLYS sheets in template for XEU system (Aerolys part) in area {area_name}")
+
                         # Write each canopy with proper spacing
                         fs_canopy_idx = 0  # Track fire suppression canopies separately
                         
@@ -3197,8 +3315,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                     else:
                         raise Exception(f"Not enough CANOPY sheets in template for area {area_name}")
                 
-                # Handle case where UV-C, SDU, RecoAir, and/or Marvel are selected but no canopies exist (edge case)
-                elif (has_uvc or has_sdu or has_canopy_sdu or has_recoair or has_marvel or has_vent_clg) and not area_canopies:
+                # Handle case where UV-C, SDU, RecoAir, Marvel, Pollustop, Aerolys, and/or XEU are selected but no canopies exist (edge case)
+                elif (has_uvc or has_sdu or has_canopy_sdu or has_recoair or has_marvel or has_vent_clg or has_pollustop or has_aerolys or has_xeu) and not area_canopies:
                     # Create EBOX sheet if UV-C is selected
                     if has_uvc:
                         if edge_box_sheets:
@@ -3301,6 +3419,85 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         else:
                             print(f"Warning: Not enough VENT CLG sheets in template for VENT CLG system in area {area_name}")
 
+                    # Create Pollustop sheet if Pollustop is selected
+                    if has_pollustop:
+                        if pollustop_sheets:
+                            pollustop_sheet_name = pollustop_sheets.pop(0)
+                            pollustop_sheet = wb[pollustop_sheet_name]
+                            new_pollustop_name = f"POLLUSTOP - {level_name} ({area_number})"
+                            pollustop_sheet.title = new_pollustop_name
+                            pollustop_sheet.sheet_state = 'visible'
+                            pollustop_sheet.sheet_properties.tabColor = tab_color
+
+                            # Write Pollustop-specific metadata
+                            write_project_metadata(pollustop_sheet, project_data, template_version)
+                            # Set Pollustop sheet title in B1
+                            try:
+                                pollustop_sheet['B1'] = f"{level_name} - {area_name} - POLLUSTOP SYSTEM"
+                            except Exception as e:
+                                print(f"Warning: Could not write title to B1 on Pollustop sheet: {str(e)}")
+                        else:
+                            print(f"Warning: Not enough POLLUSTOP sheets in template for Pollustop system in area {area_name}")
+
+                    # Create Aerolys sheet if Aerolys is selected
+                    if has_aerolys:
+                        if aerolys_sheets:
+                            aerolys_sheet_name = aerolys_sheets.pop(0)
+                            aerolys_sheet = wb[aerolys_sheet_name]
+                            new_aerolys_name = f"AEROLYS - {level_name} ({area_number})"
+                            aerolys_sheet.title = new_aerolys_name
+                            aerolys_sheet.sheet_state = 'visible'
+                            aerolys_sheet.sheet_properties.tabColor = tab_color
+
+                            # Write Aerolys-specific metadata
+                            write_project_metadata(aerolys_sheet, project_data, template_version)
+                            # Set Aerolys sheet title in B1
+                            try:
+                                aerolys_sheet['B1'] = f"{level_name} - {area_name} - AEROLYS SYSTEM"
+                            except Exception as e:
+                                print(f"Warning: Could not write title to B1 on Aerolys sheet: {str(e)}")
+                        else:
+                            print(f"Warning: Not enough AEROLYS sheets in template for Aerolys system in area {area_name}")
+
+                    # Create both Pollustop and Aerolys sheets if XEU is selected
+                    if has_xeu:
+                        # XEU uses both Pollustop and Aerolys sheets
+                        if pollustop_sheets:
+                            pollustop_sheet_name = pollustop_sheets.pop(0)
+                            pollustop_sheet = wb[pollustop_sheet_name]
+                            new_pollustop_name = f"POLLUSTOP (XEU) - {level_name} ({area_number})"
+                            pollustop_sheet.title = new_pollustop_name
+                            pollustop_sheet.sheet_state = 'visible'
+                            pollustop_sheet.sheet_properties.tabColor = tab_color
+
+                            # Write Pollustop-specific metadata for XEU
+                            write_project_metadata(pollustop_sheet, project_data, template_version)
+                            # Set Pollustop sheet title in B1 for XEU
+                            try:
+                                pollustop_sheet['B1'] = f"{level_name} - {area_name} - XEU POLLUSTOP SYSTEM"
+                            except Exception as e:
+                                print(f"Warning: Could not write title to B1 on XEU Pollustop sheet: {str(e)}")
+                        else:
+                            print(f"Warning: Not enough POLLUSTOP sheets in template for XEU system (Pollustop part) in area {area_name}")
+
+                        if aerolys_sheets:
+                            aerolys_sheet_name = aerolys_sheets.pop(0)
+                            aerolys_sheet = wb[aerolys_sheet_name]
+                            new_aerolys_name = f"AEROLYS (XEU) - {level_name} ({area_number})"
+                            aerolys_sheet.title = new_aerolys_name
+                            aerolys_sheet.sheet_state = 'visible'
+                            aerolys_sheet.sheet_properties.tabColor = tab_color
+
+                            # Write Aerolys-specific metadata for XEU
+                            write_project_metadata(aerolys_sheet, project_data, template_version)
+                            # Set Aerolys sheet title in B1 for XEU
+                            try:
+                                aerolys_sheet['B1'] = f"{level_name} - {area_name} - XEU AEROLYS SYSTEM"
+                            except Exception as e:
+                                print(f"Warning: Could not write title to B1 on XEU Aerolys sheet: {str(e)}")
+                        else:
+                            print(f"Warning: Not enough AEROLYS sheets in template for XEU system (Aerolys part) in area {area_name}")
+
                 
                 area_count += 1
         
@@ -3313,7 +3510,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                            sheet_name.startswith('EXTRACT DUCT'))
             
             if (sheet.sheet_state == 'visible' and 
-                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG')) and 
+                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG', 'POLLUSTOP', 'AEROLYS')) and 
                 not is_duct_sheet and
                 sheet_name not in ['Lists', 'JOB TOTAL']):
                 # Write metadata to any other visible sheets (excluding EBOX, RECOAIR, SDU, MARVEL, and duct sheets which don't need metadata)
@@ -3345,7 +3542,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         if project_data.get('contract_option', False):
             created_contract_sheet_names = ['CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']
         
-        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets + vent_clg_sheets + contract_sheets + spiral_duct_sheets + supply_duct_sheets + extract_duct_sheets
+        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets + vent_clg_sheets + pollustop_sheets + aerolys_sheets + contract_sheets + spiral_duct_sheets + supply_duct_sheets + extract_duct_sheets
         
         # Filter out the created contract sheets from the deletion list
         unused_sheets = [sheet for sheet in unused_sheets if sheet not in created_contract_sheet_names]
@@ -3416,8 +3613,15 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         else:
             output_path = f"output/{project_number} Cost Sheet {formatted_date}.xlsx"
         os.makedirs("output", exist_ok=True)
+
+        # Apply canopy sheet modifications before saving
+        apply_canopy_sheet_modifications(wb)
+
+        # Final check: ensure all used Pollustop and Aerolys sheets are visible
+        ensure_pollustop_aerolys_sheets_visible(wb)
+
         wb.save(output_path)
-        
+
         return output_path
     
     except Exception as e:
@@ -3473,13 +3677,280 @@ def detect_template_version(wb: Workbook) -> str:
                     if version in TEMPLATE_PATHS:  # Only return if it's a known version
                         return version
         
-        # Default to R19.2 if no version found
-        return "R19.2"
-        
+        # Default to R19.2-Sep if no version found
+        return "R19.2-Sep"
+
     except Exception as e:
         print(f"Warning: Could not detect template version: {str(e)}")
-        # Default to R19.2 if detection fails
-        return "R19.2"
+        # Default to R19.2-Sep if detection fails
+        return "R19.2-Sep"
+
+def ensure_pollustop_aerolys_sheets_visible(wb: Workbook):
+    """
+    Final check to ensure all used Pollustop and Aerolys sheets are visible before saving.
+    This includes both renamed sheets and any template sheets that are being used.
+
+    Args:
+        wb (Workbook): The workbook to check
+    """
+    try:
+        print(f"🔍 Final visibility check for Pollustop and Aerolys sheets...")
+        sheets_made_visible = 0
+
+        for sheet_name in wb.sheetnames:
+            # Check for both template names and renamed sheets
+            if any(keyword in sheet_name.upper() for keyword in ['POLLUSTOP', 'AEROLYS']):
+                sheet = wb[sheet_name]
+                current_state = sheet.sheet_state
+                print(f"   Checking sheet: '{sheet_name}' - State: {current_state}")
+
+                if current_state != 'visible':
+                    sheet.sheet_state = 'visible'
+                    sheets_made_visible += 1
+                    print(f"   ✅ Made visible: '{sheet_name}' (was {current_state})")
+                else:
+                    print(f"   ℹ️ Already visible: '{sheet_name}'")
+
+        if sheets_made_visible > 0:
+            print(f"✅ Made {sheets_made_visible} Pollustop/Aerolys sheets visible")
+        else:
+            print(f"ℹ️ All Pollustop/Aerolys sheets already visible or none found")
+
+    except Exception as e:
+        print(f"❌ Error ensuring Pollustop/Aerolys sheets visibility: {str(e)}")
+
+def apply_canopy_sheet_modifications(wb: Workbook):
+    """
+    Apply modifications to canopy sheets in a workbook:
+    1. Set default value "SELECT WORKS" in C16, C33, etc.
+    2. Replace formulas in J16, J33, etc. with simple VLOOKUP formulas
+    3. Change "FIRE SUPPRESSION" to "SPECIAL WORKS" in B16, B33, etc.
+    4. Remove dropdown validation from D16, D33, etc.
+
+    Args:
+        wb (Workbook): The workbook to modify
+    """
+    try:
+        # Find all canopy sheets
+        canopy_sheets = []
+        print(f"📋 Applying canopy modifications to generated Excel...")
+        for sheet_name in wb.sheetnames:
+            if 'CANOPY' in sheet_name:
+                sheet_obj = wb[sheet_name]
+                print(f"   Found CANOPY sheet: '{sheet_name}' - State: {sheet_obj.sheet_state}")
+                if sheet_obj.sheet_state == 'visible':
+                    canopy_sheets.append(sheet_name)
+                    print(f"   ✅ Added to modification list: '{sheet_name}'")
+                else:
+                    print(f"   ❌ Skipping hidden sheet: '{sheet_name}'")
+
+        print(f"🔧 Found {len(canopy_sheets)} canopy sheets to modify")
+
+        for sheet_name in canopy_sheets:
+            sheet = wb[sheet_name]
+            print(f"   Modifying sheet: {sheet_name}")
+
+            # Process all potential canopy rows: 16, 33, 50, 67, 84, 101
+            # These correspond to base rows 14, 31, 48, 65, 82, 99 + 2
+            target_rows = [16, 33, 50, 67, 84, 101]
+            canopies_modified = 0
+
+            for row_idx, target_row in enumerate(target_rows):
+                print(f"     Processing target row {target_row} (canopy position {row_idx + 1})")
+                canopies_modified += 1
+
+                # 1. Set default value "SELECT WORKS" in C16, C33, C50, etc.
+                current_c_value = sheet[f'C{target_row}'].value
+                print(f"     Cell C{target_row} current value: '{current_c_value}'")
+                print(f"     Setting C{target_row} to 'SELECT WORKS'")
+                sheet[f'C{target_row}'] = "SELECT WORKS"
+
+                # 2. Replace formula in J16, J33, J50, etc. with IF/VLOOKUP formula
+                vlookup_formula = f'=IF(C{target_row}="",0,VLOOKUP(C{target_row},CCBASE!$A$53:$C$73,2,FALSE))'
+
+                # Check if there's already a formula or value in this cell
+                existing_value = sheet[f'J{target_row}'].value
+                if existing_value:
+                    print(f"     Cell J{target_row} has existing content: {existing_value}")
+                    print(f"     Replacing with VLOOKUP formula: {vlookup_formula}")
+                else:
+                    print(f"     Cell J{target_row} is empty, adding VLOOKUP formula: {vlookup_formula}")
+
+                sheet[f'J{target_row}'] = vlookup_formula
+
+                # 3. Change "FIRE SUPPRESSION" to "SPECIAL WORKS" in B16, B33, B50, etc.
+                current_label = sheet[f'B{target_row}'].value
+                print(f"     Checking label at B{target_row}: '{current_label}'")
+
+                if current_label and "FIRE" in str(current_label).upper():
+                    print(f"     Changing 'FIRE SUPPRESSION' to 'SPECIAL WORKS' at B{target_row}")
+                    sheet[f'B{target_row}'] = "SPECIAL WORKS"
+                elif not current_label:
+                    print(f"     Setting empty label to 'SPECIAL WORKS' at B{target_row}")
+                    sheet[f'B{target_row}'] = "SPECIAL WORKS"
+                else:
+                    print(f"     Label at B{target_row} doesn't contain 'FIRE', leaving as '{current_label}'")
+
+                # 4. Remove dropdown validation from D16, D33, D50, etc.
+                dropdown_cell = f'D{target_row}'
+                print(f"     Removing dropdown validation from {dropdown_cell}")
+
+                # Remove any data validation from this cell
+                validations_found = 0
+                validations_to_remove = []
+                for validation in sheet.data_validations:
+                    cells_to_remove = []
+                    for cell_range in validation.cells:
+                        # Check if this validation applies to our dropdown cell
+                        if dropdown_cell in str(cell_range):
+                            print(f"     Found validation affecting {dropdown_cell}: {cell_range}")
+                            cells_to_remove.append(cell_range)
+                            validations_found += 1
+
+                    # Remove the cell from this validation
+                    for cell_range in cells_to_remove:
+                        validation.cells.discard(cell_range)
+                        print(f"     Removed {dropdown_cell} from validation range {cell_range}")
+
+                    # If validation has no cells left, mark for removal
+                    if len(validation.cells) == 0:
+                        validations_to_remove.append(validation)
+                        print(f"     Validation now empty, marking for removal")
+
+                # Remove empty validations
+                for validation in validations_to_remove:
+                    sheet.data_validations.remove(validation)
+                    print(f"     Removed empty validation")
+
+                if validations_found == 0:
+                    print(f"     No validations found affecting {dropdown_cell}")
+                else:
+                    print(f"     Processed {validations_found} validations for {dropdown_cell}")
+
+                # Clear any existing value in the dropdown cell
+                current_d_value = sheet[dropdown_cell].value
+                if current_d_value:
+                    print(f"     Clearing existing value in {dropdown_cell}: '{current_d_value}'")
+                    sheet[dropdown_cell] = None
+                else:
+                    print(f"     {dropdown_cell} already empty")
+
+                print(f"     ✅ Completed all modifications for canopy position {row_idx + 1} (target row {target_row})")
+
+            print(f"   ✅ Modified {canopies_modified} canopies in sheet '{sheet_name}'")
+
+        print(f"✅ Successfully applied modifications to {len(canopy_sheets)} canopy sheets")
+
+    except Exception as e:
+        print(f"❌ Error applying canopy sheet modifications: {str(e)}")
+
+def modify_uploaded_excel_sheet(excel_path: str) -> str:
+    """
+    Modify uploaded Excel files for future use:
+    1. Add VLOOKUP formulas to canopy sheets starting from J16
+    2. Change "FIRE SUPPRESSION" to "SPECIAL WORKS" from B16
+    3. Remove dropdown validation from D16 onwards
+
+    Args:
+        excel_path (str): Path to the Excel file to modify
+
+    Returns:
+        str: Path to the modified Excel file
+    """
+    try:
+        wb = load_workbook(excel_path, data_only=False)  # Keep formulas
+
+        # Find all canopy sheets
+        canopy_sheets = []
+        print(f"📋 Scanning {len(wb.sheetnames)} sheets for CANOPY sheets...")
+        for sheet_name in wb.sheetnames:
+            if 'CANOPY' in sheet_name:
+                sheet_obj = wb[sheet_name]
+                print(f"   Found CANOPY sheet: '{sheet_name}' - State: {sheet_obj.sheet_state}")
+                if sheet_obj.sheet_state == 'visible':
+                    canopy_sheets.append(sheet_name)
+                    print(f"   ✅ Added to modification list: '{sheet_name}'")
+                else:
+                    print(f"   ❌ Skipping hidden sheet: '{sheet_name}'")
+
+        print(f"🔧 Found {len(canopy_sheets)} canopy sheets to modify")
+
+        for sheet_name in canopy_sheets:
+            sheet = wb[sheet_name]
+            print(f"   Modifying sheet: {sheet_name}")
+
+            # Determine the number of canopies in this sheet (every 17 rows starting from row 14)
+            max_canopies = 10  # Reasonable limit
+            canopies_modified = 0
+            for canopy_index in range(max_canopies):
+                base_row = 14 + (canopy_index * 17)  # 14, 31, 48, 65, etc.
+
+                # Check if there's still canopy data at this position
+                config_cell = sheet[f'C{base_row}'].value
+                print(f"     Checking canopy {canopy_index + 1} at row {base_row}: C{base_row} = '{config_cell}'")
+
+                if not config_cell:
+                    print(f"     No more canopies found at row {base_row}")
+                    break  # No more canopies
+
+                canopies_modified += 1
+
+                # 1. Add VLOOKUP formula to J16, J33, J50, etc. (base_row + 2)
+                vlookup_row = base_row + 2  # J16, J33, J50, etc.
+                vlookup_formula = f"=VLOOKUP(C{vlookup_row},'Base Costs'!$U$4:$V$41,2,FALSE)"
+                print(f"     Adding VLOOKUP formula to J{vlookup_row}: {vlookup_formula}")
+                sheet[f'J{vlookup_row}'] = vlookup_formula
+
+                # 2. Change "FIRE SUPPRESSION" to "SPECIAL WORKS" in B16, B33, B50, etc.
+                label_row = base_row + 2  # B16, B33, B50, etc.
+                current_label = sheet[f'B{label_row}'].value
+                print(f"     Checking label at B{label_row}: '{current_label}'")
+
+                if current_label and "FIRE" in str(current_label).upper():
+                    print(f"     Changing 'FIRE SUPPRESSION' to 'SPECIAL WORKS' at B{label_row}")
+                    sheet[f'B{label_row}'] = "SPECIAL WORKS"
+                elif not current_label:
+                    print(f"     Setting empty label to 'SPECIAL WORKS' at B{label_row}")
+                    sheet[f'B{label_row}'] = "SPECIAL WORKS"
+                else:
+                    print(f"     Label at B{label_row} doesn't contain 'FIRE', leaving as '{current_label}'")
+
+                # 3. Remove dropdown validation from D16, D33, D50, etc.
+                dropdown_row = base_row + 2  # D16, D33, D50, etc.
+                dropdown_cell = f'D{dropdown_row}'
+
+                # Remove any data validation from this cell
+                validations_to_remove = []
+                for validation in sheet.data_validations:
+                    cells_to_remove = []
+                    for cell_range in validation.cells:
+                        if dropdown_cell in str(cell_range):
+                            cells_to_remove.append(cell_range)
+
+                    # Remove the cell from this validation
+                    for cell_range in cells_to_remove:
+                        validation.cells.discard(cell_range)
+
+                    # If validation has no cells left, mark for removal
+                    if len(validation.cells) == 0:
+                        validations_to_remove.append(validation)
+
+                # Remove empty validations
+                for validation in validations_to_remove:
+                    sheet.data_validations.remove(validation)
+
+            print(f"   ✅ Modified {canopies_modified} canopies in sheet '{sheet_name}'")
+
+        # Save the modified file
+        wb.save(excel_path)
+        wb.close()
+
+        print(f"✅ Successfully modified {len(canopy_sheets)} canopy sheets in uploaded Excel file")
+        return excel_path
+
+    except Exception as e:
+        print(f"❌ Error modifying uploaded Excel file: {str(e)}")
+        return excel_path
 
 def read_excel_project_data(excel_path: str) -> Dict:
     """
@@ -4092,7 +4563,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
         for level_name, areas in levels_data.items():
             for area in areas:
                 if 'options' not in area:
-                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False, 'vent_clg': False}
+                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False, 'vent_clg': False, 'pollustop': False, 'aerolys': False, 'xeu': False}
         
         # Check CANOPY sheets for area options written in rows 6-8
         for sheet_name in wb.sheetnames:
@@ -4634,6 +5105,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         recoair_sheets = []
         marvel_sheets = []
         vent_clg_sheets = []
+        pollustop_sheets = []
+        aerolys_sheets = []
         contract_sheets = []
         other_sheets = []
         
@@ -4654,6 +5127,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
                     marvel_sheets.append(sheet_name)
                 elif 'VENT CLG - ' in sheet_name:
                     vent_clg_sheets.append(sheet_name)  # VENT CLG gets its own category
+                elif 'POLLUSTOP - ' in sheet_name:
+                    pollustop_sheets.append(sheet_name)
+                elif 'AEROLYS - ' in sheet_name:
+                    aerolys_sheets.append(sheet_name)
                 elif sheet_name == 'CONTRACT' or sheet_name.startswith('CONTRACT'):
                     contract_sheets.append(sheet_name)
                 elif sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData']:
@@ -4750,7 +5227,29 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
             summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!J10"  # Price reference
             summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G10"  # Cost reference
             current_row += 1
-        
+
+        # POLLUSTOP sheets
+        for sheet_name in pollustop_sheets:
+            summary_sheet[f'A{current_row}'] = 'POLLUSTOP'
+            summary_sheet[f'B{current_row}'] = sheet_name
+            safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!J9,0)"  # Price
+            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!G9,0)"  # Cost
+            summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!J9"  # Price reference
+            summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G9"  # Cost reference
+            current_row += 1
+
+        # AEROLYS sheets
+        for sheet_name in aerolys_sheets:
+            summary_sheet[f'A{current_row}'] = 'AEROLYS'
+            summary_sheet[f'B{current_row}'] = sheet_name
+            safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!J9,0)"  # Price
+            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!G9,0)"  # Cost
+            summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!J9"  # Price reference
+            summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G9"  # Cost reference
+            current_row += 1
+
         # CONTRACT sheets
         for sheet_name in contract_sheets:
             summary_sheet[f'A{current_row}'] = 'CONTRACT'

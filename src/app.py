@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from config.business_data import ESTIMATORS, SALES_CONTACTS, DELIVERY_LOCATIONS, COMPANY_ADDRESSES
 from config.constants import VALID_CANOPY_MODELS
-from utils.excel import read_excel_project_data, save_to_excel
+from utils.excel import read_excel_project_data, save_to_excel, modify_uploaded_excel_sheet
 from utils.word import generate_quotation_document
 from utils.date_utils import format_date_for_display, get_current_date
 from openpyxl import load_workbook
@@ -115,7 +115,8 @@ def word_generation_page():
             temp_path = f"temp_excel_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            
+
+
             # Read project data from Excel
             with st.spinner("Reading project data from Excel..."):
                 project_data = read_excel_project_data(temp_path)
@@ -598,7 +599,8 @@ def revision_page():
             temp_path = f"temp_revision_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            
+
+
             # Read project data from Excel
             with st.spinner("Reading project data from Excel..."):
                 project_data = read_excel_project_data(temp_path)
@@ -794,7 +796,7 @@ def revision_page():
                                 
                                 # Area options
                                 st.write("**Area Options:**")
-                                opt_col1, opt_col2, opt_col3, opt_col4 = st.columns(4)
+                                opt_col1, opt_col2, opt_col3, opt_col4, opt_col5, opt_col6, opt_col7 = st.columns(7)
                                 
                                 with opt_col1:
                                     area['options']['uvc'] = st.checkbox(
@@ -822,6 +824,27 @@ def revision_page():
                                         "Vent CLG",
                                         value=area.get('options', {}).get('vent_clg', False),
                                         key=f"rev_area_vent_{level_idx}_{area_idx}"
+                                    )
+
+                                with opt_col5:
+                                    area['options']['pollustop'] = st.checkbox(
+                                        "Pollustop",
+                                        value=area.get('options', {}).get('pollustop', False),
+                                        key=f"rev_area_pollustop_{level_idx}_{area_idx}"
+                                    )
+
+                                with opt_col6:
+                                    area['options']['aerolys'] = st.checkbox(
+                                        "Aerolys",
+                                        value=area.get('options', {}).get('aerolys', False),
+                                        key=f"rev_area_aerolys_{level_idx}_{area_idx}"
+                                    )
+
+                                with opt_col7:
+                                    area['options']['xeu'] = st.checkbox(
+                                        "XEU",
+                                        value=area.get('options', {}).get('xeu', False),
+                                        key=f"rev_area_xeu_{level_idx}_{area_idx}"
                                     )
                                 
                                 st.markdown("---")  # Separator between areas
@@ -1155,7 +1178,7 @@ def revision_page():
                             elif template_used == 'R18.1':
                                 template_path = 'templates/excel/Halton Cost Sheet Jan 2025.xlsx'
                             else:
-                                template_path = 'templates/excel/Cost Sheet R19.2 Jun 2025.xlsx'  # Default to latest
+                                template_path = 'templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx'  # Default to latest
                             
                             # Generate the Excel file with all the edited data
                             output_path = save_to_excel(
@@ -1253,9 +1276,9 @@ def initialize_session_state():
         st.session_state.project_info = {}
     # Initialize template selection with default 19.2
     if "selected_template" not in st.session_state:
-        st.session_state.selected_template = "Cost Sheet R19.2 Jun 2025"
+        st.session_state.selected_template = "Cost Sheet R19.2 Sep 2025"
     if "template_path" not in st.session_state:
-        st.session_state.template_path = "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx"
+        st.session_state.template_path = "templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx"
 
 def navigation_buttons():
     """Display navigation buttons based on the current step."""
@@ -1602,11 +1625,14 @@ def step2_project_structure():
                         "name": f"Area {len(level['areas']) + 1}",
                         "canopies": [],
                         "options": {
-                            "uvc": False, 
-                            "recoair": False, 
-                            "marvel": False, 
+                            "uvc": False,
+                            "recoair": False,
+                            "marvel": False,
                             "uv_extra_over": False,
-                            "vent_clg": False
+                            "vent_clg": False,
+                            "pollustop": False,
+                            "aerolys": False,
+                            "xeu": False
                         }
                     })
                     st.rerun()
@@ -1656,7 +1682,10 @@ def step2_project_structure():
                                         'recoair': st.session_state.get(f"{area_key}_recoair", False),
                                         'marvel': st.session_state.get(f"{area_key}_marvel", False),
                                         'uv_extra_over': st.session_state.get(f"{area_key}_uv_extra_over", False),
-                                        'vent_clg': st.session_state.get(f"{area_key}_vent_clg", False)
+                                        'vent_clg': st.session_state.get(f"{area_key}_vent_clg", False),
+                                        'pollustop': st.session_state.get(f"{area_key}_pollustop", False),
+                                        'aerolys': st.session_state.get(f"{area_key}_aerolys", False),
+                                        'xeu': st.session_state.get(f"{area_key}_xeu", False)
                                     }
                             except (IndexError, KeyError) as e:
                                 # If there's an error, silently fail - the checkboxes will maintain their state
@@ -1683,11 +1712,29 @@ def step2_project_structure():
                                                   help="Calculate additional cost for UV functionality",
                                                   on_change=update_area_options)
                         
-                        vent_clg = st.checkbox("VENT CLG", 
-                                            value=area['options'].get('vent_clg', False), 
+                        vent_clg = st.checkbox("VENT CLG",
+                                            value=area['options'].get('vent_clg', False),
                                             key=f"{area_key}_vent_clg",
                                             help="Toggle if Ventilated Ceiling is needed for this area",
                                             on_change=update_area_options)
+
+                        pollustop = st.checkbox("Pollustop",
+                                              value=area['options'].get('pollustop', False),
+                                              key=f"{area_key}_pollustop",
+                                              help="Pollustop filtration system",
+                                              on_change=update_area_options)
+
+                        aerolys = st.checkbox("Aerolys",
+                                            value=area['options'].get('aerolys', False),
+                                            key=f"{area_key}_aerolys",
+                                            help="Aerolys air purification system",
+                                            on_change=update_area_options)
+
+                        xeu = st.checkbox("XEU",
+                                        value=area['options'].get('xeu', False),
+                                        key=f"{area_key}_xeu",
+                                        help="XEU system",
+                                        on_change=update_area_options)
                         
                         # Options are updated via the callback, no need for direct update here
                     
@@ -1720,6 +1767,10 @@ def step3_canopy_configuration():
                 # Display area options with UV Extra Over
                 options_text = f"UV-C: {'Yes' if area['options']['uvc'] else 'No'} | RecoAir: {'Yes' if area['options']['recoair'] else 'No'} | Marvel: {'Yes' if area['options'].get('marvel', False) else 'No'}"
                 options_text += f" | UV Extra Over: {'Yes' if area['options'].get('uv_extra_over', False) else 'No'}"
+                options_text += f" | VENT CLG: {'Yes' if area['options'].get('vent_clg', False) else 'No'}"
+                options_text += f" | Pollustop: {'Yes' if area['options'].get('pollustop', False) else 'No'}"
+                options_text += f" | Aerolys: {'Yes' if area['options'].get('aerolys', False) else 'No'}"
+                options_text += f" | XEU: {'Yes' if area['options'].get('xeu', False) else 'No'}"
                 
                 st.markdown(f"**Area Options:** {options_text}")
                 
@@ -2057,6 +2108,11 @@ def step4_review_and_generate():
                     if area['options']['uvc']: options.append("UV-C")
                     if area['options']['recoair']: options.append("RecoAir")
                     if area['options']['marvel']: options.append("Marvel")
+                    if area['options'].get('uv_extra_over', False): options.append("UV Extra Over")
+                    if area['options'].get('vent_clg', False): options.append("VENT CLG")
+                    if area['options'].get('pollustop', False): options.append("Pollustop")
+                    if area['options'].get('aerolys', False): options.append("Aerolys")
+                    if area['options'].get('xeu', False): options.append("XEU")
                     options_str = ", ".join(options) if options else "None"
                     st.write(f"  • {area['name']}: {canopy_count} canopies, Options: {options_str}")
     
@@ -2112,16 +2168,18 @@ def populate_session_state_from_uploaded_data(extracted_data):
         if extracted_data.get('template_used'):
             # Map short template versions to full template names
             template_version_mapping = {
-                'R19.2': "Cost Sheet R19.2 Jun 2025",
-                'R19.1': "Cost Sheet R19.1 May 2025", 
+                'R19.2': "Cost Sheet R19.2 Sep 2025",
+                'R19.1': "Cost Sheet R19.1 May 2025",
                 'R18.1': "Cost Sheet R18.1 (Legacy)",
                 # Also handle full names in case they're already correct
+                "Cost Sheet R19.2 Sep 2025": "Cost Sheet R19.2 Sep 2025",
                 "Cost Sheet R19.2 Jun 2025": "Cost Sheet R19.2 Jun 2025",
                 "Cost Sheet R19.1 May 2025": "Cost Sheet R19.1 May 2025",
                 "Cost Sheet R18.1 (Legacy)": "Cost Sheet R18.1 (Legacy)"
             }
             
             template_options = {
+                "Cost Sheet R19.2 Sep 2025": "templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx",
                 "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
                 "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
                 "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
@@ -2129,7 +2187,7 @@ def populate_session_state_from_uploaded_data(extracted_data):
             
             # Map the extracted template to the correct full name
             extracted_template = extracted_data['template_used']
-            mapped_template = template_version_mapping.get(extracted_template, "Cost Sheet R19.2 Jun 2025")
+            mapped_template = template_version_mapping.get(extracted_template, "Cost Sheet R19.2 Sep 2025")
             
             # Only set if the mapped template exists in current options
             if mapped_template in template_options:
@@ -2138,8 +2196,8 @@ def populate_session_state_from_uploaded_data(extracted_data):
                 print(f"✅ Mapped template '{extracted_template}' to '{mapped_template}'")
             else:
                 # Fallback to default
-                st.session_state.selected_template = "Cost Sheet R19.2 Jun 2025"
-                st.session_state.template_path = template_options["Cost Sheet R19.2 Jun 2025"]
+                st.session_state.selected_template = "Cost Sheet R19.2 Sep 2025"
+                st.session_state.template_path = template_options["Cost Sheet R19.2 Sep 2025"]
                 print(f"⚠️ Template '{extracted_template}' not recognized, using default")
         
         print(f"✅ Session state populated with uploaded data:")
@@ -2170,7 +2228,7 @@ def single_page_project_builder():
     if 'levels' not in st.session_state:
         st.session_state.levels = []
     if 'template_path' not in st.session_state:
-        st.session_state.template_path = 'templates/excel/Cost Sheet R19.2 Jun 2025.xlsx'
+        st.session_state.template_path = 'templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx'
     
     # Add save progress button
     add_save_progress_button()
@@ -2198,7 +2256,10 @@ def single_page_project_builder():
                         temp_path = f"temp_upload_{uploaded_file.name}"
                         with open(temp_path, "wb") as f:
                             f.write(uploaded_file.getbuffer())
-                        
+
+                        # Modify uploaded Excel file for future use
+                        modify_uploaded_excel_sheet(temp_path)
+
                         # Read project data from Excel
                         with st.spinner("Reading project data..."):
                             extracted_data = read_excel_project_data(temp_path)
@@ -2240,6 +2301,7 @@ def single_page_project_builder():
         # Template Selection
         st.markdown("### 📄 Template Selection")
         template_options = {
+            "Cost Sheet R19.2 Sep 2025": "templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx",
             "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
             "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
             "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
@@ -2292,7 +2354,10 @@ def single_page_project_builder():
                             'recoair': False,
                             'marvel': False,
                             'uv_extra_over': False,
-                            'vent_clg': False
+                            'vent_clg': False,
+                            'pollustop': False,
+                            'aerolys': False,
+                            'xeu': False
                         }
                     }]
                 }]
@@ -2496,7 +2561,10 @@ def single_page_project_builder():
                             "recoair": False,
                             "marvel": False,
                             "uv_extra_over": False,
-                            "vent_clg": False
+                            "vent_clg": False,
+                            "pollustop": False,
+                            "aerolys": False,
+                            "xeu": False
                         }
                     })
                     st.rerun()
@@ -2534,20 +2602,28 @@ def single_page_project_builder():
                             st.rerun()
                     
                     # Area options with smaller columns
-                    col1, col2 = st.columns(2)
+                    col1, col2, col3 = st.columns(3)
                     with col1:
-                        uvc = st.checkbox("UV-C", value=area['options'].get('uvc', False), 
+                        uvc = st.checkbox("UV-C", value=area['options'].get('uvc', False),
                                          key=f"sp_uvc_{level_idx}_{area_idx}")
                         recoair = st.checkbox("RecoAir", value=area['options'].get('recoair', False),
                                             key=f"sp_recoair_{level_idx}_{area_idx}")
                         marvel = st.checkbox("Marvel", value=area['options'].get('marvel', False),
                                            key=f"sp_marvel_{level_idx}_{area_idx}")
-                    
+
                     with col2:
                         uv_extra = st.checkbox("UV Extra", value=area['options'].get('uv_extra_over', False),
                                              key=f"sp_uv_extra_{level_idx}_{area_idx}")
                         vent_clg = st.checkbox("VENT CLG", value=area['options'].get('vent_clg', False),
                                              key=f"sp_vent_clg_{level_idx}_{area_idx}")
+
+                    with col3:
+                        pollustop = st.checkbox("Pollustop", value=area['options'].get('pollustop', False),
+                                              key=f"sp_pollustop_{level_idx}_{area_idx}")
+                        aerolys = st.checkbox("Aerolys", value=area['options'].get('aerolys', False),
+                                            key=f"sp_aerolys_{level_idx}_{area_idx}")
+                        xeu = st.checkbox("XEU", value=area['options'].get('xeu', False),
+                                        key=f"sp_xeu_{level_idx}_{area_idx}")
                     
                     # Update options
                     st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
@@ -2555,7 +2631,10 @@ def single_page_project_builder():
                         'recoair': recoair,
                         'marvel': marvel,
                         'uv_extra_over': uv_extra,
-                        'vent_clg': vent_clg
+                        'vent_clg': vent_clg,
+                        'pollustop': pollustop,
+                        'aerolys': aerolys,
+                        'xeu': xeu
                     }
                     
                     st.markdown("---")
@@ -2620,10 +2699,13 @@ def single_page_project_builder():
                     # Show area options
                     options = []
                     if area['options'].get('uvc'): options.append("UV-C")
-                    if area['options'].get('recoair'): options.append("RecoAir") 
+                    if area['options'].get('recoair'): options.append("RecoAir")
                     if area['options'].get('marvel'): options.append("Marvel")
                     if area['options'].get('uv_extra_over'): options.append("UV Extra Over")
                     if area['options'].get('vent_clg'): options.append("VENT CLG")
+                    if area['options'].get('pollustop'): options.append("Pollustop")
+                    if area['options'].get('aerolys'): options.append("Aerolys")
+                    if area['options'].get('xeu'): options.append("XEU")
                     
                     if options:
                         st.markdown(f"**Area Options:** {', '.join(options)}")
@@ -2953,6 +3035,9 @@ def single_page_project_builder():
                         if area['options'].get('marvel'): options.append("Marvel")
                         if area['options'].get('uv_extra_over'): options.append("UV Extra")
                         if area['options'].get('vent_clg'): options.append("VENT CLG")
+                        if area['options'].get('pollustop'): options.append("Pollustop")
+                        if area['options'].get('aerolys'): options.append("Aerolys")
+                        if area['options'].get('xeu'): options.append("XEU")
                         
                         options_str = f" ({', '.join(options)})" if options else ""
                         st.write(f"  • {area['name']}: {canopy_count} canopies{options_str}")
@@ -3083,6 +3168,7 @@ def main():
         # Template Selection
         st.markdown("### Cost Sheet Template Selection")
         template_options = {
+            "Cost Sheet R19.2 Sep 2025": "templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx",
             "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
             "Cost Sheet R19.1 May 2025": "templates/excel/Cost Sheet R19.1 May 2025.xlsx",
             "Cost Sheet R18.1 (Legacy)": "templates/excel/Halton Cost Sheet Jan 2025.xlsx"
@@ -3090,7 +3176,7 @@ def main():
         
         # Initialize template selection in session state
         if "selected_template" not in st.session_state:
-            st.session_state.selected_template = "Cost Sheet R19.2 Jun 2025"  # Default to 19.2
+            st.session_state.selected_template = "Cost Sheet R19.2 Sep 2025"  # Default to latest
         
         # Ensure the selected template is in the available options
         template_keys = list(template_options.keys())
@@ -3142,7 +3228,8 @@ def main():
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     temp_path = tmp_file.name
-                
+
+
                 # Simplified loading effect without rainbow border
                 with st.container():
                     # Create columns for better layout
