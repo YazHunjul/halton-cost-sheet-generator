@@ -14,6 +14,7 @@ from openpyxl import load_workbook # Added for contract data extraction
 # Template path for Word documents
 WORD_TEMPLATE_PATH = "templates/word/Halton Quote Feb 2024.docx"
 RECOAIR_TEMPLATE_PATH = "templates/word/Halton RECO Quotation Jan 2025 (2).docx"
+AHU_TEMPLATE_PATH = "templates/word/Halton AHU quote JAN2020.docx"
 
 
 
@@ -1252,16 +1253,24 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
                 has_vent_clg = True
 
             # Check if area has Pollustop option
-            if area.get('options', {}).get('pollustop', False):
+            pollustop_value = area.get('options', {}).get('pollustop', False)
+            if pollustop_value:
+                print(f"🟢 Pollustop detected in area: {area.get('name', 'Unknown')}")
                 has_pollustop = True
 
             # Check if area has Aerolys option
-            if area.get('options', {}).get('aerolys', False):
+            aerolys_value = area.get('options', {}).get('aerolys', False)
+            if aerolys_value:
+                print(f"🟢 Aerolys detected in area: {area.get('name', 'Unknown')}")
                 has_aerolys = True
 
-            # Check if area has XEU option
-            if area.get('options', {}).get('xeu', False):
+            # Check if area has XEU option (XEU creates both Pollustop AND Aerolys sheets)
+            xeu_value = area.get('options', {}).get('xeu', False)
+            if xeu_value:
+                print(f"🟢 XEU detected in area: {area.get('name', 'Unknown')} - this creates both Pollustop AND Aerolys sheets")
                 has_xeu = True
+                has_pollustop = True  # XEU creates Pollustop sheet
+                has_aerolys = True    # XEU creates Aerolys sheet
     
     # Determine if project is RecoAir-only (has RecoAir but no other systems)
     is_recoair_only = has_recoair and not (has_canopies or has_vent_clg or has_marvel or has_uv or has_pollustop or has_aerolys or has_xeu)
@@ -1405,6 +1414,19 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
             else:
                 recoair_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
             documents_to_generate.append((RECOAIR_TEMPLATE_PATH, recoair_filename, "RecoAir Quotation"))
+
+        # Generate AHU quotation if there are Pollustop or Aerolys areas (including XEU which creates both)
+        # Format: "Project Number AHU Quotation Date Rev X"
+        print(f"🔍 AHU Detection: has_pollustop={has_pollustop}, has_aerolys={has_aerolys}, has_xeu={has_xeu}")
+        if has_pollustop or has_aerolys:
+            if revision and revision.strip():
+                ahu_filename = f"{project_number} AHU Quotation {date_str} Rev {revision}.docx"
+            else:
+                ahu_filename = f"{project_number} AHU Quotation {date_str}.docx"
+            print(f"✅ Adding AHU quotation to generation list: {ahu_filename}")
+            documents_to_generate.append((AHU_TEMPLATE_PATH, ahu_filename, "AHU Quotation"))
+        else:
+            print(f"❌ No AHU quotation needed - no Pollustop, Aerolys, or XEU areas detected")
         
         # If only one document to generate, return it directly
         if len(documents_to_generate) == 1:

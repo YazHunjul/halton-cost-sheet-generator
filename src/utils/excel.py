@@ -201,6 +201,7 @@ def copy_template_sheet(wb: Workbook, sheet_name: str, new_name: str) -> Workshe
     except Exception as e:
         raise Exception(f"Failed to copy template sheet: {str(e)}")
 
+
 def get_sheet_type(project_type: str, canopy_data: Optional[Dict] = None) -> List[str]:
     """
     Determine which template sheets to use based on project and canopy type.
@@ -2122,6 +2123,206 @@ def add_vent_clg_dropdowns(sheet: Worksheet):
         print(f"Warning: Could not add VENT CLG dropdowns: {str(e)}")
 
 
+def add_pollustop_dropdowns(sheet: Worksheet):
+    """
+    Add Pollustop-specific dropdowns to the Pollustop sheet.
+
+    Args:
+        sheet (Worksheet): The Pollustop worksheet to add dropdowns to
+    """
+    try:
+        from openpyxl.worksheet.datavalidation import DataValidation
+        from config.business_data import DELIVERY_LOCATIONS
+
+        # Define the size options for each cell (C15-C23)
+        size_options = {
+            'C15': ["PS01 940mm", "PS02 940mm", "PS03 940mm", "PS04 940mm", "PS05 940mm", "PS06 940mm", "PS07 940mm", "PS08 940mm", "PS09 940mm", "PS10 940mm"],
+            'C16': ["PS01 1150mm", "PS02 1150mm", "PS03 1150mm", "PS04 1150mm", "PS05 1150mm", "PS06 1150mm", "PS07 1150mm", "PS08 1150mm", "PS09 1550mm", "PS10 1150mm"],
+            'C17': ["PS01 790mm", "PS02 790mm", "PS03 790mm", "PS04 790mm", "PS05 790mm", "PS06 790mm", "PS07 790mm", "PS08 790mm", "PS09 790mm", "PS10 790mm"],
+            'C18': ["PS01 600mm", "PS02 600mm", "PS03 600mm", "PS04 600mm", "PS05 600mm", "PS06 600mm", "PS07 600mm", "PS08 600mm", "PS09 600mm", "PS10 600mm"],
+            'C19': ["PS01 600mm", "PS02 600mm", "PS03 600mm", "PS04 600mm", "PS05 600mm", "PS06 600mm", "PS07 600mm", "PS08 600mm", "PS09 600mm", "PS10 600mm"],
+            'C20': ["PS01 600mm", "PS02 600mm", "PS03 600mm", "PS04 600mm", "PS05 600mm", "PS06 600mm", "PS07 600mm", "PS08 600mm", "PS09 600mm", "PS10 600mm"],
+            'C21': ["PS01 1560mm", "PS02 1560mm", "PS03 1560mm", "PS04 1560mm", "PS05 2060mm", "PS06 2060mm", "PS07 2060mm", "PS08 2060mm", "PS09 2060mm", "PS10 2060mm"],
+            'C22': ["PS01 600mm", "PS02 600mm", "PS03 600mm", "PS04 600mm", "PS05 600mm", "PS06 600mm", "PS07 600mm", "PS08 600mm", "PS09 600mm", "PS10 600mm"],
+            'C23': ["PS01 800mm", "PS02 800mm", "PS03 940mm", "PS04 940mm", "PS05 940mm", "PS06 940mm", "PS07 940mm", "PS08 940mm", "PS09 940mm", "PS10 940mm"]
+        }
+
+        # Write size options to hidden cells and create more robust validations
+        current_row = 500  # Start at row 500 for hidden data
+        print(f"🔧 Adding Pollustop size dropdowns to sheet: {sheet.title}")
+
+        for cell_ref, options in size_options.items():
+            try:
+                # Write options to hidden cells in column AZ
+                for i, option in enumerate(options):
+                    sheet[f'AZ{current_row + i}'] = option
+
+                # Create validation that references the range
+                range_ref = f'$AZ${current_row}:$AZ${current_row + len(options) - 1}'
+                size_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+                sheet.add_data_validation(size_dv)
+                size_dv.add(cell_ref)
+
+                current_row += len(options) + 2  # Leave gap between option sets
+                print(f"✅ Added size dropdown to {cell_ref} on Pollustop sheet")
+
+            except Exception as e:
+                print(f"Warning: Could not add size dropdown to {cell_ref}: {str(e)}")
+
+        # Add delivery location dropdown to D52
+        try:
+            # Write delivery locations to hidden cells
+            delivery_start_row = 600
+            for i, location in enumerate(DELIVERY_LOCATIONS):
+                sheet[f'AY{delivery_start_row + i}'] = location
+
+            # Create validation for delivery locations
+            range_ref = f'$AY${delivery_start_row}:$AY${delivery_start_row + len(DELIVERY_LOCATIONS) - 1}'
+            delivery_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            sheet.add_data_validation(delivery_dv)
+            delivery_dv.add('D52')
+            print(f"✅ Added delivery location dropdown to D52 on Pollustop sheet")
+
+        except Exception as e:
+            print(f"Warning: Could not add delivery location dropdown to D52: {str(e)}")
+
+        # Add plant selection dropdown to D53
+        try:
+            plant_options = [
+                "",  # Empty option
+                "SL10 GENIE",
+                "EXTENSION FORKS",
+                "2.5M COMBI LADDER",
+                "1.5M PODIUM",
+                "3M TOWER",
+                "COMBI LADDER",
+                "PECO LIFT",
+                "3M YOUNGMAN BOARD",
+                "GS1930 SCISSOR LIFT",
+                "4-6 SHERASCOPIC",
+                "7-9 SHERASCOPIC"
+            ]
+
+            # Write plant options to hidden cells
+            plant_start_row = 700
+            for i, option in enumerate(plant_options):
+                sheet[f'AX{plant_start_row + i}'] = option
+
+            # Create validation for plant selection
+            range_ref = f'$AX${plant_start_row}:$AX${plant_start_row + len(plant_options) - 1}'
+            plant_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            sheet.add_data_validation(plant_dv)
+            plant_dv.add('D53')
+            print(f"✅ Added plant selection dropdown to D53 on Pollustop sheet")
+
+        except Exception as e:
+            print(f"Warning: Could not add plant selection dropdown to D53: {str(e)}")
+
+        print(f"✅ Completed Pollustop dropdown setup")
+
+    except Exception as e:
+        print(f"Warning: Could not add Pollustop dropdowns to sheet {sheet.title}: {str(e)}")
+
+def add_aerolys_dropdowns(sheet: Worksheet):
+    """
+    Add Aerolys-specific dropdowns to the Aerolys sheet for cells C15-C22.
+
+    Args:
+        sheet (Worksheet): The Aerolys worksheet to add dropdowns to
+    """
+    try:
+        from openpyxl.worksheet.datavalidation import DataValidation
+
+        # Define the size options for each cell
+        size_options = {
+            'C15': ["PS01 940mm", "PS02 940mm", "PS03 940mm", "PS04 940mm", "PS05 940mm", "PS06 940mm", "PS07 940mm", "PS08 940mm", "PS09 940mm", "PS10 940mm"],
+            'C16': ["PS01 1150mm", "PS02 1150mm", "PS03 1150mm", "PS04 1150mm", "PS05 1150mm", "PS06 1150mm", "PS07 1150mm", "PS08 1150mm", "PS09 1550mm", "PS10 1150mm"],
+            'C17': ["PS01 790mm", "PS02 790mm", "PS03 790mm", "PS04 790mm", "PS05 790mm", "PS06 790mm", "PS07 790mm", "PS08 790mm", "PS09 790mm", "PS10 790mm"],
+            'C18': ["PS01 600mm", "PS02 600mm", "PS03 600mm", "PS04 600mm", "PS05 600mm", "PS06 600mm", "PS07 600mm", "PS08 600mm", "PS09 600mm", "PS10 600mm"],
+            'C19': ["PS01 600mm", "PS02 600mm", "PS03 600mm", "PS04 600mm", "PS05 600mm", "PS06 600mm", "PS07 600mm", "PS08 600mm", "PS09 600mm", "PS10 600mm"],
+            'C20': ["PS01 800mm", "PS02 800mm", "PS03 800mm", "PS04 800mm", "PS05 800mm", "PS06 800mm", "PS07 800mm", "PS08 800mm", "PS09 800mm", "PS10 800mm"],
+            'C21': ["PS01 1560mm", "PS02 1560mm", "PS03 1560mm", "PS04 1560mm", "PS05 2060mm", "PS06 2060mm", "PS07 2060mm", "PS08 2060mm", "PS09 2060mm", "PS10 2060mm"],
+            'C22': ["PS01 600mm", "PS02 600mm", "PS03 600mm", "PS04 600mm", "PS05 600mm", "PS06 600mm", "PS07 600mm", "PS08 600mm", "PS09 600mm", "PS10 600mm"]
+        }
+
+        # Write size options to hidden cells and create more robust validations
+        current_row = 800  # Start at row 800 for hidden data (different from Pollustop)
+        print(f"🔧 Adding Aerolys size dropdowns to sheet: {sheet.title}")
+
+        for cell_ref, options in size_options.items():
+            try:
+                # Write options to hidden cells in column BA
+                for i, option in enumerate(options):
+                    sheet[f'BA{current_row + i}'] = option
+
+                # Create validation that references the range
+                range_ref = f'$BA${current_row}:$BA${current_row + len(options) - 1}'
+                size_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+                sheet.add_data_validation(size_dv)
+                size_dv.add(cell_ref)
+
+                current_row += len(options) + 2  # Leave gap between option sets
+                print(f"✅ Added size dropdown to {cell_ref} on Aerolys sheet")
+
+            except Exception as e:
+                print(f"Warning: Could not add size dropdown to {cell_ref}: {str(e)}")
+
+        # Add delivery location dropdown to D52
+        try:
+            from config.business_data import DELIVERY_LOCATIONS
+
+            # Write delivery locations to hidden cells
+            delivery_start_row = 900
+            for i, location in enumerate(DELIVERY_LOCATIONS):
+                sheet[f'BB{delivery_start_row + i}'] = location  # Use column BB for Aerolys
+
+            # Create validation for delivery locations
+            range_ref = f'$BB${delivery_start_row}:$BB${delivery_start_row + len(DELIVERY_LOCATIONS) - 1}'
+            delivery_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            sheet.add_data_validation(delivery_dv)
+            delivery_dv.add('D52')
+            print(f"✅ Added delivery location dropdown to D52 on Aerolys sheet")
+
+        except Exception as e:
+            print(f"Warning: Could not add delivery location dropdown to D52: {str(e)}")
+
+        # Add plant selection dropdown to D53
+        try:
+            plant_options = [
+                "",  # Empty option
+                "SL10 GENIE",
+                "EXTENSION FORKS",
+                "2.5M COMBI LADDER",
+                "1.5M PODIUM",
+                "3M TOWER",
+                "COMBI LADDER",
+                "PECO LIFT",
+                "3M YOUNGMAN BOARD",
+                "GS1930 SCISSOR LIFT",
+                "4-6 SHERASCOPIC",
+                "7-9 SHERASCOPIC"
+            ]
+
+            # Write plant options to hidden cells
+            plant_start_row = 1000
+            for i, option in enumerate(plant_options):
+                sheet[f'BC{plant_start_row + i}'] = option  # Use column BC for Aerolys
+
+            # Create validation for plant selection
+            range_ref = f'$BC${plant_start_row}:$BC${plant_start_row + len(plant_options) - 1}'
+            plant_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            sheet.add_data_validation(plant_dv)
+            plant_dv.add('D53')
+            print(f"✅ Added plant selection dropdown to D53 on Aerolys sheet")
+
+        except Exception as e:
+            print(f"Warning: Could not add plant selection dropdown to D53: {str(e)}")
+
+        print(f"✅ Completed Aerolys dropdown setup")
+
+    except Exception as e:
+        print(f"Warning: Could not add Aerolys dropdowns to sheet {sheet.title}: {str(e)}")
+
 def add_fire_suppression_dropdowns(sheet: Worksheet):
     """
     Add specific dropdowns for fire suppression sheets.
@@ -3161,6 +3362,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                     pollustop_sheet['B1'] = f"{level_name} - {area_name} - POLLUSTOP SYSTEM"
                                 except Exception as e:
                                     print(f"Warning: Could not write title to B1 on Pollustop sheet: {str(e)}")
+
+                                # Add Pollustop specific dropdowns
+                                add_pollustop_dropdowns(pollustop_sheet)
                             else:
                                 print(f"Warning: Not enough POLLUSTOP sheets in template for Pollustop system in area {area_name}")
 
@@ -3181,6 +3385,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                     aerolys_sheet['B1'] = f"{level_name} - {area_name} - AEROLYS SYSTEM"
                                 except Exception as e:
                                     print(f"Warning: Could not write title to B1 on Aerolys sheet: {str(e)}")
+
+                                # Add Aerolys specific dropdowns
+                                add_aerolys_dropdowns(aerolys_sheet)
                             else:
                                 print(f"Warning: Not enough AEROLYS sheets in template for Aerolys system in area {area_name}")
 
@@ -3202,6 +3409,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                     pollustop_sheet['B1'] = f"{level_name} - {area_name} - XEU POLLUSTOP SYSTEM"
                                 except Exception as e:
                                     print(f"Warning: Could not write title to B1 on XEU Pollustop sheet: {str(e)}")
+
+                                # Add Pollustop specific dropdowns
+                                add_pollustop_dropdowns(pollustop_sheet)
                             else:
                                 print(f"Warning: Not enough POLLUSTOP sheets in template for XEU system (Pollustop part) in area {area_name}")
 
@@ -3220,6 +3430,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                     aerolys_sheet['B1'] = f"{level_name} - {area_name} - XEU AEROLYS SYSTEM"
                                 except Exception as e:
                                     print(f"Warning: Could not write title to B1 on XEU Aerolys sheet: {str(e)}")
+
+                                # Add Aerolys specific dropdowns
+                                add_aerolys_dropdowns(aerolys_sheet)
                             else:
                                 print(f"Warning: Not enough AEROLYS sheets in template for XEU system (Aerolys part) in area {area_name}")
 
@@ -3436,6 +3649,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 pollustop_sheet['B1'] = f"{level_name} - {area_name} - POLLUSTOP SYSTEM"
                             except Exception as e:
                                 print(f"Warning: Could not write title to B1 on Pollustop sheet: {str(e)}")
+
+                            # Add Pollustop specific dropdowns
+                            add_pollustop_dropdowns(pollustop_sheet)
                         else:
                             print(f"Warning: Not enough POLLUSTOP sheets in template for Pollustop system in area {area_name}")
 
@@ -3456,6 +3672,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 aerolys_sheet['B1'] = f"{level_name} - {area_name} - AEROLYS SYSTEM"
                             except Exception as e:
                                 print(f"Warning: Could not write title to B1 on Aerolys sheet: {str(e)}")
+
+                            # Add Aerolys specific dropdowns
+                            add_aerolys_dropdowns(aerolys_sheet)
                         else:
                             print(f"Warning: Not enough AEROLYS sheets in template for Aerolys system in area {area_name}")
 
@@ -3477,6 +3696,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 pollustop_sheet['B1'] = f"{level_name} - {area_name} - XEU POLLUSTOP SYSTEM"
                             except Exception as e:
                                 print(f"Warning: Could not write title to B1 on XEU Pollustop sheet: {str(e)}")
+
+                            # Add Pollustop specific dropdowns
+                            add_pollustop_dropdowns(pollustop_sheet)
                         else:
                             print(f"Warning: Not enough POLLUSTOP sheets in template for XEU system (Pollustop part) in area {area_name}")
 
@@ -3495,6 +3717,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 aerolys_sheet['B1'] = f"{level_name} - {area_name} - XEU AEROLYS SYSTEM"
                             except Exception as e:
                                 print(f"Warning: Could not write title to B1 on XEU Aerolys sheet: {str(e)}")
+
+                            # Add Aerolys specific dropdowns
+                            add_aerolys_dropdowns(aerolys_sheet)
                         else:
                             print(f"Warning: Not enough AEROLYS sheets in template for XEU system (Aerolys part) in area {area_name}")
 
@@ -3531,7 +3756,7 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
             sheet = wb[sheet_name]
             if (sheet.sheet_state == 'visible' and 
                 sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData'] and
-                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG'])):
+                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG', 'POLLUSTOP', 'AEROLYS'])):
                 add_delivery_location_dropdown_to_sheet(sheet, delivery_location)
                 sheets_updated += 1
         print(f"📝 Added delivery location dropdowns to {sheets_updated} sheets")
@@ -3724,8 +3949,7 @@ def apply_canopy_sheet_modifications(wb: Workbook):
     Apply modifications to canopy sheets in a workbook:
     1. Set default value "SELECT WORKS" in C16, C33, etc.
     2. Replace formulas in J16, J33, etc. with simple VLOOKUP formulas
-    3. Change "FIRE SUPPRESSION" to "SPECIAL WORKS" in B16, B33, etc.
-    4. Remove dropdown validation from D16, D33, etc.
+    3. Remove dropdown validation from D16, D33, etc.
 
     Args:
         wb (Workbook): The workbook to modify
@@ -3778,20 +4002,7 @@ def apply_canopy_sheet_modifications(wb: Workbook):
 
                 sheet[f'J{target_row}'] = vlookup_formula
 
-                # 3. Change "FIRE SUPPRESSION" to "SPECIAL WORKS" in B16, B33, B50, etc.
-                current_label = sheet[f'B{target_row}'].value
-                print(f"     Checking label at B{target_row}: '{current_label}'")
-
-                if current_label and "FIRE" in str(current_label).upper():
-                    print(f"     Changing 'FIRE SUPPRESSION' to 'SPECIAL WORKS' at B{target_row}")
-                    sheet[f'B{target_row}'] = "SPECIAL WORKS"
-                elif not current_label:
-                    print(f"     Setting empty label to 'SPECIAL WORKS' at B{target_row}")
-                    sheet[f'B{target_row}'] = "SPECIAL WORKS"
-                else:
-                    print(f"     Label at B{target_row} doesn't contain 'FIRE', leaving as '{current_label}'")
-
-                # 4. Remove dropdown validation from D16, D33, D50, etc.
+                # 3. Remove dropdown validation from D16, D33, D50, etc.
                 dropdown_cell = f'D{target_row}'
                 print(f"     Removing dropdown validation from {dropdown_cell}")
 
@@ -4565,6 +4776,36 @@ def read_excel_project_data(excel_path: str) -> Dict:
                 if 'options' not in area:
                     area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False, 'vent_clg': False, 'pollustop': False, 'aerolys': False, 'xeu': False}
         
+        # Check POLLUSTOP and AEROLYS sheets for XEU indicators first
+        for sheet_name in wb.sheetnames:
+            # Check for XEU in POLLUSTOP and AEROLYS sheet names
+            if ('POLLUSTOP (XEU)' in sheet_name or 'AEROLYS (XEU)' in sheet_name) and ' - ' in sheet_name:
+                # Extract level and area from sheet name: "POLLUSTOP (XEU) - LEVEL 1 (1)"
+                parts = sheet_name.split(' - ', 1)  # Split on first ' - '
+                if len(parts) >= 2:
+                    level_area = parts[1]  # "LEVEL 1 (1)"
+
+                    # Parse level and area: "LEVEL 1 (1)" -> level="LEVEL 1", area number="1"
+                    if '(' in level_area and ')' in level_area:
+                        level_part = level_area.split('(')[0].strip()  # "LEVEL 1"
+                        area_num_part = level_area.split('(')[1].split(')')[0].strip()  # "1"
+
+                        print(f"🔍 Found XEU sheet: {sheet_name} -> Level: {level_part}, Area: {area_num_part}")
+
+                        # Find the corresponding area in levels_data and set XEU=True
+                        if level_part in levels_data:
+                            try:
+                                area_index = int(area_num_part) - 1  # Convert to 0-based index
+                                if 0 <= area_index < len(levels_data[level_part]):
+                                    levels_data[level_part][area_index]['options']['xeu'] = True
+                                    print(f"✅ Set XEU=True for {level_part} area {area_num_part}")
+                                else:
+                                    print(f"⚠️ Area index {area_index} out of range for {level_part}")
+                            except (ValueError, IndexError) as e:
+                                print(f"⚠️ Could not parse area number from {area_num_part}: {e}")
+                        else:
+                            print(f"⚠️ Level {level_part} not found in levels_data")
+
         # Check CANOPY sheets for area options written in rows 6-8
         for sheet_name in wb.sheetnames:
             if 'CANOPY - ' in sheet_name or 'CANOPY (UV) - ' in sheet_name:

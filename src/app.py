@@ -125,17 +125,34 @@ def word_generation_page():
             st.success("Successfully extracted project data from Excel!")
             
             # Analyze project to show what type it is
-            has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg = analyze_project_areas(project_data)
+            has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu = analyze_project_areas(project_data)
             
             # Show project type analysis
+            project_components = []
+            if has_canopies:
+                project_components.append("Canopies")
+            if has_recoair:
+                project_components.append("RecoAir")
+            if has_pollustop:
+                project_components.append("Pollustop")
+            if has_aerolys:
+                project_components.append("Aerolys")
+            if has_marvel:
+                project_components.append("Marvel")
+            if has_vent_clg:
+                project_components.append("Vent CLG")
+            if has_uv:
+                project_components.append("UV")
+            if has_xeu:
+                project_components.append("XEU")
+
             if is_recoair_only:
                 st.info("**Project Type:** RecoAir-only project detected")
-            elif has_canopies and has_recoair:
-                st.info("**Project Type:** Mixed project (Canopies + RecoAir) detected")
-            elif has_canopies:
-                st.info("**Project Type:** Canopy-only project detected")
+            elif project_components:
+                components_str = " + ".join(project_components)
+                st.info(f"**Project Type:** Mixed project ({components_str}) detected")
             else:
-                st.warning("**Project Type:** No canopies or RecoAir systems detected")
+                st.warning("**Project Type:** No systems detected")
             
             # Show download button first for quick access
             st.markdown("---")
