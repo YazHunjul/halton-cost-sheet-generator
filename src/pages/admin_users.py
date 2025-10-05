@@ -314,22 +314,34 @@ def show_user_list():
 
 
 def show_pending_invitations():
-    """Display list of pending invitations."""
-    st.markdown("### ◆ Pending Invitations")
+    """Display list of all invitations with filtering."""
+    st.markdown("### ◆ Invitations")
 
     try:
         # Use service role to see all invitations
         client = get_supabase_client(use_service_role=True)
 
-        # Fetch pending invitations
-        response = client.table("user_invitations").select("*").eq("status", "pending").order("created_at", desc=True).execute()
+        # Add filter for invitation status
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            status_filter = st.selectbox(
+                "Filter by Status",
+                options=["pending", "all", "cancelled", "expired", "accepted"],
+                index=0
+            )
+
+        # Fetch invitations based on filter
+        if status_filter == "all":
+            response = client.table("user_invitations").select("*").order("created_at", desc=True).execute()
+        else:
+            response = client.table("user_invitations").select("*").eq("status", status_filter).order("created_at", desc=True).execute()
 
         if not response.data:
-            st.info("No pending invitations.")
+            st.info(f"No {status_filter} invitations.")
             return
 
         # Display count
-        st.metric("Pending Invitations", len(response.data))
+        st.metric(f"{status_filter.capitalize()} Invitations", len(response.data))
 
         # Display invitations
         for invitation in response.data:
@@ -364,18 +376,17 @@ def show_pending_invitations():
                         help="Copy and send this link to the user"
                     )
 
-                # Cancel button
-                if st.button(f"✕ Cancel Invitation", key=f"cancel_{invitation['id']}"):
+                # Delete button (actually delete instead of just cancelling)
+                if st.button(f"✕ Delete Invitation", key=f"delete_inv_{invitation['id']}"):
                     try:
                         cancel_client = get_supabase_client(use_service_role=True)
-                        cancel_client.table("user_invitations").update(
-                            {"status": "cancelled"}
-                        ).eq("id", invitation["id"]).execute()
+                        # Delete the invitation record completely
+                        cancel_client.table("user_invitations").delete().eq("id", invitation["id"]).execute()
 
-                        st.success("Invitation cancelled")
+                        st.success("Invitation deleted")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error cancelling invitation: {str(e)}")
+                        st.error(f"Error deleting invitation: {str(e)}")
 
     except Exception as e:
         st.error(f"Error loading invitations: {str(e)}")
