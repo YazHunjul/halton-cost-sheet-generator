@@ -1,6 +1,7 @@
 """
 Business-specific constants and data for the Halton Cost Sheet Generator.
 """
+from typing import Dict
 
 # Sales contacts with phone numbers
 SALES_CONTACTS = {
@@ -20,8 +21,44 @@ ESTIMATORS = {
     'Chris Davis': 'Estimator'
 }
 
-# Company addresses dictionary
-COMPANY_ADDRESSES = {
+
+def get_companies_from_database(active_only: bool = True) -> Dict[str, str]:
+    """
+    Fetch companies and their addresses from the database.
+    Returns a dictionary of {company_name: address}
+    Falls back to hardcoded list if database is unavailable.
+
+    Args:
+        active_only: If True, only return active companies. If False, return all companies.
+    """
+    try:
+        from config.supabase_config import get_supabase_client
+
+        client = get_supabase_client()
+
+        # Fetch companies (active only or all)
+        query = client.table("companies").select("name, address")
+        if active_only:
+            query = query.eq("is_active", True)
+
+        response = query.order("name").execute()
+
+        if response.data:
+            # Convert to dictionary format
+            return {company["name"]: company["address"] for company in response.data}
+        else:
+            # Fall back to hardcoded list
+            return _get_fallback_companies()
+
+    except Exception as e:
+        # If database is not available, use hardcoded list
+        print(f"Warning: Could not load companies from database: {str(e)}")
+        return _get_fallback_companies()
+
+
+def _get_fallback_companies() -> Dict[str, str]:
+    """Fallback company list if database is unavailable."""
+    return {
     "Airedale Group (Bradford)": "Victoria Road\nPedeshill\nBradford BD23 2BN",
     "Airedale Group (Lutterworth)": "1 St Johns Business Park\nRugby Road\nLutterworth LE17 4HB",
     "Court Catering Equipment Ltd": "Unit 1, Acton Vale Ind. Park,\nCowley Road\nLondon W3 7XA",
@@ -100,10 +137,51 @@ COMPANY_ADDRESSES = {
     "Western Blueprint Ltd": "Unit B2, 1st Floor\nTrym House Business Centre\nForest Road\nKingswood\nBristol BS15 8DH",
     "Edge Design": "Unit 3 Wiston House\nWiston Avenue\nWorthing\nWest Sussex BN14 7QL",
     "Chapman Ventilation": "15 - 20 Woodfield Road\nWelwyn Garden City\nHertfordshire\nAL7 1JQ",
-    "Michael J Lonsdale": "Unit 1 Langley Quay\nWaterside Drive\nBerkshire SL3 6EY",
-    "RecoAir": "14 Heritage Park\nHayes Way\nCannock\nStaffordshire WS11 7LT",
-    "Humble Arnold": "Farriers House,\nFarriers Close,\nCodicote\nHerts SG4 8DU"
-}
+        "Michael J Lonsdale": "Unit 1 Langley Quay\nWaterside Drive\nBerkshire SL3 6EY",
+        "RecoAir": "14 Heritage Park\nHayes Way\nCannock\nStaffordshire WS11 7LT",
+        "Humble Arnold": "Farriers House,\nFarriers Close,\nCodicote\nHerts SG4 8DU"
+    }
+
+
+# Cache for companies (to avoid database query on every access)
+_companies_cache = None
+_cache_timestamp = None
+
+def get_company_addresses(refresh=False, active_only=True):
+    """
+    Get company addresses dictionary.
+    Uses cached version unless refresh=True or cache is stale.
+
+    Args:
+        refresh: If True, force reload from database
+        active_only: If True, only return active companies
+
+    Returns:
+        Dictionary of {company_name: address}
+    """
+    global _companies_cache, _cache_timestamp
+
+    from datetime import datetime, timedelta
+
+    # Check if we need to refresh cache
+    should_refresh = (
+        refresh or
+        _companies_cache is None or
+        _cache_timestamp is None or
+        (datetime.now() - _cache_timestamp) > timedelta(minutes=5)
+    )
+
+    if should_refresh:
+        _companies_cache = get_companies_from_database(active_only=active_only)
+        _cache_timestamp = datetime.now()
+
+    return _companies_cache
+
+
+# Company addresses dictionary - dynamically loaded from database
+# Falls back to hardcoded list if database unavailable
+# NOTE: This is loaded once at import. For fresh data, use get_company_addresses(refresh=True)
+COMPANY_ADDRESSES = get_companies_from_database()
 
 # Valid canopy models
 VALID_CANOPY_MODELS = [

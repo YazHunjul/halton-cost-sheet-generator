@@ -7,11 +7,11 @@ from datetime import datetime
 
 from config.constants import (
     ESTIMATORS,
-    COMPANY_ADDRESSES,
     SALES_CONTACTS,
     DELIVERY_LOCATIONS,
     SessionKeys
 )
+from config.business_data import get_company_addresses
 from utils.date_utils import format_date_for_display, convert_date_object_to_display, get_current_date
 
 def general_project_form() -> Dict[str, Any]:
@@ -82,13 +82,21 @@ def general_project_form() -> Dict[str, Any]:
             )
             
             if company_mode == "Select from list":
+                # Get fresh company list (uses cache, refreshes every 5 minutes)
+                company_addresses = get_company_addresses(active_only=True)
+
                 company = st.selectbox(
                     "Company *",
-                    options=list(COMPANY_ADDRESSES.keys()),
-                    index=list(COMPANY_ADDRESSES.keys()).index(st.session_state.general_form_data.get("company", list(COMPANY_ADDRESSES.keys())[0])) if st.session_state.general_form_data.get("company") in COMPANY_ADDRESSES else 0,
+                    options=list(company_addresses.keys()),
+                    index=list(company_addresses.keys()).index(st.session_state.general_form_data.get("company", list(company_addresses.keys())[0])) if st.session_state.general_form_data.get("company") in company_addresses else 0,
                     key="company_select",
                     help="Select the company from the predefined list"
                 )
+
+                # Display the company address below the dropdown
+                if company:
+                    st.info(f"**Address:**\n{company_addresses.get(company, 'Address not found')}")
+
                 custom_company_name = ""
                 custom_company_address = ""
             else:
@@ -139,7 +147,7 @@ def general_project_form() -> Dict[str, Any]:
                 help="Select the estimator for this project"
             )
         
-        submitted = st.form_submit_button("Next ➡️", type="primary")
+        submitted = st.form_submit_button("Next ", type="primary")
         
         if submitted:
             # Validate required fields based on company mode
@@ -175,8 +183,10 @@ def general_project_form() -> Dict[str, Any]:
             
             # Determine company name and address based on mode
             if company_mode == "Select from list":
+                # Get fresh company addresses at form submission time
+                company_addresses = get_company_addresses(active_only=True)
                 final_company_name = company
-                final_company_address = COMPANY_ADDRESSES[company]
+                final_company_address = company_addresses.get(company, "")
             else:  # Custom company
                 final_company_name = custom_company_name
                 final_company_address = custom_company_address

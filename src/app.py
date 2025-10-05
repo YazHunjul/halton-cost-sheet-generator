@@ -48,23 +48,23 @@ def display_project_summary(project_data: dict):
         for level in project_data["levels"]:
             with st.expander(f"Level {level['level_number']}", expanded=True):
                 for area in level["areas"]:
-                    st.markdown(f"### 📍 Area: {area['name']}")
+                    st.markdown(f"###  Area: {area['name']}")
                     
                     # Area-level options
                     if "options" in area:
                         st.markdown("**Area Options:**")
                         opt_col1, opt_col2, opt_col3 = st.columns(3)
                         with opt_col1:
-                            st.write("✓ UV-C System" if area["options"]["uvc"] else "✗ UV-C System")
+                            st.write(" UV-C System" if area["options"]["uvc"] else " UV-C System")
                         with opt_col2:
-                            st.write("✓ RecoAir" if area["options"]["recoair"] else "✗ RecoAir")
+                            st.write(" RecoAir" if area["options"]["recoair"] else " RecoAir")
                         with opt_col3:
-                            st.write("✓ Marvel" if area["options"]["marvel"] else "✗ Marvel")
+                            st.write(" Marvel" if area["options"]["marvel"] else " Marvel")
                         st.markdown("---")
                     
                     if area["canopies"]:
                         for i, canopy in enumerate(area["canopies"], 1):
-                            st.markdown(f"#### 🔹 Canopy {i}")
+                            st.markdown(f"####  Canopy {i}")
                             
                             # Basic Info
                             col1, col2 = st.columns(2)
@@ -90,7 +90,7 @@ def display_project_summary(project_data: dict):
                             
                             # Canopy Options (only fire suppression now)
                             st.markdown("**Canopy Options:**")
-                            st.write("✓ Fire Suppression" if canopy["options"]["fire_suppression"] else "✗ Fire Suppression")
+                            st.write(" Fire Suppression" if canopy["options"]["fire_suppression"] else " Fire Suppression")
                             
                             st.markdown("---")
                     else:
@@ -555,7 +555,7 @@ def word_generation_page():
                             st.write("The document was generated successfully but preview failed. You can still download it above.")
                     
                     # Add note about dynamic pricing
-                    st.success("✨ **Your Excel file now has dynamic pricing!** The JOB TOTAL sheet will automatically update when you edit any individual sheet prices.")
+                    st.success(" **Your Excel file now has dynamic pricing!** The JOB TOTAL sheet will automatically update when you edit any individual sheet prices.")
                 
                 except Exception as e:
                     st.error(f"No Error generating Word document: {str(e)}")
@@ -569,7 +569,7 @@ def word_generation_page():
             
             # Check if this is a validation error with detailed information
             if "Data validation errors found:" in error_message:
-                st.error("❌ **Excel File Validation Errors**")
+                st.error(" **Excel File Validation Errors**")
                 st.markdown("The following data validation errors were found in your Excel file:")
                 
                 # Split the error message to extract the validation details
@@ -590,9 +590,9 @@ def word_generation_page():
                 st.info(" **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
                 
             else:
-                st.error(f"❌ Error reading Excel file: {error_message}")
+                st.error(f" Error reading Excel file: {error_message}")
                 # Show detailed traceback for debugging
-                with st.expander("🔍 Technical Details", expanded=False):
+                with st.expander(" Technical Details", expanded=False):
                     import traceback
                     st.code(traceback.format_exc())
             
@@ -623,7 +623,7 @@ def revision_page():
                 project_data = read_excel_project_data(temp_path)
             
             # Display summary of extracted data
-            st.success("✅ Successfully extracted project data from Excel!")
+            st.success(" Successfully extracted project data from Excel!")
             
             # Show current revision info
             current_revision = project_data.get('revision', '')
@@ -772,15 +772,15 @@ def revision_page():
                         
                         with col2:
                             # Remove level button
-                            if st.button("No Remove Level", key=f"rev_remove_level_{level_idx}"):
+                            if st.button("✕ Remove Level", key=f"rev_remove_level_{level_idx}"):
                                 st.session_state.revision_levels.pop(level_idx)
                                 st.rerun()
-                        
+
                         # Areas for this level
                         st.write("**Areas:**")
-                        
+
                         # Add area button
-                        if st.button(f" Add Area to {level['name']}", key=f"rev_add_area_{level_idx}"):
+                        if st.button(f"+ Add Area to {level['name']}", key=f"rev_add_area_{level_idx}"):
                             new_area = {
                                 'name': f"Area {len(level['areas']) + 1}",
                                 'canopies': []
@@ -807,7 +807,7 @@ def revision_page():
                                     )
                                 
                                 with col2:
-                                    if st.button("❌ Remove", key=f"rev_remove_area_{level_idx}_{area_idx}"):
+                                    if st.button("✕", key=f"rev_remove_area_{level_idx}_{area_idx}"):
                                         level['areas'].pop(area_idx)
                                         st.rerun()
                                 
@@ -882,7 +882,7 @@ def revision_page():
                                 area_name = area.get('name', f"Area {area_idx + 1}")
                                 with st.expander(f" {area_name}", expanded=True):
                                     # Add canopy button
-                                    if st.button(f"➕ Add Canopy", key=f"rev_add_canopy_{level_idx}_{area_idx}"):
+                                    if st.button(f" Add Canopy", key=f"rev_add_canopy_{level_idx}_{area_idx}"):
                                         if 'canopies' not in area:
                                             area['canopies'] = []
                                         new_canopy = {
@@ -919,7 +919,7 @@ def revision_page():
                                                 with header_col1:
                                                     st.write(f"**Canopy {canopy_idx + 1} - {canopy.get('reference_number', f'C{canopy_idx + 1:03d}')}**")
                                                 with header_col2:
-                                                    if st.button("❌", key=f"{canopy_key}_remove"):
+                                                    if st.button("", key=f"{canopy_key}_remove"):
                                                         area['canopies'].pop(canopy_idx)
                                                         st.rerun()
                                                 
@@ -1140,7 +1140,7 @@ def revision_page():
                 
                 # Contract sheets option
                 st.markdown("---")
-                st.subheader("📋 Contract Options")
+                st.subheader(" Contract Options")
                 
                 # Initialize contract option in session state if not present
                 if 'revision_contract_option' not in st.session_state:
@@ -1155,9 +1155,9 @@ def revision_page():
                 st.session_state.revision_contract_option = include_contract_sheets
                 
                 if include_contract_sheets:
-                    st.info("✅ Contract sheets will be included in the revision")
+                    st.info(" Contract sheets will be included in the revision")
                 else:
-                    st.info("ℹ️ Contract sheets will not be included in the revision")
+                    st.info("ℹ Contract sheets will not be included in the revision")
                 
                 st.markdown("---")
                 
@@ -1238,7 +1238,7 @@ def revision_page():
                         st.write("• Yes Only edited fields were updated")
                         
                     except Exception as e:
-                        st.error(f"❌ Error creating revision: {str(e)}")
+                        st.error(f" Error creating revision: {str(e)}")
             
             # Clean up temp file
             if os.path.exists(temp_path):
@@ -1249,7 +1249,7 @@ def revision_page():
             
             # Check if this is a validation error with detailed information
             if "Data validation errors found:" in error_message:
-                st.error("❌ **Excel File Validation Errors**")
+                st.error(" **Excel File Validation Errors**")
                 st.markdown("The following data validation errors were found in your Excel file:")
                 
                 # Split the error message to extract the validation details
@@ -1270,9 +1270,9 @@ def revision_page():
                 st.info(" **Tip:** The most common issue is entering letters in numeric fields like 'Testing and Commissioning' prices.")
                 
             else:
-                st.error(f"❌ Error reading Excel file: {error_message}")
+                st.error(f" Error reading Excel file: {error_message}")
                 # Show detailed traceback for debugging
-                with st.expander("🔍 Technical Details", expanded=False):
+                with st.expander(" Technical Details", expanded=False):
                     import traceback
                     st.code(traceback.format_exc())
             
@@ -1625,7 +1625,7 @@ def step2_project_structure():
                                          on_change=update_level_name)
             
             # Remove level button
-            if st.button(f"Remove Level {level['level_number']}", key=f"remove_level_{level_idx}"):
+            if st.button(f"✕ Remove Level {level['level_number']}", key=f"remove_level_{level_idx}"):
                 del st.session_state.levels[level_idx]
                 # Renumber remaining levels
                 for i, remaining_level in enumerate(st.session_state.levels):
@@ -1637,7 +1637,7 @@ def step2_project_structure():
             st.markdown(f"### Areas in {level['level_name']}")
             col1, col2 = st.columns([3, 1])
             with col2:
-                if st.button(f"Add Area", key=f"add_area_{level_idx}"):
+                if st.button(f"+ Add Area", key=f"add_area_{level_idx}"):
                     st.session_state.levels[level_idx]['areas'].append({
                         "name": f"Area {len(level['areas']) + 1}",
                         "canopies": [],
@@ -2015,7 +2015,7 @@ def step3_canopy_configuration():
     
     # Add Excel generation section at the bottom of Step 3
     st.markdown("---")
-    st.subheader("💾 Save Your Work")
+    st.subheader(" Save Your Work")
     st.markdown("Generate an Excel file to save your current configuration. You can continue editing or proceed to the next step.")
     
     # Show Excel generation section
@@ -2210,14 +2210,14 @@ def populate_session_state_from_uploaded_data(extracted_data):
             if mapped_template in template_options:
                 st.session_state.selected_template = mapped_template
                 st.session_state.template_path = template_options[mapped_template]
-                print(f"✅ Mapped template '{extracted_template}' to '{mapped_template}'")
+                print(f" Mapped template '{extracted_template}' to '{mapped_template}'")
             else:
                 # Fallback to default
                 st.session_state.selected_template = "Cost Sheet R19.2 Sep 2025"
                 st.session_state.template_path = template_options["Cost Sheet R19.2 Sep 2025"]
-                print(f"⚠️ Template '{extracted_template}' not recognized, using default")
+                print(f" Template '{extracted_template}' not recognized, using default")
         
-        print(f"✅ Session state populated with uploaded data:")
+        print(f" Session state populated with uploaded data:")
         print(f"   - Project: {extracted_data.get('project_name', 'N/A')}")
         print(f"   - Levels: {len(extracted_data.get('levels', []))}")
         total_areas = sum(len(level.get('areas', [])) for level in extracted_data.get('levels', []))
@@ -2226,18 +2226,18 @@ def populate_session_state_from_uploaded_data(extracted_data):
         print(f"   - Canopies: {total_canopies}")
         
     except Exception as e:
-        print(f"❌ Error populating session state from uploaded data: {str(e)}")
+        print(f" Error populating session state from uploaded data: {str(e)}")
         st.error(f"Error populating form data: {str(e)}")
 
 def single_page_project_builder():
     """Single page project setup with sidebar structure builder."""
-    st.title("🏗️ Single Page Project Builder")
+    st.title(" Single Page Project Builder")
     st.markdown("Build your project structure in the sidebar and configure canopies here.")
     
     # Load state from URL if present
     loaded_from_url = load_from_url()
     if loaded_from_url:
-        st.success("✅ Progress loaded from saved link!")
+        st.success(" Progress loaded from saved link!")
     
     # Initialize session state if needed
     if 'project_info' not in st.session_state:
@@ -2253,7 +2253,7 @@ def single_page_project_builder():
     # Sidebar Project Info Section
     with st.sidebar:
         # Excel Upload Section
-        st.markdown("### 📤 Load Existing Project")
+        st.markdown("###  Load Existing Project")
         with st.expander("Upload Excel (Optional)", expanded=False):
             uploaded_file = st.file_uploader(
                 "Choose Excel file to pre-fill data",
@@ -2303,7 +2303,7 @@ def single_page_project_builder():
                             # Mark this file as loaded
                             st.session_state.sp_loaded_file = file_key
                             
-                            st.success("✅ Data loaded successfully!")
+                            st.success(" Data loaded successfully!")
                             
                             # Clean up
                             os.remove(temp_path)
@@ -2311,12 +2311,12 @@ def single_page_project_builder():
                     except Exception as e:
                         st.error(f"Error loading file: {str(e)}")
                 else:
-                    st.info("📄 File already loaded. Remove and re-upload to reload.")
+                    st.info(" File already loaded. Remove and re-upload to reload.")
         
         st.markdown("---")
         
         # Template Selection
-        st.markdown("### 📄 Template Selection")
+        st.markdown("###  Template Selection")
         template_options = {
             "Cost Sheet R19.2 Sep 2025": "templates/excel/COST SHEET R19.2 SEPT2025ss.xlsx",
             "Cost Sheet R19.2 Jun 2025": "templates/excel/Cost Sheet R19.2 Jun 2025.xlsx",
@@ -2338,7 +2338,7 @@ def single_page_project_builder():
         # Clear All Button
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Clear All", key="sp_clear_all", help="Clear all data and start fresh"):
+            if st.button(" Clear All", key="sp_clear_all", help="Clear all data and start fresh"):
                 st.session_state.project_info = {}
                 st.session_state.levels = []
                 if 'sp_loaded_file' in st.session_state:
@@ -2346,7 +2346,7 @@ def single_page_project_builder():
                 st.rerun()
         
         with col2:
-            if st.button("➕ Add Sample", key="sp_add_sample", help="Add sample data for testing"):
+            if st.button(" Add Sample", key="sp_add_sample", help="Add sample data for testing"):
                 st.session_state.project_info = {
                     'project_name': 'Sample Kitchen Project',
                     'project_number': 'DEMO-001',
@@ -2381,7 +2381,7 @@ def single_page_project_builder():
                 st.rerun()
         
         st.markdown("---")
-        st.markdown("### 📋 Project Information")
+        st.markdown("###  Project Information")
         with st.expander("Project Details", expanded=True):
             # Project Name
             project_name = st.text_input(
@@ -2536,10 +2536,10 @@ def single_page_project_builder():
         
         # Project Structure Section
         st.markdown("---")
-        st.markdown("### 🏢 Project Structure")
+        st.markdown("###  Project Structure")
         
         # Add Level button
-        if st.button("➕ Add Level", key="sp_add_level", use_container_width=True):
+        if st.button(" Add Level", key="sp_add_level", use_container_width=True):
             new_level_number = len(st.session_state.levels) + 1
             st.session_state.levels.append({
                 "level_number": new_level_number,
@@ -2569,7 +2569,7 @@ def single_page_project_builder():
                 )
             
             with col2:
-                if st.button("➕", key=f"sp_add_area_{level_idx}", help="Add Area"):
+                if st.button("+ Area", key=f"sp_add_area_{level_idx}", help="Add Area"):
                     st.session_state.levels[level_idx]['areas'].append({
                         "name": f"Area {len(level['areas']) + 1}",
                         "canopies": [],
@@ -2585,9 +2585,9 @@ def single_page_project_builder():
                         }
                     })
                     st.rerun()
-            
+
             with col3:
-                if st.button("🗑️", key=f"sp_del_level_{level_idx}", help="Delete Level"):
+                if st.button("✕ Level", key=f"sp_del_level_{level_idx}", help="Delete Level"):
                     del st.session_state.levels[level_idx]
                     # Renumber remaining levels
                     for i, remaining_level in enumerate(st.session_state.levels):
@@ -2614,7 +2614,7 @@ def single_page_project_builder():
                         )
                     
                     with col2:
-                        if st.button("🗑️", key=f"sp_del_area_{level_idx}_{area_idx}", help="Delete Area"):
+                        if st.button("✕", key=f"sp_del_area_{level_idx}_{area_idx}", help="Delete Area"):
                             del st.session_state.levels[level_idx]['areas'][area_idx]
                             st.rerun()
                     
@@ -2658,7 +2658,7 @@ def single_page_project_builder():
         
         # Excel generation at bottom of sidebar
         st.markdown("---")
-        if st.button("💾 Generate Excel", key="sp_generate_excel", use_container_width=True, type="primary"):
+        if st.button(" Generate Excel", key="sp_generate_excel", use_container_width=True, type="primary"):
             # Reuse the generate_excel_section logic
             try:
                 final_project_data = st.session_state.project_info.copy()
@@ -2679,7 +2679,7 @@ def single_page_project_builder():
                 download_filename = f"{project_number} Cost Sheet {date_str}.xlsx"
                 
                 st.download_button(
-                    label="📥 Download",
+                    label=" Download",
                     data=excel_data,
                     file_name=download_filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2694,16 +2694,16 @@ def single_page_project_builder():
     
     # Main area - Canopy Configuration
     if not st.session_state.levels:
-        st.info("👈 Start by adding levels and areas in the sidebar")
+        st.info(" Start by adding levels and areas in the sidebar")
         return
     
     # Check if any areas exist
     total_areas = sum(len(level.get('areas', [])) for level in st.session_state.levels)
     if total_areas == 0:
-        st.info("👈 Add areas to your levels in the sidebar")
+        st.info(" Add areas to your levels in the sidebar")
         return
     
-    st.markdown("## 🏗️ Canopy Configuration")
+    st.markdown("##  Canopy Configuration")
     st.markdown("Configure canopies for each area below:")
     
     # Display canopy configuration for each level and area
@@ -2728,7 +2728,7 @@ def single_page_project_builder():
                         st.markdown(f"**Area Options:** {', '.join(options)}")
                     
                     # Add canopy button
-                    if st.button(f"➕ Add Canopy", key=f"sp_add_canopy_{level_idx}_{area_idx}"):
+                    if st.button(f" Add Canopy", key=f"sp_add_canopy_{level_idx}_{area_idx}"):
                         new_canopy = {
                             "reference_number": f"C{len(area['canopies']) + 1:03d}",
                             "configuration": "",
@@ -2791,7 +2791,7 @@ def single_page_project_builder():
                                 st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]['configuration'] = config
                         
                         with col4:
-                            if st.button("🗑️", key=f"{canopy_key}_delete", help="Delete Canopy"):
+                            if st.button("✕", key=f"{canopy_key}_delete", help="Delete Canopy"):
                                 del st.session_state.levels[level_idx]['areas'][area_idx]['canopies'][canopy_idx]
                                 st.rerun()
                         
@@ -2986,11 +2986,11 @@ def single_page_project_builder():
     # Project Summary Section
     if st.session_state.project_info or st.session_state.levels:
         st.markdown("---")
-        st.markdown("## 📊 Project Summary")
+        st.markdown("##  Project Summary")
         
         # Project Information Summary
         if st.session_state.project_info:
-            with st.expander("📋 Project Information", expanded=True):
+            with st.expander(" Project Information", expanded=True):
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
@@ -3024,7 +3024,7 @@ def single_page_project_builder():
         
         # Structure Summary
         if st.session_state.levels:
-            with st.expander("🏢 Project Structure", expanded=True):
+            with st.expander(" Project Structure", expanded=True):
                 total_areas = sum(len(level.get('areas', [])) for level in st.session_state.levels)
                 total_canopies = sum(
                     len(area.get('canopies', [])) 
@@ -3079,7 +3079,7 @@ def single_page_project_builder():
                                 st.write(f"    - {' | '.join(canopy_info)}")
 
 def main():
-    st.set_page_config(page_title="Halton Quotation System", page_icon="🏭", layout="wide")
+    st.set_page_config(page_title="Halton Quotation System", page_icon="", layout="wide")
     st.title("Halton Quotation System")
     
     # Initialize session state
@@ -3096,7 +3096,7 @@ def main():
     # Add project summary to sidebar
     if page == "Project Setup" and st.session_state.project_info:
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### 📋 Current Project")
+        st.sidebar.markdown("###  Current Project")
         
         # General Project Information
         with st.sidebar.expander("General Information", expanded=True):
@@ -3124,7 +3124,7 @@ def main():
         # Structure summary
         if st.session_state.levels:
             st.sidebar.markdown("---")
-            st.sidebar.markdown("### 🏗️ Project Structure")
+            st.sidebar.markdown("###  Project Structure")
             
             # Overall stats
             total_areas = sum(len(level.get('areas', [])) for level in st.session_state.levels)
@@ -3200,7 +3200,7 @@ def main():
         if st.session_state.selected_template not in template_keys:
             # If the session template is not available, default to the first option
             st.session_state.selected_template = template_keys[0]
-            st.warning(f"⚠️ Previous template version not available. Defaulted to {template_keys[0]}")
+            st.warning(f" Previous template version not available. Defaulted to {template_keys[0]}")
         
         selected_template = st.selectbox(
             "Choose Cost Sheet Template:",
@@ -3221,9 +3221,9 @@ def main():
         # Display template status
         template_path = template_options[selected_template]
         if os.path.exists(template_path) or os.path.exists(f"../{template_path}"):
-            st.success(f"✅ Using template: {selected_template}")
+            st.success(f" Using template: {selected_template}")
         else:
-            st.warning(f"⚠️  Template file not found: {template_path}")
+            st.warning(f"  Template file not found: {template_path}")
             st.info("Please ensure the template file exists before generating Excel files.")
         
         st.markdown("---")

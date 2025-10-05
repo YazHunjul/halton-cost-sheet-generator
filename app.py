@@ -1,6 +1,8 @@
 """
 Halton Cost Sheet Generator - Streamlit Cloud Entry Point
 Main application entry point for deployment on Streamlit Cloud.
+
+AUTHENTICATION ENABLED: Users must log in before accessing the application.
 """
 
 import sys
@@ -13,8 +15,8 @@ sys.path.insert(0, src_dir)
 # Import the main function using importlib to avoid naming conflicts
 import importlib.util
 
-# Load the src/app.py module directly
-app_path = os.path.join(src_dir, 'app.py')
+# Load the src/app_with_auth.py module (authentication-enabled version)
+app_path = os.path.join(src_dir, 'app_with_auth.py')
 spec = importlib.util.spec_from_file_location("main_app", app_path)
 main_app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(main_app)

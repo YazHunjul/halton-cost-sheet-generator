@@ -4,10 +4,19 @@ Constants and configuration values for the Halton Cost Sheet Generator.
 from .business_data import (
     SALES_CONTACTS,
     ESTIMATORS,
-    COMPANY_ADDRESSES,
     VALID_CANOPY_MODELS,
-    DELIVERY_LOCATIONS
+    DELIVERY_LOCATIONS,
+    get_company_addresses
 )
+
+# Company addresses - loaded dynamically with caching
+# Use get_company_addresses(refresh=True) to force reload
+def COMPANY_ADDRESSES():
+    """Get active company addresses (cached)."""
+    return get_company_addresses(active_only=True)
+
+# For backward compatibility, also create a direct reference
+COMPANY_ADDRESSES = get_company_addresses(active_only=True)
 
 # Feature flags for systems not yet implemented
 # Set to True when ready to display to users

@@ -11,10 +11,44 @@ from config.business_data import SALES_CONTACTS, ESTIMATORS
 from config.constants import is_feature_enabled
 import streamlit as st
 from openpyxl import load_workbook # Added for contract data extraction
-# Template path for Word documents
+# Import template storage utilities
+from utils.template_storage import download_template_to_local
+
+# Template paths - will be downloaded from Supabase Storage when needed
 WORD_TEMPLATE_PATH = "templates/word/Halton Quote Feb 2024.docx"
 RECOAIR_TEMPLATE_PATH = "templates/word/Halton RECO Quotation Jan 2025 (2).docx"
 AHU_TEMPLATE_PATH = "templates/word/Halton AHU quote JAN2020.docx"
+
+
+def ensure_template_available(template_key: str, local_path: str) -> str:
+    """
+    Ensure template is available locally by downloading from Supabase Storage if needed.
+
+    Args:
+        template_key: Template key (e.g., 'canopy_quotation')
+        local_path: Local filepath where template should be
+
+    Returns:
+        Local filepath of template
+
+    Raises:
+        Exception if template cannot be retrieved
+    """
+    import os
+
+    # Check if template exists locally
+    if os.path.exists(local_path):
+        return local_path
+
+    # Template doesn't exist locally, download from Supabase Storage
+    print(f"Template not found locally at {local_path}, downloading from Supabase Storage...")
+    success, downloaded_path = download_template_to_local(template_key)
+
+    if not success:
+        raise Exception(f"Failed to download template from storage: {downloaded_path}")
+
+    print(f"✓ Template downloaded successfully to {downloaded_path}")
+    return downloaded_path
 
 
 
@@ -1277,15 +1311,16 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
 
     return has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu
 
-def generate_single_document(project_data: Dict, template_path: str, output_filename: str, excel_file_path: str = None) -> str:
+def generate_single_document(project_data: Dict, template_path: str, output_filename: str, excel_file_path: str = None, template_key: str = None) -> str:
     """
     Generate a single Word document from project data using specified template.
-    
+
     Args:
         project_data (Dict): Project data extracted from Excel
-        template_path (str): Path to the Word template
+        template_path (str): Path to the Word template (will download from Supabase if needed)
         output_filename (str): Name for the output file
-        
+        template_key (str): Template key for Supabase Storage (e.g., 'canopy_quotation')
+
     Returns:
         str: Path to the generated Word document
     """
@@ -1296,13 +1331,18 @@ def generate_single_document(project_data: Dict, template_path: str, output_file
     print(f"   📁 Output: {output_filename}")
     
     try:
-        # Check if template exists
+        # Ensure template is available (download from Supabase Storage if needed)
         template_check_start = time.time()
-        if not os.path.exists(template_path):
-            raise Exception(f"Template file not found at {template_path}")
+        if template_key:
+            print(f"   📥 Ensuring template is available (downloading from Supabase if needed)...")
+            template_path = ensure_template_available(template_key, template_path)
+        else:
+            # Fallback to old behavior if no template_key provided
+            if not os.path.exists(template_path):
+                raise Exception(f"Template file not found at {template_path}")
         template_check_time = time.time() - template_check_start
-        print(f"   ✅ Template exists: {template_check_time:.3f}s")
-        
+        print(f"   ✅ Template ready: {template_check_time:.3f}s")
+
         # Load the template
         template_load_start = time.time()
         print(f"   📖 Loading Word template...")
@@ -1392,11 +1432,11 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
                 output_filename = f"{project_number} RecoAir Quotation {date_str} Rev {revision}.docx"
             else:
                 output_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
-            return generate_single_document(project_data, RECOAIR_TEMPLATE_PATH, output_filename, excel_file_path)
-        
+            return generate_single_document(project_data, RECOAIR_TEMPLATE_PATH, output_filename, excel_file_path, template_key="recoair_quotation")
+
         # Case 2: Mixed project or canopy-only project
         documents_to_generate = []
-        
+
         # Generate main quotation if there are canopies OR ventilated ceilings (or other non-RecoAir systems)
         # Format: "Project Number Quotation Date Rev X"
         if has_canopies or has_vent_clg or has_marvel or has_uv or has_pollustop or has_aerolys or has_xeu:
@@ -1404,8 +1444,8 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
                 main_filename = f"{project_number} Quotation {date_str} Rev {revision}.docx"
             else:
                 main_filename = f"{project_number} Quotation {date_str}.docx"
-            documents_to_generate.append((WORD_TEMPLATE_PATH, main_filename, "Main Quotation"))
-        
+            documents_to_generate.append((WORD_TEMPLATE_PATH, main_filename, "Main Quotation", "canopy_quotation"))
+
         # Generate RecoAir quotation if there are RecoAir areas
         # Format: "Project Number RecoAir Quotation Date Rev X"
         if has_recoair:
@@ -1413,7 +1453,7 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
                 recoair_filename = f"{project_number} RecoAir Quotation {date_str} Rev {revision}.docx"
             else:
                 recoair_filename = f"{project_number} RecoAir Quotation {date_str}.docx"
-            documents_to_generate.append((RECOAIR_TEMPLATE_PATH, recoair_filename, "RecoAir Quotation"))
+            documents_to_generate.append((RECOAIR_TEMPLATE_PATH, recoair_filename, "RecoAir Quotation", "recoair_quotation"))
 
         # Generate AHU quotation if there are Pollustop or Aerolys areas (including XEU which creates both)
         # Format: "Project Number AHU Quotation Date Rev X"
@@ -1424,23 +1464,23 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
             else:
                 ahu_filename = f"{project_number} AHU Quotation {date_str}.docx"
             print(f"✅ Adding AHU quotation to generation list: {ahu_filename}")
-            documents_to_generate.append((AHU_TEMPLATE_PATH, ahu_filename, "AHU Quotation"))
+            documents_to_generate.append((AHU_TEMPLATE_PATH, ahu_filename, "AHU Quotation", "ahu_quotation"))
         else:
             print(f"❌ No AHU quotation needed - no Pollustop, Aerolys, or XEU areas detected")
-        
+
         # If only one document to generate, return it directly
         if len(documents_to_generate) == 1:
-            template_path, filename, _ = documents_to_generate[0]
-            return generate_single_document(project_data, template_path, filename, excel_file_path)
-        
+            template_path, filename, _, template_key = documents_to_generate[0]
+            return generate_single_document(project_data, template_path, filename, excel_file_path, template_key=template_key)
+
         # If multiple documents, generate all and create zip file
         if len(documents_to_generate) > 1:
             generated_files = []
-            
+
             # Generate each document
-            for template_path, filename, description in documents_to_generate:
+            for template_path, filename, description, template_key in documents_to_generate:
                 try:
-                    file_path = generate_single_document(project_data, template_path, filename, excel_file_path)
+                    file_path = generate_single_document(project_data, template_path, filename, excel_file_path, template_key=template_key)
                     generated_files.append((file_path, filename))
                 except Exception as e:
                     print(f"Warning: Failed to generate {description}: {str(e)}")
@@ -1470,7 +1510,7 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
             main_filename = f"{project_number} Quotation {date_str} Rev {revision}.docx"
         else:
             main_filename = f"{project_number} Quotation {date_str}.docx"
-        return generate_single_document(project_data, WORD_TEMPLATE_PATH, main_filename, excel_file_path)
+        return generate_single_document(project_data, WORD_TEMPLATE_PATH, main_filename, excel_file_path, template_key="canopy_quotation")
         
     except Exception as e:
         raise Exception(f"Failed to generate Word document(s): {str(e)}")

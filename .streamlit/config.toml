@@ -1,0 +1,16 @@
+[server]
+# Enable CORS for better session handling
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+# Prevent browser from automatically opening on startup
+gatherUsageStats = false
+
+[theme]
+# Custom theme for Halton Quotation System
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"

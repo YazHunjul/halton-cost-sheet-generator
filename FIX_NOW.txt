@@ -1,0 +1,137 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         🔧 FIX INFINITE RECURSION ERROR                      ║
+║                                                                              ║
+║  Error: "infinite recursion detected in policy for relation user_profiles"  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 STEP-BY-STEP FIX (3 Minutes)
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Open Supabase Dashboard
+─────────────────────────────────────────────────────────────────────────────
+→ Go to: https://supabase.com/dashboard/project/rlvtnyotgsgywxkshazo
+→ Click "SQL Editor" in left sidebar
+→ Click "New Query"
+
+
+STEP 2: Run Fixed Schema
+─────────────────────────────────────────────────────────────────────────────
+→ Open file: database/schema_fixed.sql
+→ Copy ALL content (entire file)
+→ Paste into Supabase SQL Editor
+→ Click "RUN" button (or press Ctrl+Enter)
+→ Wait for message: "Success. No rows returned"
+
+✅ This removes the problematic policies and creates new ones!
+
+
+STEP 3: Disable Email Confirmation (While You're There)
+─────────────────────────────────────────────────────────────────────────────
+→ Click "Authentication" → "Providers"
+→ Click on "Email"
+→ UNCHECK "Enable email confirmations"
+→ Click "Save"
+
+
+STEP 4: Create Admin User
+─────────────────────────────────────────────────────────────────────────────
+→ Still in Dashboard, click "Authentication" → "Users"
+→ Click "Add User" → "Create New User"
+
+Fill in:
+  Email:            yazan@halton.com
+  Password:         Halton2025!
+  ✅ Auto Confirm User   ← CHECK THIS!
+
+→ Click "Create User"
+
+→ Click on the user you just created
+→ Go to "User Metadata" tab
+→ Click "Edit"
+→ Paste this JSON:
+
+{
+  "first_name": "Yazan",
+  "last_name": "Admin",
+  "role": "admin"
+}
+
+→ Click "Save"
+
+
+STEP 5: Test Login
+─────────────────────────────────────────────────────────────────────────────
+In your terminal:
+
+  cd /Users/yazan/Desktop/Efficiency/UKCS
+  source venv/bin/activate
+  streamlit run app.py
+
+Browser opens at: http://localhost:8501
+
+Login with:
+  Email:    yazan@halton.com
+  Password: Halton2025!
+
+→ Click "Login"
+
+✅ Should work now!
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 WHAT WENT WRONG?
+═══════════════════════════════════════════════════════════════════════════════
+
+The original RLS policies tried to check "is user admin?" by querying the
+user_profiles table WHILE querying the user_profiles table = infinite loop!
+
+Old (broken):
+  SELECT * FROM user_profiles
+  WHERE EXISTS (
+    SELECT 1 FROM user_profiles WHERE role = 'admin'  ← Recursion!
+  )
+
+New (fixed):
+  SELECT * FROM user_profiles
+  WHERE id = auth.uid()  ← No recursion!
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ AFTER FIX
+═══════════════════════════════════════════════════════════════════════════════
+
+You will be able to:
+  ✅ Login without errors
+  ✅ Access User Management (as admin)
+  ✅ Invite team members
+  ✅ Create quotations
+  ✅ Use all features
+
+═══════════════════════════════════════════════════════════════════════════════
+🆘 TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════════
+
+Still getting errors?
+
+1. Verify schema applied:
+   → Dashboard → Table Editor → Check user_profiles exists
+
+2. Verify user created:
+   → Dashboard → Authentication → Users → Find yazan@halton.com
+
+3. Verify user metadata:
+   → Click user → User Metadata → Should show role: "admin"
+
+4. Check logs:
+   → Dashboard → Logs & Analytics → Database Logs
+
+═══════════════════════════════════════════════════════════════════════════════
+📞 NEED HELP?
+═══════════════════════════════════════════════════════════════════════════════
+
+Read: FIX_RLS_POLICIES.md (detailed explanation)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🚀 Ready? Follow the 5 steps above and you'll be logged in within 3 minutes!
+
+═══════════════════════════════════════════════════════════════════════════════
