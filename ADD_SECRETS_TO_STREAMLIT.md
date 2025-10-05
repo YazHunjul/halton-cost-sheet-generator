@@ -20,7 +20,13 @@
 SUPABASE_URL = "https://vxvjncrolwyvvykalirw.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4dmpuY3JvbHd5dnZ5a2FsaXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1NTQ3MjIsImV4cCI6MjA3NTEzMDcyMn0.FOSEwPRuAj9FX2TBZ3UVhCa4OqEVDheWCUBYkUMIKa4"
 SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4dmpuY3JvbHd5dnZ5a2FsaXJ3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTU1NDcyMiwiZXhwIjoyMDc1MTMwNzIyfQ.xGUwD0H5vLaDTEGEDK_PmCyldtxQ33T-Kq0zwWSH1pQ"
+
+# IMPORTANT: Replace with your actual Streamlit Cloud URL
+# Example: https://halton-quotation-system.streamlit.app
+APP_URL = "https://your-app-name.streamlit.app"
 ```
+
+**⚠️ IMPORTANT**: Replace `your-app-name` with your actual Streamlit Cloud app name!
 
 4. Click **"Save"**
 

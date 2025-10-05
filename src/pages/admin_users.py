@@ -12,9 +12,28 @@ from config.supabase_config import get_supabase_client
 
 def generate_invitation_link(token: str) -> str:
     """Generate invitation link with token."""
-    # Get the current app URL
-    # In production, this should be your actual domain
-    base_url = "http://localhost:8501"  # Update this for production
+    import os
+
+    # Try to get APP_URL from secrets/env (most reliable)
+    try:
+        # Try Streamlit secrets first
+        if hasattr(st, 'secrets') and 'APP_URL' in st.secrets:
+            base_url = st.secrets['APP_URL']
+        # Try environment variable
+        elif os.getenv('APP_URL'):
+            base_url = os.getenv('APP_URL')
+        # Auto-detect based on environment
+        elif os.getenv("STREAMLIT_SHARING_MODE") == "cloud" or os.getenv("IS_STREAMLIT_CLOUD"):
+            # Running on Streamlit Cloud but no APP_URL set
+            # Use a generic placeholder that user should update
+            base_url = "https://your-app.streamlit.app"
+        else:
+            # Local development
+            base_url = "http://localhost:8501"
+    except:
+        # Fallback to localhost
+        base_url = "http://localhost:8501"
+
     return f"{base_url}?token={token}"
 
 
