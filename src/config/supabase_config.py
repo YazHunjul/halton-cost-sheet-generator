@@ -10,28 +10,26 @@ from dotenv import load_dotenv
 # Load environment variables from .env (local development)
 load_dotenv()
 
-# Try to import streamlit for secrets support (Streamlit Cloud)
-try:
-    import streamlit as st
-    # Use Streamlit secrets if available (deployed on Streamlit Cloud)
-    if hasattr(st, 'secrets') and 'supabase' in st.secrets:
-        SUPABASE_URL = st.secrets["supabase"]["SUPABASE_URL"]
-        SUPABASE_ANON_KEY = st.secrets["supabase"]["SUPABASE_ANON_KEY"]
-        SUPABASE_SERVICE_ROLE_KEY = st.secrets["supabase"]["SUPABASE_SERVICE_ROLE_KEY"]
-    else:
-        # Fall back to environment variables (local .env)
-        SUPABASE_URL = os.getenv("SUPABASE_URL")
-        SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-        SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-except ImportError:
-    # Streamlit not available, use environment variables
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-    SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
 # Global client instances
 _supabase_client: Optional[Client] = None
 _supabase_admin_client: Optional[Client] = None
+
+
+def _get_config_value(key: str) -> Optional[str]:
+    """
+    Get configuration value from Streamlit secrets or environment variables.
+    Tries Streamlit secrets first, then falls back to environment variables.
+    """
+    # Try Streamlit secrets first (for Streamlit Cloud deployment)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'supabase' in st.secrets:
+            return st.secrets["supabase"].get(key)
+    except (ImportError, KeyError, AttributeError):
+        pass
+
+    # Fall back to environment variables (for local development)
+    return os.getenv(key)
 
 
 def get_supabase_client(use_service_role: bool = False) -> Client:
@@ -49,6 +47,11 @@ def get_supabase_client(use_service_role: bool = False) -> Client:
         ValueError: If required environment variables are not set
     """
     global _supabase_client, _supabase_admin_client
+
+    # Lazy-load configuration values
+    SUPABASE_URL = _get_config_value("SUPABASE_URL")
+    SUPABASE_ANON_KEY = _get_config_value("SUPABASE_ANON_KEY")
+    SUPABASE_SERVICE_ROLE_KEY = _get_config_value("SUPABASE_SERVICE_ROLE_KEY")
 
     if not SUPABASE_URL:
         raise ValueError("SUPABASE_URL environment variable is not set")
@@ -80,20 +83,22 @@ def test_connection() -> dict:
     """
     try:
         client = get_supabase_client()
+        url = _get_config_value("SUPABASE_URL")
 
         # Try a simple operation to test connection
         # This will attempt to connect to Supabase
         result = {
             "status": "connected",
-            "url": SUPABASE_URL,
+            "url": url,
             "message": "Successfully connected to Supabase"
         }
 
         return result
     except Exception as e:
+        url = _get_config_value("SUPABASE_URL")
         return {
             "status": "error",
-            "url": SUPABASE_URL,
+            "url": url,
             "message": f"Failed to connect: {str(e)}"
         }
 
