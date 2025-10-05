@@ -15,22 +15,37 @@ def generate_invitation_link(token: str) -> str:
     import os
 
     # Try to get APP_URL from secrets/env (most reliable)
+    base_url = None
+
     try:
-        # Try Streamlit secrets first
-        if hasattr(st, 'secrets') and 'APP_URL' in st.secrets:
-            base_url = st.secrets['APP_URL']
+        # Try Streamlit secrets first (check both root level and nested)
+        if hasattr(st, 'secrets'):
+            # Check root level first
+            if 'APP_URL' in st.secrets:
+                base_url = st.secrets['APP_URL']
+                print(f"DEBUG: Using APP_URL from st.secrets (root): {base_url}")
+            # Check inside supabase section
+            elif 'supabase' in st.secrets and 'APP_URL' in st.secrets['supabase']:
+                base_url = st.secrets['supabase']['APP_URL']
+                print(f"DEBUG: Using APP_URL from st.secrets[supabase]: {base_url}")
+
         # Try environment variable
-        elif os.getenv('APP_URL'):
+        if not base_url and os.getenv('APP_URL'):
             base_url = os.getenv('APP_URL')
+            print(f"DEBUG: Using APP_URL from env: {base_url}")
+
         # Auto-detect based on environment
-        elif os.getenv("STREAMLIT_SHARING_MODE") == "cloud" or os.getenv("IS_STREAMLIT_CLOUD"):
-            # Running on Streamlit Cloud but no APP_URL set
-            # Use a generic placeholder that user should update
-            base_url = "https://your-app.streamlit.app"
-        else:
-            # Local development
-            base_url = "http://localhost:8501"
-    except:
+        if not base_url:
+            if os.getenv("STREAMLIT_SHARING_MODE") == "cloud" or os.getenv("IS_STREAMLIT_CLOUD"):
+                # Running on Streamlit Cloud but no APP_URL set
+                base_url = "https://haltonsales.streamlit.app"
+                print(f"DEBUG: Auto-detected Streamlit Cloud, using: {base_url}")
+            else:
+                # Local development
+                base_url = "http://localhost:8501"
+                print(f"DEBUG: Local development, using: {base_url}")
+    except Exception as e:
+        print(f"DEBUG: Error in generate_invitation_link: {e}")
         # Fallback to localhost
         base_url = "http://localhost:8501"
 
