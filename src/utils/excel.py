@@ -78,35 +78,58 @@ TAB_COLORS = [
     "FF00FFFF",  # Cyan
 ]
 
-def remove_external_links(wb: Workbook) -> None:
+def remove_drawings_from_workbook(wb: Workbook) -> None:
     """
-    Remove external links from workbook to prevent 'unsafe external sources' warning.
-    
+    Remove all drawings/images from workbook to prevent drawing corruption warnings.
+
     Args:
         wb (Workbook): Workbook to clean
     """
     try:
-        # Remove external links if they exist
-        if hasattr(wb, 'external_references') and wb.external_references:
-            for ext_ref in wb.external_references:
-                if hasattr(ext_ref, 'clear'):
-                    ext_ref.clear()
-        
-        # Alternative approach: check for external links in defined names
+        drawing_count = 0
+        for sheet in wb.worksheets:
+            # Remove drawing relationship if it exists
+            if hasattr(sheet, '_drawing') and sheet._drawing is not None:
+                sheet._drawing = None
+                drawing_count += 1
+
+        if drawing_count > 0:
+            print(f"🖼️  Removed drawings from {drawing_count} sheets to prevent corruption")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not remove drawings: {str(e)}")
+
+def remove_external_links(wb: Workbook) -> None:
+    """
+    Remove external links from workbook to prevent 'unsafe external sources' warning.
+
+    Args:
+        wb (Workbook): Workbook to clean
+    """
+    try:
+        # Remove external links using the correct private attribute
+        if hasattr(wb, '_external_links') and wb._external_links:
+            print(f"🔗 Removing {len(wb._external_links)} external links from workbook...")
+            wb._external_links.clear()  # Clear the list
+            print("✅ External links removed successfully")
+
+        # Also remove external link references from defined names
         if hasattr(wb, 'defined_names') and wb.defined_names:
             names_to_remove = []
             for name in wb.defined_names:
-                if hasattr(name, 'value') and name.value and ('[' in str(name.value) or '.xlsx' in str(name.value)):
-                    names_to_remove.append(name.name)
-            
+                if hasattr(name, 'value') and name.value:
+                    # Check for external references in formula
+                    if '[' in str(name.value) or '.xlsx' in str(name.value).lower():
+                        names_to_remove.append(name.name)
+
             for name_to_remove in names_to_remove:
                 try:
                     del wb.defined_names[name_to_remove]
+                    print(f"🗑️  Removed defined name with external ref: {name_to_remove}")
                 except:
                     pass
-                    
+
     except Exception as e:
-        print(f"Warning: Could not remove external links: {str(e)}")
+        print(f"⚠️  Warning: Could not remove external links: {str(e)}")
 
 def get_template_path(version: str = None) -> str:
     """
@@ -171,10 +194,13 @@ def load_template_workbook(template_path: str = None, version: str = None) -> Wo
         
         if wb is None:
             raise FileNotFoundError(f"Could not find template file '{template_path}' in any of the expected locations")
-        
+
         # Remove external links to prevent "unsafe external sources" warning
         remove_external_links(wb)
-        
+
+        # Remove drawings to prevent drawing corruption warnings
+        remove_drawings_from_workbook(wb)
+
         return wb
     except Exception as e:
         raise Exception(f"Failed to load template workbook: {str(e)}")

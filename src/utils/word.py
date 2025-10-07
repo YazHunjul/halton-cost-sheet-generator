@@ -2196,7 +2196,8 @@ def generate_scope_of_works(project_data: Dict) -> List[Dict]:
                 areas_with_sdu.add(area_identifier)
     
     # 2. Generate canopy scope items
-    for (model, lighting), count in sorted(model_lighting_counts.items()):
+    # Sort with None-safe key (treat None as empty string for sorting)
+    for (model, lighting), count in sorted(model_lighting_counts.items(), key=lambda x: (x[0][0] or '', x[0][1] or '')):
         count_str = f"{count}no"
         
         # Create concise descriptions based on model type

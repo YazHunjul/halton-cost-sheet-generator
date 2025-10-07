@@ -20,7 +20,14 @@
       "Bash(git add:*)",
       "Bash(python3 -m pip install:*)",
       "Bash(python3:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Read(//Users/yazan/Downloads/**)",
+      "Read(//private/tmp/**)",
+      "Bash(cat:*)",
+      "Read(//tmp/halton_extract/xl/externalLinks/_rels/**)",
+      "Bash(done)",
+      "Bash(xmllint:*)",
+      "Bash(unzip:*)"
     ],
     "deny": []
   }
