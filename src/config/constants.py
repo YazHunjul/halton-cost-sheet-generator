@@ -32,7 +32,7 @@ FEATURE_FLAGS = {
     "cyclocell_cassette_ceiling": True,  # Changed from False to True
     
     # Additional equipment
-    "reactaway_unit": False,
+    "reactaway_unit": True,  # NOTE: REACTAWAY display is now data-driven via has_reactaway flag, not this config flag
     
     # Future systems (placeholders)
     "dishwasher_extract": False,

@@ -27,7 +27,8 @@
       "Read(//tmp/halton_extract/xl/externalLinks/_rels/**)",
       "Bash(done)",
       "Bash(xmllint:*)",
-      "Bash(unzip:*)"
+      "Bash(unzip:*)",
+      "Read(///**)"
     ],
     "deny": []
   }

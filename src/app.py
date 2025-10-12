@@ -127,7 +127,7 @@ def word_generation_page():
             st.success("Successfully extracted project data from Excel!")
             
             # Analyze project to show what type it is
-            has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu = analyze_project_areas(project_data)
+            has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu, has_reactaway = analyze_project_areas(project_data)
             
             # Show project type analysis
             project_components = []
@@ -139,6 +139,8 @@ def word_generation_page():
                 project_components.append("Pollustop")
             if has_aerolys:
                 project_components.append("Aerolys")
+            if has_reactaway:
+                project_components.append("Reactaway")
             if has_marvel:
                 project_components.append("Marvel")
             if has_vent_clg:

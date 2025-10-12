@@ -2337,6 +2337,61 @@ def add_pollustop_dropdowns(sheet: Worksheet):
     except Exception as e:
         print(f"Warning: Could not add Pollustop dropdowns to sheet {sheet.title}: {str(e)}")
 
+def add_reactaway_dropdowns(sheet: Worksheet):
+    """
+    Add Reactaway-specific dropdowns to the Reactaway sheet.
+    Note: Delivery location dropdown (E36) is handled by add_delivery_location_dropdown_to_sheet()
+
+    Args:
+        sheet (Worksheet): The Reactaway worksheet to add dropdowns to
+    """
+    try:
+        from openpyxl.worksheet.datavalidation import DataValidation
+
+        print(f"🔧 Adding Reactaway plant selection dropdowns to sheet: {sheet.title}")
+
+        # Note: Delivery location dropdown at E36 is added by the global add_delivery_location_dropdown_to_sheet()
+
+        # Add plant selection dropdowns to E37 and E38
+        try:
+            plant_options = [
+                "",  # Empty option
+                "SL10 GENIE",
+                "EXTENSION FORKS",
+                "2.5M COMBI LADDER",
+                "1.5M PODIUM",
+                "3M TOWER",
+                "COMBI LADDER",
+                "PECO LIFT",
+                "3M YOUNGMAN BOARD",
+                "GS1930 SCISSOR LIFT",
+                "4-6 SHERASCOPIC",
+                "7-9 SHERASCOPIC"
+            ]
+
+            # Write plant options to hidden cells
+            plant_start_row = 950  # Start at row 950 for plant options
+            for i, option in enumerate(plant_options):
+                sheet[f'AV{plant_start_row + i}'] = option
+
+            # Create validation for plant selection
+            range_ref = f'$AV${plant_start_row}:$AV${plant_start_row + len(plant_options) - 1}'
+            plant_dv = DataValidation(type="list", formula1=range_ref, allow_blank=True)
+            sheet.add_data_validation(plant_dv)
+
+            # Apply to both E37 and E38
+            plant_dv.add('E37')
+            plant_dv.add('E38')
+            print(f"✅ Added plant selection dropdowns to E37 and E38 on Reactaway sheet")
+
+        except Exception as e:
+            print(f"Warning: Could not add plant selection dropdowns to E37/E38: {str(e)}")
+
+        print(f"✅ Completed Reactaway dropdown setup")
+
+    except Exception as e:
+        print(f"Warning: Could not add Reactaway dropdowns to sheet {sheet.title}: {str(e)}")
+
 def add_aerolys_dropdowns(sheet: Worksheet):
     """
     Add Aerolys-specific dropdowns to the Aerolys sheet for cells C15-C22.
@@ -2932,6 +2987,8 @@ def add_delivery_location_dropdown_to_sheet(sheet: Worksheet, selected_delivery_
             cell = "D44"  # POLLUSTOP sheets use D44 for delivery location (same as VENT CLG)
         elif "AEROLYS" in sheet_name:
             cell = "D44"  # AEROLYS sheets use D44 for delivery location (same as VENT CLG)
+        elif "REACTAWAY" in sheet_name:
+            cell = "E36"  # REACTAWAY sheets use E36 for delivery location
         elif "FIRE" in sheet_name and "SUPP" in sheet_name:
             cell = "D186"
         elif "CANOPY" in sheet_name:
@@ -3587,6 +3644,10 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                     print(f"   Title written to B1: {title_text}")
                                 except Exception as e:
                                     print(f"   ⚠️ Warning: Could not write title to B1: {str(e)}")
+
+                                # Add Reactaway specific dropdowns
+                                add_reactaway_dropdowns(reactaway_sheet)
+
                                 print(f"   ✅ REACTAWAY sheet '{new_reactaway_name}' created successfully")
                             else:
                                 print(f"   ❌ ERROR: Not enough REACTAWAY sheets in template for area {area_name}")
@@ -3905,6 +3966,10 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                                 print(f"   Title written to B1: {title_text}")
                             except Exception as e:
                                 print(f"   ⚠️ Warning: Could not write title to B1: {str(e)}")
+
+                            # Add Reactaway specific dropdowns
+                            add_reactaway_dropdowns(reactaway_sheet)
+
                             print(f"   ✅ REACTAWAY sheet '{new_reactaway_name}' created successfully (no canopies)")
                         else:
                             print(f"   ❌ ERROR: Not enough REACTAWAY sheets in template for area {area_name}")
@@ -3942,9 +4007,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         sheets_updated = 0
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
-            if (sheet.sheet_state == 'visible' and 
+            if (sheet.sheet_state == 'visible' and
                 sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData'] and
-                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG', 'POLLUSTOP', 'AEROLYS'])):
+                any(prefix in sheet_name for prefix in ['CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG', 'POLLUSTOP', 'AEROLYS', 'REACTAWAY'])):
                 add_delivery_location_dropdown_to_sheet(sheet, delivery_location)
                 sheets_updated += 1
         print(f"📝 Added delivery location dropdowns to {sheets_updated} sheets")
@@ -4978,7 +5043,7 @@ def read_excel_project_data(excel_path: str) -> Dict:
         for level_name, areas in levels_data.items():
             for area in areas:
                 if 'options' not in area:
-                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False, 'vent_clg': False, 'pollustop': False, 'aerolys': False, 'xeu': False}
+                    area['options'] = {'uvc': False, 'sdu': False, 'recoair': False, 'marvel': False, 'vent_clg': False, 'pollustop': False, 'aerolys': False, 'xeu': False, 'reactaway': False}
         
         # Check POLLUSTOP and AEROLYS sheets for XEU indicators first
         for sheet_name in wb.sheetnames:
@@ -5144,21 +5209,100 @@ def read_excel_project_data(excel_path: str) -> Dict:
             if 'VENT CLG - ' in sheet_name:
                 sheet = wb[sheet_name]
                 title_cell = sheet['B1'].value  # VENT CLG sheets have title in B1
-                
+
                 if title_cell and ' - ' in title_cell and 'VENT CLG SYSTEM' in title_cell:
                     # Extract level and area from title like "Level 1 - Main Kitchen - VENT CLG SYSTEM"
                     title_parts = title_cell.split(' - ')
                     if len(title_parts) >= 2:
                         level_name = title_parts[0]
                         area_name = title_parts[1]
-                        
+
                         # Find the area and set VENT CLG option to True
                         if level_name in levels_data:
                             for area in levels_data[level_name]:
                                 if area['name'] == area_name:
                                     area['options']['vent_clg'] = True
                                     break
-        
+
+        # Check POLLUSTOP sheets for POLLUSTOP option
+        for sheet_name in wb.sheetnames:
+            if 'POLLUSTOP - ' in sheet_name or 'POLLUSTOP (XEU) - ' in sheet_name:
+                sheet = wb[sheet_name]
+                title_cell = sheet['B1'].value  # POLLUSTOP sheets have title in B1
+
+                if title_cell and ' - ' in title_cell and 'POLLUSTOP SYSTEM' in title_cell:
+                    # Extract level and area from title like "Level 1 - Main Kitchen - POLLUSTOP SYSTEM"
+                    title_parts = title_cell.split(' - ')
+                    if len(title_parts) >= 2:
+                        level_name = title_parts[0]
+                        area_name = title_parts[1]
+
+                        # Find the area and set POLLUSTOP option to True
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['pollustop'] = True
+                                    print(f"✅ Set pollustop=True for {level_name} - {area_name} from sheet: {sheet_name}")
+                                    break
+
+        # Check AEROLYS sheets for AEROLYS option
+        for sheet_name in wb.sheetnames:
+            if 'AEROLYS - ' in sheet_name or 'AEROLYS (XEU) - ' in sheet_name:
+                sheet = wb[sheet_name]
+                title_cell = sheet['B1'].value  # AEROLYS sheets have title in B1
+
+                if title_cell and ' - ' in title_cell and 'AEROLYS SYSTEM' in title_cell:
+                    # Extract level and area from title like "Level 1 - Main Kitchen - AEROLYS SYSTEM"
+                    title_parts = title_cell.split(' - ')
+                    if len(title_parts) >= 2:
+                        level_name = title_parts[0]
+                        area_name = title_parts[1]
+
+                        # Find the area and set AEROLYS option to True
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['aerolys'] = True
+                                    print(f"✅ Set aerolys=True for {level_name} - {area_name} from sheet: {sheet_name}")
+                                    break
+
+        # Check REACTAWAY sheets for REACTAWAY option
+        print(f"🔍 Checking for REACTAWAY sheets in workbook...")
+        reactaway_found = False
+        for sheet_name in wb.sheetnames:
+            if 'REACTAWAY - ' in sheet_name:
+                reactaway_found = True
+                print(f"   Found REACTAWAY sheet: {sheet_name}")
+                sheet = wb[sheet_name]
+                title_cell = sheet['B1'].value  # REACTAWAY sheets have title in B1
+                print(f"   B1 cell value: '{title_cell}'")
+
+                if title_cell and ' - ' in title_cell and 'REACTAWAY SYSTEM' in title_cell:
+                    # Extract level and area from title like "Level 1 - Main Kitchen - REACTAWAY SYSTEM"
+                    title_parts = title_cell.split(' - ')
+                    print(f"   Title parts: {title_parts}")
+                    if len(title_parts) >= 2:
+                        level_name = title_parts[0]
+                        area_name = title_parts[1]
+                        print(f"   Extracted: level='{level_name}', area='{area_name}'")
+
+                        # Find the area and set REACTAWAY option to True
+                        if level_name in levels_data:
+                            for area in levels_data[level_name]:
+                                if area['name'] == area_name:
+                                    area['options']['reactaway'] = True
+                                    print(f"✅ Set reactaway=True for {level_name} - {area_name} from sheet: {sheet_name}")
+                                    break
+                                else:
+                                    print(f"   Area name mismatch: '{area['name']}' != '{area_name}'")
+                        else:
+                            print(f"   ⚠️ Level '{level_name}' not found in levels_data. Available: {list(levels_data.keys())}")
+                else:
+                    print(f"   ⚠️ Title doesn't match expected format (needs ' - ' and 'REACTAWAY SYSTEM')")
+
+        if not reactaway_found:
+            print(f"   ℹ️ No REACTAWAY sheets found in workbook")
+
         # Check for contract sheets to set contract option (handle exact matches and numbered variants)
         contract_sheet_names = ['CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']
         has_contract_sheets = False
@@ -5552,9 +5696,10 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         vent_clg_sheets = []
         pollustop_sheets = []
         aerolys_sheets = []
+        reactaway_sheets = []
         contract_sheets = []
         other_sheets = []
-        
+
         for sheet_name in wb.sheetnames:
             sheet = wb[sheet_name]
             if sheet.sheet_state == 'visible':
@@ -5576,6 +5721,8 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
                     pollustop_sheets.append(sheet_name)
                 elif 'AEROLYS - ' in sheet_name:
                     aerolys_sheets.append(sheet_name)
+                elif 'REACTAWAY - ' in sheet_name:
+                    reactaway_sheets.append(sheet_name)
                 elif sheet_name == 'CONTRACT' or sheet_name.startswith('CONTRACT'):
                     contract_sheets.append(sheet_name)
                 elif sheet_name not in ['JOB TOTAL', 'Lists', 'PRICING_SUMMARY', 'ProjectData']:
@@ -5695,6 +5842,17 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
             summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!G9"  # Cost reference
             current_row += 1
 
+        # REACTAWAY sheets
+        for sheet_name in reactaway_sheets:
+            summary_sheet[f'A{current_row}'] = 'REACTAWAY'
+            summary_sheet[f'B{current_row}'] = sheet_name
+            safe_sheet_name = f"'{sheet_name}'" if ' ' in sheet_name else sheet_name
+            summary_sheet[f'C{current_row}'] = f"=IFERROR({safe_sheet_name}!N9,0)"  # Price (Selling price in N9)
+            summary_sheet[f'D{current_row}'] = f"=IFERROR({safe_sheet_name}!K9,0)"  # Cost (Cost in K9)
+            summary_sheet[f'E{current_row}'] = f"{safe_sheet_name}!N9"  # Price reference
+            summary_sheet[f'F{current_row}'] = f"{safe_sheet_name}!K9"  # Cost reference
+            current_row += 1
+
         # CONTRACT sheets
         for sheet_name in contract_sheets:
             summary_sheet[f'A{current_row}'] = 'CONTRACT'
@@ -5727,11 +5885,12 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'B{summary_row + 5}'] = 'RECOAIR TOTAL'
         summary_sheet[f'B{summary_row + 6}'] = 'MARVEL TOTAL'
         summary_sheet[f'B{summary_row + 7}'] = 'VENT CLG TOTAL'
-        summary_sheet[f'B{summary_row + 8}'] = 'CONTRACT TOTAL'
-        summary_sheet[f'B{summary_row + 9}'] = 'OTHER TOTAL'
-        summary_sheet[f'B{summary_row + 10}'] = 'UV EXTRA OVER TOTAL'
-        summary_sheet[f'B{summary_row + 11}'] = 'PROJECT TOTAL'
-        
+        summary_sheet[f'B{summary_row + 8}'] = 'REACTAWAY TOTAL'
+        summary_sheet[f'B{summary_row + 9}'] = 'CONTRACT TOTAL'
+        summary_sheet[f'B{summary_row + 10}'] = 'OTHER TOTAL'
+        summary_sheet[f'B{summary_row + 11}'] = 'UV EXTRA OVER TOTAL'
+        summary_sheet[f'B{summary_row + 12}'] = 'PROJECT TOTAL'
+
         # Calculate totals using SUMIF formulas
         summary_sheet[f'C{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",C:C)'  # Sum all CANOPY sheet prices
         summary_sheet[f'C{summary_row + 2}'] = f'=SUMIF(A:A,"FIRE SUPP",C:C)'  # Sum all FIRE SUPP sheet prices
@@ -5740,11 +5899,12 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'C{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",C:C)'  # Sum all RECOAIR sheet prices
         summary_sheet[f'C{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",C:C)'  # Sum all MARVEL sheet prices
         summary_sheet[f'C{summary_row + 7}'] = f'=SUMIF(A:A,"VENT CLG",C:C)'  # Sum all VENT CLG sheet prices
-        summary_sheet[f'C{summary_row + 8}'] = f'=SUMIF(A:A,"CONTRACT",C:C)'  # Sum all CONTRACT sheet prices
-        summary_sheet[f'C{summary_row + 9}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
-        summary_sheet[f'C{summary_row + 10}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",C:C)'  # Sum all UV Extra Over sheet prices (tracked but excluded)
-        summary_sheet[f'C{summary_row + 11}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}+C{summary_row + 8}+C{summary_row + 9}'  # Project price total (excludes UV Extra Over)
-        
+        summary_sheet[f'C{summary_row + 8}'] = f'=SUMIF(A:A,"REACTAWAY",C:C)'  # Sum all REACTAWAY sheet prices
+        summary_sheet[f'C{summary_row + 9}'] = f'=SUMIF(A:A,"CONTRACT",C:C)'  # Sum all CONTRACT sheet prices
+        summary_sheet[f'C{summary_row + 10}'] = f'=SUMIF(A:A,"OTHER",C:C)'  # Sum all OTHER sheet prices
+        summary_sheet[f'C{summary_row + 11}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",C:C)'  # Sum all UV Extra Over sheet prices (tracked but excluded)
+        summary_sheet[f'C{summary_row + 12}'] = f'=C{summary_row + 1}+C{summary_row + 2}+C{summary_row + 3}+C{summary_row + 4}+C{summary_row + 5}+C{summary_row + 6}+C{summary_row + 7}+C{summary_row + 8}+C{summary_row + 9}+C{summary_row + 10}'  # Project price total (excludes UV Extra Over)
+
         # Cost totals
         summary_sheet[f'D{summary_row + 1}'] = f'=SUMIF(A:A,"CANOPY",D:D)'  # Sum all CANOPY sheet costs
         summary_sheet[f'D{summary_row + 2}'] = f'=SUMIF(A:A,"FIRE SUPP",D:D)'  # Sum all FIRE SUPP sheet costs
@@ -5753,10 +5913,11 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet[f'D{summary_row + 5}'] = f'=SUMIF(A:A,"RECOAIR",D:D)'  # Sum all RECOAIR sheet costs
         summary_sheet[f'D{summary_row + 6}'] = f'=SUMIF(A:A,"MARVEL",D:D)'  # Sum all MARVEL sheet costs
         summary_sheet[f'D{summary_row + 7}'] = f'=SUMIF(A:A,"VENT CLG",D:D)'  # Sum all VENT CLG sheet costs
-        summary_sheet[f'D{summary_row + 8}'] = f'=SUMIF(A:A,"CONTRACT",D:D)'  # Sum all CONTRACT sheet costs
-        summary_sheet[f'D{summary_row + 9}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
-        summary_sheet[f'D{summary_row + 10}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",D:D)'  # Sum all UV Extra Over sheet costs (tracked but excluded)
-        summary_sheet[f'D{summary_row + 11}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}+D{summary_row + 8}+D{summary_row + 9}'  # Project cost total (excludes UV Extra Over)
+        summary_sheet[f'D{summary_row + 8}'] = f'=SUMIF(A:A,"REACTAWAY",D:D)'  # Sum all REACTAWAY sheet costs
+        summary_sheet[f'D{summary_row + 9}'] = f'=SUMIF(A:A,"CONTRACT",D:D)'  # Sum all CONTRACT sheet costs
+        summary_sheet[f'D{summary_row + 10}'] = f'=SUMIF(A:A,"OTHER",D:D)'  # Sum all OTHER sheet costs
+        summary_sheet[f'D{summary_row + 11}'] = f'=SUMIF(A:A,"UV_EXTRA_OVER",D:D)'  # Sum all UV Extra Over sheet costs (tracked but excluded)
+        summary_sheet[f'D{summary_row + 12}'] = f'=D{summary_row + 1}+D{summary_row + 2}+D{summary_row + 3}+D{summary_row + 4}+D{summary_row + 5}+D{summary_row + 6}+D{summary_row + 7}+D{summary_row + 8}+D{summary_row + 9}+D{summary_row + 10}'  # Project cost total (excludes UV Extra Over)
         
         # Store the summary row positions for JOB TOTAL to reference
         summary_sheet['H1'] = 'Reference Cells for JOB TOTAL'
@@ -5767,21 +5928,23 @@ def create_pricing_summary_sheet(wb: Workbook) -> None:
         summary_sheet['H6'] = f'RECOAIR_PRICE_TOTAL=C{summary_row + 5}'
         summary_sheet['H7'] = f'MARVEL_PRICE_TOTAL=C{summary_row + 6}'
         summary_sheet['H8'] = f'VENT_CLG_PRICE_TOTAL=C{summary_row + 7}'
-        summary_sheet['H9'] = f'CONTRACT_PRICE_TOTAL=C{summary_row + 8}'
-        summary_sheet['H10'] = f'OTHER_PRICE_TOTAL=C{summary_row + 9}'
-        summary_sheet['H11'] = f'UV_EXTRA_OVER_PRICE_TOTAL=C{summary_row + 10}'
-        summary_sheet['H12'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 11}'
-        summary_sheet['H13'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
-        summary_sheet['H14'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
-        summary_sheet['H15'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
-        summary_sheet['H16'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
-        summary_sheet['H17'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
-        summary_sheet['H18'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
-        summary_sheet['H19'] = f'VENT_CLG_COST_TOTAL=D{summary_row + 7}'
-        summary_sheet['H20'] = f'CONTRACT_COST_TOTAL=D{summary_row + 8}'
-        summary_sheet['H21'] = f'OTHER_COST_TOTAL=D{summary_row + 9}'
-        summary_sheet['H22'] = f'UV_EXTRA_OVER_COST_TOTAL=D{summary_row + 10}'
-        summary_sheet['H23'] = f'PROJECT_COST_TOTAL=D{summary_row + 11}'
+        summary_sheet['H9'] = f'REACTAWAY_PRICE_TOTAL=C{summary_row + 8}'
+        summary_sheet['H10'] = f'CONTRACT_PRICE_TOTAL=C{summary_row + 9}'
+        summary_sheet['H11'] = f'OTHER_PRICE_TOTAL=C{summary_row + 10}'
+        summary_sheet['H12'] = f'UV_EXTRA_OVER_PRICE_TOTAL=C{summary_row + 11}'
+        summary_sheet['H13'] = f'PROJECT_PRICE_TOTAL=C{summary_row + 12}'
+        summary_sheet['H14'] = f'CANOPY_COST_TOTAL=D{summary_row + 1}'
+        summary_sheet['H15'] = f'FIRE_SUPP_COST_TOTAL=D{summary_row + 2}'
+        summary_sheet['H16'] = f'EBOX_COST_TOTAL=D{summary_row + 3}'
+        summary_sheet['H17'] = f'SDU_COST_TOTAL=D{summary_row + 4}'
+        summary_sheet['H18'] = f'RECOAIR_COST_TOTAL=D{summary_row + 5}'
+        summary_sheet['H19'] = f'MARVEL_COST_TOTAL=D{summary_row + 6}'
+        summary_sheet['H20'] = f'VENT_CLG_COST_TOTAL=D{summary_row + 7}'
+        summary_sheet['H21'] = f'REACTAWAY_COST_TOTAL=D{summary_row + 8}'
+        summary_sheet['H22'] = f'CONTRACT_COST_TOTAL=D{summary_row + 9}'
+        summary_sheet['H23'] = f'OTHER_COST_TOTAL=D{summary_row + 10}'
+        summary_sheet['H24'] = f'UV_EXTRA_OVER_COST_TOTAL=D{summary_row + 11}'
+        summary_sheet['H25'] = f'PROJECT_COST_TOTAL=D{summary_row + 12}'
         
         print(f"Created PRICING_SUMMARY sheet with {current_row - 2} individual sheet references")
         
@@ -5835,7 +5998,7 @@ def update_job_total_sheet(wb: Workbook) -> None:
                 }
         
         # Map Job Total categories to PRICING_SUMMARY categories and clear all first
-        # Only include active/used systems - exclude unused items like Aerolys, Pollustop, Reactaway
+        # Only include active/used systems - exclude unused items like Aerolys, Pollustop
         job_total_mapping = {
             16: ('Canopy', 'CANOPY'),           # Row 16: Canopy
             17: ('Fire Suppression', 'FIRE SUPP'),  # Row 17: Fire Suppression
@@ -5845,11 +6008,12 @@ def update_job_total_sheet(wb: Workbook) -> None:
             21: ('Edge', 'EBOX'),               # Row 21: Edge -> EBOX
             26: ('Contract', 'CONTRACT'),       # Row 22: Contract -> CONTRACT (was Aerolys, now repurposed for Contract)
             24: ('Reco', 'RECOAIR'),            # Row 24: Reco -> RECOAIR
-            # Row 23 (Pollustop), 25 (Reactaway) intentionally excluded - these are unused systems
+            25: ('Reactaway', 'REACTAWAY'),     # Row 25: Reactaway -> REACTAWAY (cost in S25, price in T25)
+            # Row 23 (Pollustop) intentionally excluded - these are unused systems
         }
         
         # Clear all Job Total cells first
-        for row_num in range(16, 26):
+        for row_num in range(16, 27):  # Include row 25 for Reactaway, row 26 for Contract
             job_total_sheet[f'S{row_num}'] = 0  # Cost
             job_total_sheet[f'T{row_num}'] = 0  # Price
         

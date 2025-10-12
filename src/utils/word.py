@@ -947,7 +947,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
     # Analyze project for global flags
     analysis_start = time.time()
     print(f"🔬 Analyzing project areas...")
-    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu = analyze_project_areas(project_data)
+    has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu, has_reactaway = analyze_project_areas(project_data)
     analysis_time = time.time() - analysis_start
     print(f"🔬 Project analysis complete: {analysis_time:.3f}s")
     
@@ -1111,6 +1111,7 @@ def prepare_template_context(project_data: Dict, excel_file_path: str = None) ->
         'has_pollustop': has_pollustop,
         'has_aerolys': has_aerolys,
         'has_xeu': has_xeu,
+        'has_reactaway': has_reactaway,
         
         # Feature flags for conditional display of systems
         'show_kitchen_extract_system': is_feature_enabled('kitchen_extract_system'),
@@ -1250,7 +1251,7 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
         project_data (Dict): Project data with levels and areas
         
     Returns:
-        Tuple[bool, bool, bool, bool, bool, bool, bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu)
+        Tuple[bool, bool, bool, bool, bool, bool, bool, bool, bool, bool]: (has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu, has_reactaway)
     """
     has_canopies = False
     has_recoair = False
@@ -1260,6 +1261,7 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
     has_pollustop = False
     has_aerolys = False
     has_xeu = False
+    has_reactaway = False
     
     for level in project_data.get('levels', []):
         for area in level.get('areas', []):
@@ -1305,11 +1307,17 @@ def analyze_project_areas(project_data: Dict) -> Tuple[bool, bool, bool, bool, b
                 has_xeu = True
                 has_pollustop = True  # XEU creates Pollustop sheet
                 has_aerolys = True    # XEU creates Aerolys sheet
-    
-    # Determine if project is RecoAir-only (has RecoAir but no other systems)
-    is_recoair_only = has_recoair and not (has_canopies or has_vent_clg or has_marvel or has_uv or has_pollustop or has_aerolys or has_xeu)
 
-    return has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu
+            # Check if area has Reactaway option
+            reactaway_value = area.get('options', {}).get('reactaway', False)
+            if reactaway_value:
+                print(f"🟢 Reactaway detected in area: {area.get('name', 'Unknown')}")
+                has_reactaway = True
+
+    # Determine if project is RecoAir-only (has RecoAir but no other systems)
+    is_recoair_only = has_recoair and not (has_canopies or has_vent_clg or has_marvel or has_uv or has_pollustop or has_aerolys or has_xeu or has_reactaway)
+
+    return has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu, has_reactaway
 
 def generate_single_document(project_data: Dict, template_path: str, output_filename: str, excel_file_path: str = None, template_key: str = None) -> str:
     """
@@ -1419,7 +1427,7 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
     """
     try:
         # Analyze project to determine what documents to generate
-        has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu = analyze_project_areas(project_data)
+        has_canopies, has_recoair, is_recoair_only, has_uv, has_marvel, has_vent_clg, has_pollustop, has_aerolys, has_xeu, has_reactaway = analyze_project_areas(project_data)
         
         project_number = project_data.get('project_number', 'unknown')
         date_str = format_date_for_filename(project_data.get('date', ''))
@@ -1439,7 +1447,7 @@ def generate_quotation_document(project_data: Dict, excel_file_path: str = None)
 
         # Generate main quotation if there are canopies OR ventilated ceilings (or other non-RecoAir systems)
         # Format: "Project Number Quotation Date Rev X"
-        if has_canopies or has_vent_clg or has_marvel or has_uv or has_pollustop or has_aerolys or has_xeu:
+        if has_canopies or has_vent_clg or has_marvel or has_uv or has_pollustop or has_aerolys or has_xeu or has_reactaway:
             if revision and revision.strip():
                 main_filename = f"{project_number} Quotation {date_str} Rev {revision}.docx"
             else:
@@ -1824,6 +1832,7 @@ def calculate_pricing_totals(project_data: Dict, excel_file_path: str = None, ca
                 'has_pollustop': area.get('options', {}).get('pollustop', False),
                 'has_aerolys': area.get('options', {}).get('aerolys', False),
                 'has_xeu': area.get('options', {}).get('xeu', False),
+                'has_reactaway': area.get('options', {}).get('reactaway', False),
                 'uve_price': uvc_price,  # Alternative spelling for template compatibility
                 'sdu_subtotal': sdu_price,  # SDU subtotal for template compatibility
                 'sdu': {  # SDU data object with pricing structure that matches template expectations
