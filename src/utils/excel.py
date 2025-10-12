@@ -27,6 +27,7 @@ BASE_SHEET_NAME = "CANOPY"  # The template sheet to copy from
 RECOAIR_SHEET_NAME = "RECOAIR"
 EDGE_BOX_SHEET_NAME = "EDGE BOX"
 FIRE_SUPPRESSION_SHEET_NAME = "FIRE SUPPRESSION"  # Template sheet name
+REACTAWAY_SHEET_NAME = "REACTAWAY"  # Template sheet name for Reactaway
 LISTS_SHEET_NAME = "Lists"
 
 # Output sheet name mapping
@@ -78,25 +79,84 @@ TAB_COLORS = [
     "FF00FFFF",  # Cyan
 ]
 
-def remove_drawings_from_workbook(wb: Workbook) -> None:
+def remove_drawings_from_excel_file(file_path: str) -> None:
     """
-    Remove all drawings/images from workbook to prevent drawing corruption warnings.
+    Remove all drawing XML files and their references from Excel ZIP to prevent corruption warnings.
+    Must be called AFTER the file has been saved by openpyxl.
 
     Args:
-        wb (Workbook): Workbook to clean
+        file_path (str): Path to the Excel file
     """
-    try:
-        drawing_count = 0
-        for sheet in wb.worksheets:
-            # Remove drawing relationship if it exists
-            if hasattr(sheet, '_drawing') and sheet._drawing is not None:
-                sheet._drawing = None
-                drawing_count += 1
+    import zipfile
+    import tempfile
+    import shutil
+    import xml.etree.ElementTree as ET
 
-        if drawing_count > 0:
-            print(f"🖼️  Removed drawings from {drawing_count} sheets to prevent corruption")
+    try:
+        # Create temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            tmp_path = tmp_file.name
+
+        # Read original file and filter out drawing files
+        with zipfile.ZipFile(file_path, 'r') as zip_read:
+            with zipfile.ZipFile(tmp_path, 'w', zipfile.ZIP_DEFLATED) as zip_write:
+                drawing_files_removed = 0
+
+                for item in zip_read.infolist():
+                    # Skip drawing XML files and their relationships in xl/drawings/
+                    if (item.filename.startswith('xl/drawings/drawing') and
+                        item.filename.endswith('.xml') and
+                        not 'commentsDrawing' in item.filename):
+                        drawing_files_removed += 1
+                        continue
+                    elif (item.filename.startswith('xl/drawings/_rels/drawing') and
+                          item.filename.endswith('.xml.rels') and
+                          not 'commentsDrawing' in item.filename):
+                        continue
+
+                    # Clean worksheet relationship files to remove drawing references
+                    elif (item.filename.startswith('xl/worksheets/_rels/') and
+                          item.filename.endswith('.xml.rels')):
+                        data = zip_read.read(item.filename)
+                        try:
+                            # Parse XML
+                            root = ET.fromstring(data)
+                            ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+
+                            # Find and remove drawing relationships
+                            for rel in root.findall('.//r:Relationship[@Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing"]', ns):
+                                # Only remove if it points to a drawing file (not commentsDrawing)
+                                target = rel.get('Target', '')
+                                if 'drawing' in target and 'commentsDrawing' not in target:
+                                    root.remove(rel)
+
+                            # Write cleaned XML
+                            cleaned_data = ET.tostring(root, encoding='utf-8', xml_declaration=True)
+                            zip_write.writestr(item, cleaned_data)
+                        except:
+                            # If parsing fails, copy original
+                            zip_write.writestr(item, data)
+                        continue
+
+                    # Copy all other files unchanged
+                    data = zip_read.read(item.filename)
+                    zip_write.writestr(item, data)
+
+                if drawing_files_removed > 0:
+                    print(f"🖼️  Removed {drawing_files_removed} drawing files and cleaned worksheet relationships")
+
+        # Replace original file with cleaned version
+        shutil.move(tmp_path, file_path)
+
     except Exception as e:
-        print(f"⚠️  Warning: Could not remove drawings: {str(e)}")
+        print(f"⚠️  Warning: Could not remove drawings from file: {str(e)}")
+        # Clean up temp file if it exists
+        try:
+            import os
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+        except:
+            pass
 
 def remove_external_links(wb: Workbook) -> None:
     """
@@ -176,10 +236,10 @@ def load_template_workbook(template_path: str = None, version: str = None) -> Wo
                 wb = load_workbook(path)
                 print(f"✅ Successfully loaded template: {path}")
 
-                # Ensure POLLUSTOP and AEROLYS template sheets are unhidden if they exist
+                # Ensure POLLUSTOP, AEROLYS, and REACTAWAY template sheets are unhidden if they exist
                 print(f"   Checking template sheets for unhiding...")
                 for sheet_name in wb.sheetnames:
-                    if 'POLLUSTOP' in sheet_name or 'AEROLYS' in sheet_name:
+                    if 'POLLUSTOP' in sheet_name or 'AEROLYS' in sheet_name or 'REACTAWAY' in sheet_name:
                         sheet = wb[sheet_name]
                         print(f"   Found template sheet: '{sheet_name}' - Current state: {sheet.sheet_state}")
                         if sheet.sheet_state != 'visible':
@@ -198,8 +258,8 @@ def load_template_workbook(template_path: str = None, version: str = None) -> Wo
         # Remove external links to prevent "unsafe external sources" warning
         remove_external_links(wb)
 
-        # Remove drawings to prevent drawing corruption warnings
-        remove_drawings_from_workbook(wb)
+        # Note: Drawing removal happens before save in save_to_excel()
+        # because copy_worksheet() copies drawings from template sheets
 
         return wb
     except Exception as e:
@@ -2927,6 +2987,9 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         pollustop_sheets = [sheet for sheet in all_sheets if 'POLLUSTOP' in sheet]
         # Aerolys template sheets (for Aerolys air purification systems)
         aerolys_sheets = [sheet for sheet in all_sheets if 'AEROLYS' in sheet]
+        # Reactaway template sheets (for Reactaway systems)
+        reactaway_sheets = [sheet for sheet in all_sheets if 'REACTAWAY' in sheet]
+        print(f"📋 DEBUG: Found {len(reactaway_sheets)} REACTAWAY template sheets: {reactaway_sheets[:3]}{'...' if len(reactaway_sheets) > 3 else ''}")
         # Contract template sheets - handle exact matches and numbered variants
         contract_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'CONTRACT' or sheet.startswith('CONTRACT')]
         spiral_duct_sheets = [sheet for sheet in all_sheets if sheet.strip() == 'SPIRAL DUCT' or sheet.startswith('SPIRAL DUCT')]
@@ -3200,7 +3263,16 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
 
                 # Check if area has XEU system (area-level option)
                 has_xeu = area.get("options", {}).get("xeu", False)
-                
+
+                # Check if area has Reactaway system (area-level option)
+                has_reactaway = area.get("options", {}).get("reactaway", False)
+                print(f"🔍 DEBUG: Area '{area_name}' - Reactaway option check:")
+                print(f"   Area options: {area.get('options', {})}")
+                print(f"   has_reactaway = {has_reactaway}")
+                if has_reactaway:
+                    print(f"   ✅ REACTAWAY DETECTED - Will create sheet for this area")
+                    print(f"   Available reactaway_sheets: {len(reactaway_sheets)}")
+
                 # Check if area has UV canopies for UV Extra Over
                 uv_canopies = [canopy for canopy in area_canopies if canopy.get('model', '').upper().startswith('UV')]
                 non_uv_canopies = [canopy for canopy in area_canopies if not canopy.get('model', '').upper().startswith('UV')]
@@ -3462,6 +3534,38 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                             else:
                                 print(f"Warning: Not enough AEROLYS sheets in template for XEU system (Aerolys part) in area {area_name}")
 
+                        # Create Reactaway sheet if Reactaway is selected for this area
+                        if has_reactaway:
+                            print(f"🟢 DEBUG: Creating REACTAWAY sheet for area '{area_name}'")
+                            if reactaway_sheets:
+                                reactaway_sheet_name = reactaway_sheets.pop(0)
+                                print(f"   Using template sheet: {reactaway_sheet_name}")
+                                reactaway_sheet = wb[reactaway_sheet_name]
+                                new_reactaway_name = f"REACTAWAY - {level_name} ({area_number})"
+                                print(f"   Renaming to: {new_reactaway_name}")
+                                reactaway_sheet.title = new_reactaway_name
+                                reactaway_sheet.sheet_state = 'visible'
+                                print(f"   Sheet state set to: visible")
+                                reactaway_sheet.sheet_properties.tabColor = tab_color
+                                print(f"   Tab color set")
+
+                                # Write Reactaway-specific metadata
+                                write_project_metadata(reactaway_sheet, project_data, template_version)
+                                print(f"   Metadata written")
+                                # Set Reactaway sheet title in B1
+                                try:
+                                    title_text = f"{level_name} - {area_name} - REACTAWAY SYSTEM"
+                                    reactaway_sheet['B1'] = title_text
+                                    print(f"   Title written to B1: {title_text}")
+                                except Exception as e:
+                                    print(f"   ⚠️ Warning: Could not write title to B1: {str(e)}")
+                                print(f"   ✅ REACTAWAY sheet '{new_reactaway_name}' created successfully")
+                            else:
+                                print(f"   ❌ ERROR: Not enough REACTAWAY sheets in template for area {area_name}")
+                                print(f"   This should not happen - check template has REACTAWAY sheets")
+                        else:
+                            print(f"⚪ DEBUG: Reactaway NOT enabled for area '{area_name}' - skipping")
+
                         # Write each canopy with proper spacing
                         fs_canopy_idx = 0  # Track fire suppression canopies separately
                         
@@ -3554,8 +3658,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                     else:
                         raise Exception(f"Not enough CANOPY sheets in template for area {area_name}")
                 
-                # Handle case where UV-C, SDU, RecoAir, Marvel, Pollustop, Aerolys, and/or XEU are selected but no canopies exist (edge case)
-                elif (has_uvc or has_sdu or has_canopy_sdu or has_recoair or has_marvel or has_vent_clg or has_pollustop or has_aerolys or has_xeu) and not area_canopies:
+                # Handle case where UV-C, SDU, RecoAir, Marvel, Pollustop, Aerolys, Reactaway, and/or XEU are selected but no canopies exist (edge case)
+                elif (has_uvc or has_sdu or has_canopy_sdu or has_recoair or has_marvel or has_vent_clg or has_pollustop or has_aerolys or has_xeu or has_reactaway) and not area_canopies:
                     # Create EBOX sheet if UV-C is selected
                     if has_uvc:
                         if edge_box_sheets:
@@ -3749,7 +3853,37 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                         else:
                             print(f"Warning: Not enough AEROLYS sheets in template for XEU system (Aerolys part) in area {area_name}")
 
-                
+                    # Create Reactaway sheet if Reactaway is selected (for areas without canopies)
+                    if has_reactaway:
+                        print(f"🟢 DEBUG: Creating REACTAWAY sheet for area WITHOUT canopies: '{area_name}'")
+                        if reactaway_sheets:
+                            reactaway_sheet_name = reactaway_sheets.pop(0)
+                            print(f"   Using template sheet: {reactaway_sheet_name}")
+                            reactaway_sheet = wb[reactaway_sheet_name]
+                            new_reactaway_name = f"REACTAWAY - {level_name} ({area_number})"
+                            print(f"   Renaming to: {new_reactaway_name}")
+                            reactaway_sheet.title = new_reactaway_name
+                            reactaway_sheet.sheet_state = 'visible'
+                            print(f"   Sheet state set to: visible")
+                            reactaway_sheet.sheet_properties.tabColor = tab_color
+
+                            # Write Reactaway-specific metadata
+                            write_project_metadata(reactaway_sheet, project_data, template_version)
+                            print(f"   Metadata written")
+                            # Set Reactaway sheet title in B1
+                            try:
+                                title_text = f"{level_name} - {area_name} - REACTAWAY SYSTEM"
+                                reactaway_sheet['B1'] = title_text
+                                print(f"   Title written to B1: {title_text}")
+                            except Exception as e:
+                                print(f"   ⚠️ Warning: Could not write title to B1: {str(e)}")
+                            print(f"   ✅ REACTAWAY sheet '{new_reactaway_name}' created successfully (no canopies)")
+                        else:
+                            print(f"   ❌ ERROR: Not enough REACTAWAY sheets in template for area {area_name}")
+                    else:
+                        print(f"⚪ DEBUG: Reactaway NOT enabled for area WITHOUT canopies: '{area_name}'")
+
+
                 area_count += 1
         
         # Write project metadata to any other visible sheets that might exist
@@ -3760,8 +3894,8 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
                            sheet_name.startswith('SUPPLY DUCT') or 
                            sheet_name.startswith('EXTRACT DUCT'))
             
-            if (sheet.sheet_state == 'visible' and 
-                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG', 'POLLUSTOP', 'AEROLYS')) and 
+            if (sheet.sheet_state == 'visible' and
+                not sheet_name.startswith(('CANOPY', 'FIRE SUPP', 'EBOX', 'RECOAIR', 'SDU', 'MARVEL', 'VENT CLG', 'POLLUSTOP', 'AEROLYS', 'REACTAWAY')) and
                 not is_duct_sheet and
                 sheet_name not in ['Lists', 'JOB TOTAL']):
                 # Write metadata to any other visible sheets (excluding EBOX, RECOAIR, SDU, MARVEL, and duct sheets which don't need metadata)
@@ -3793,43 +3927,54 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         if project_data.get('contract_option', False):
             created_contract_sheet_names = ['CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT']
         
-        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets + vent_clg_sheets + pollustop_sheets + aerolys_sheets + contract_sheets + spiral_duct_sheets + supply_duct_sheets + extract_duct_sheets
-        
+        unused_sheets = canopy_sheets + fire_supp_sheets + edge_box_sheets + sdu_sheets + recoair_sheets + marvel_sheets + vent_clg_sheets + pollustop_sheets + aerolys_sheets + reactaway_sheets + contract_sheets + spiral_duct_sheets + supply_duct_sheets + extract_duct_sheets
+
         # Filter out the created contract sheets from the deletion list
         unused_sheets = [sheet for sheet in unused_sheets if sheet not in created_contract_sheet_names]
-        
+
         print(f"🗑️  Removing {len(unused_sheets)} unused system template sheets...")
+        print(f"   DEBUG: Unused REACTAWAY sheets to delete: {[s for s in unused_sheets if 'REACTAWAY' in s]}")
         for sheet_name in unused_sheets:
             if sheet_name in wb.sheetnames:
                 del wb[sheet_name]
-                print(f"   Deleted: {sheet_name}")
+                if 'REACTAWAY' in sheet_name:
+                    print(f"   Deleted unused REACTAWAY: {sheet_name}")
         
         # Hide ALL template sheets except the ones we actually use
         # Only keep visible: used system sheets and essential management sheets
         allowed_visible_prefixes = (
             'CANOPY -', 'CANOPY (UV)', 'FIRE SUPP -', 'EBOX -', 'SDU -', 'RECOAIR -', 'MARVEL -', 'VENT CLG -',
+            'POLLUSTOP -', 'POLLUSTOP (XEU)', 'AEROLYS -', 'AEROLYS (XEU)', 'REACTAWAY -',
             'JOB TOTAL', 'PRICING_SUMMARY', 'ProjectData', 'Lists',
             'CONTRACT', 'SPIRAL DUCT', 'SUPPLY DUCT', 'EXTRACT DUCT'
         )
-        
+
+        print(f"🔒 DEBUG: Checking sheet visibility. REACTAWAY sheets should start with 'REACTAWAY -'")
         extra_hidden_count = 0
+        reactaway_visible_count = 0
         for sheet in wb.worksheets:
             if sheet.sheet_state == 'visible':
                 keep_visible = False
-                
+
                 # Check if it starts with an allowed prefix (used system sheets or management)
                 for prefix in allowed_visible_prefixes:
                     if sheet.title.startswith(prefix) or sheet.title == prefix:
                         keep_visible = True
+                        if 'REACTAWAY -' in sheet.title:
+                            reactaway_visible_count += 1
+                            print(f"   ✅ Keeping REACTAWAY sheet visible: {sheet.title}")
                         break
-                
+
                 if not keep_visible:
                     sheet.sheet_state = 'hidden'
                     extra_hidden_count += 1
-                    print(f"   Hidden: {sheet.title}")
+                    if 'REACTAWAY' in sheet.title:
+                        print(f"   🔒 Hiding unused REACTAWAY template: {sheet.title}")
         
         if extra_hidden_count:
             print(f"🔒 Hidden {extra_hidden_count} unused template sheets (preserved for future use).")
+
+        print(f"📊 DEBUG: Final REACTAWAY sheet status: {reactaway_visible_count} visible REACTAWAY sheets")
         
         # Create pricing summary sheet for dynamic pricing aggregation
         print("Creating PRICING_SUMMARY sheet...")
@@ -3871,7 +4016,12 @@ def save_to_excel(project_data: Dict, template_path: str = None) -> str:
         # Final check: ensure all used Pollustop and Aerolys sheets are visible
         ensure_pollustop_aerolys_sheets_visible(wb)
 
+        # Save workbook first
         wb.save(output_path)
+
+        # Remove drawing files from the saved Excel file to prevent corruption
+        print("🖼️  Removing drawing files to prevent corruption...")
+        remove_drawings_from_excel_file(output_path)
 
         return output_path
     

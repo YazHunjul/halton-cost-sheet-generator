@@ -53,13 +53,15 @@ def display_project_summary(project_data: dict):
                     # Area-level options
                     if "options" in area:
                         st.markdown("**Area Options:**")
-                        opt_col1, opt_col2, opt_col3 = st.columns(3)
+                        opt_col1, opt_col2, opt_col3, opt_col4 = st.columns(4)
                         with opt_col1:
                             st.write(" UV-C System" if area["options"]["uvc"] else " UV-C System")
                         with opt_col2:
                             st.write(" RecoAir" if area["options"]["recoair"] else " RecoAir")
                         with opt_col3:
                             st.write(" Marvel" if area["options"]["marvel"] else " Marvel")
+                        with opt_col4:
+                            st.write(" Reactaway" if area["options"].get("reactaway") else " Reactaway")
                         st.markdown("---")
                     
                     if area["canopies"]:
@@ -813,29 +815,29 @@ def revision_page():
                                 
                                 # Area options
                                 st.write("**Area Options:**")
-                                opt_col1, opt_col2, opt_col3, opt_col4, opt_col5, opt_col6, opt_col7 = st.columns(7)
-                                
+                                opt_col1, opt_col2, opt_col3, opt_col4, opt_col5, opt_col6, opt_col7, opt_col8 = st.columns(8)
+
                                 with opt_col1:
                                     area['options']['uvc'] = st.checkbox(
                                         "UV-C",
                                         value=area.get('options', {}).get('uvc', False),
                                         key=f"rev_area_uvc_{level_idx}_{area_idx}"
                                     )
-                                
+
                                 with opt_col2:
                                     area['options']['recoair'] = st.checkbox(
                                         "RecoAir",
                                         value=area.get('options', {}).get('recoair', False),
                                         key=f"rev_area_recoair_{level_idx}_{area_idx}"
                                     )
-                                
+
                                 with opt_col3:
                                     area['options']['marvel'] = st.checkbox(
                                         "Marvel",
                                         value=area.get('options', {}).get('marvel', False),
                                         key=f"rev_area_marvel_{level_idx}_{area_idx}"
                                     )
-                                
+
                                 with opt_col4:
                                     area['options']['vent_clg'] = st.checkbox(
                                         "Vent CLG",
@@ -862,6 +864,13 @@ def revision_page():
                                         "XEU",
                                         value=area.get('options', {}).get('xeu', False),
                                         key=f"rev_area_xeu_{level_idx}_{area_idx}"
+                                    )
+
+                                with opt_col8:
+                                    area['options']['reactaway'] = st.checkbox(
+                                        "Reactaway",
+                                        value=area.get('options', {}).get('reactaway', False),
+                                        key=f"rev_area_reactaway_{level_idx}_{area_idx}"
                                     )
                                 
                                 st.markdown("---")  # Separator between areas
@@ -1702,7 +1711,8 @@ def step2_project_structure():
                                         'vent_clg': st.session_state.get(f"{area_key}_vent_clg", False),
                                         'pollustop': st.session_state.get(f"{area_key}_pollustop", False),
                                         'aerolys': st.session_state.get(f"{area_key}_aerolys", False),
-                                        'xeu': st.session_state.get(f"{area_key}_xeu", False)
+                                        'xeu': st.session_state.get(f"{area_key}_xeu", False),
+                                        'reactaway': st.session_state.get(f"{area_key}_reactaway", False)
                                     }
                             except (IndexError, KeyError) as e:
                                 # If there's an error, silently fail - the checkboxes will maintain their state
@@ -1752,7 +1762,13 @@ def step2_project_structure():
                                         key=f"{area_key}_xeu",
                                         help="XEU system",
                                         on_change=update_area_options)
-                        
+
+                        reactaway = st.checkbox("Reactaway",
+                                              value=area['options'].get('reactaway', False),
+                                              key=f"{area_key}_reactaway",
+                                              help="Reactaway system",
+                                              on_change=update_area_options)
+
                         # Options are updated via the callback, no need for direct update here
                     
                     with col3:
@@ -1786,6 +1802,7 @@ def step3_canopy_configuration():
                 options_text += f" | UV Extra Over: {'Yes' if area['options'].get('uv_extra_over', False) else 'No'}"
                 options_text += f" | VENT CLG: {'Yes' if area['options'].get('vent_clg', False) else 'No'}"
                 options_text += f" | Pollustop: {'Yes' if area['options'].get('pollustop', False) else 'No'}"
+                options_text += f" | Reactaway: {'Yes' if area['options'].get('reactaway', False) else 'No'}"
                 options_text += f" | Aerolys: {'Yes' if area['options'].get('aerolys', False) else 'No'}"
                 options_text += f" | XEU: {'Yes' if area['options'].get('xeu', False) else 'No'}"
                 
@@ -2127,6 +2144,7 @@ def step4_review_and_generate():
                     if area['options']['marvel']: options.append("Marvel")
                     if area['options'].get('uv_extra_over', False): options.append("UV Extra Over")
                     if area['options'].get('vent_clg', False): options.append("VENT CLG")
+                    if area['options'].get('reactaway', False): options.append("Reactaway")
                     if area['options'].get('pollustop', False): options.append("Pollustop")
                     if area['options'].get('aerolys', False): options.append("Aerolys")
                     if area['options'].get('xeu', False): options.append("XEU")
@@ -2633,15 +2651,17 @@ def single_page_project_builder():
                                              key=f"sp_uv_extra_{level_idx}_{area_idx}")
                         vent_clg = st.checkbox("VENT CLG", value=area['options'].get('vent_clg', False),
                                              key=f"sp_vent_clg_{level_idx}_{area_idx}")
-
-                    with col3:
                         pollustop = st.checkbox("Pollustop", value=area['options'].get('pollustop', False),
                                               key=f"sp_pollustop_{level_idx}_{area_idx}")
+
+                    with col3:
                         aerolys = st.checkbox("Aerolys", value=area['options'].get('aerolys', False),
                                             key=f"sp_aerolys_{level_idx}_{area_idx}")
                         xeu = st.checkbox("XEU", value=area['options'].get('xeu', False),
                                         key=f"sp_xeu_{level_idx}_{area_idx}")
-                    
+                        reactaway = st.checkbox("Reactaway", value=area['options'].get('reactaway', False),
+                                              key=f"sp_reactaway_{level_idx}_{area_idx}")
+
                     # Update options
                     st.session_state.levels[level_idx]['areas'][area_idx]['options'] = {
                         'uvc': uvc,
@@ -2651,7 +2671,8 @@ def single_page_project_builder():
                         'vent_clg': vent_clg,
                         'pollustop': pollustop,
                         'aerolys': aerolys,
-                        'xeu': xeu
+                        'xeu': xeu,
+                        'reactaway': reactaway
                     }
                     
                     st.markdown("---")
@@ -2721,6 +2742,7 @@ def single_page_project_builder():
                     if area['options'].get('uv_extra_over'): options.append("UV Extra Over")
                     if area['options'].get('vent_clg'): options.append("VENT CLG")
                     if area['options'].get('pollustop'): options.append("Pollustop")
+                    if area['options'].get('reactaway'): options.append("Reactaway")
                     if area['options'].get('aerolys'): options.append("Aerolys")
                     if area['options'].get('xeu'): options.append("XEU")
                     
@@ -3053,6 +3075,7 @@ def single_page_project_builder():
                         if area['options'].get('uv_extra_over'): options.append("UV Extra")
                         if area['options'].get('vent_clg'): options.append("VENT CLG")
                         if area['options'].get('pollustop'): options.append("Pollustop")
+                        if area['options'].get('reactaway'): options.append("Reactaway")
                         if area['options'].get('aerolys'): options.append("Aerolys")
                         if area['options'].get('xeu'): options.append("XEU")
                         
@@ -3155,7 +3178,9 @@ def main():
                             options.append("UV Extra Over")
                         if area.get('options', {}).get('vent_clg'):
                             options.append("VENT CLG")
-                        
+                        if area.get('options', {}).get('reactaway'):
+                            options.append("Reactaway")
+
                         if options:
                             st.sidebar.markdown(f"  Options: {', '.join(options)}")
                         
