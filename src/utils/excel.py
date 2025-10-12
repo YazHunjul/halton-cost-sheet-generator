@@ -83,6 +83,7 @@ def remove_drawings_from_excel_file(file_path: str) -> None:
     """
     Remove all drawing XML files and their references from Excel ZIP to prevent corruption warnings.
     Must be called AFTER the file has been saved by openpyxl.
+    This is a safety net - primary prevention happens in load_template_workbook().
 
     Args:
         file_path (str): Path to the Excel file
@@ -101,17 +102,21 @@ def remove_drawings_from_excel_file(file_path: str) -> None:
         with zipfile.ZipFile(file_path, 'r') as zip_read:
             with zipfile.ZipFile(tmp_path, 'w', zipfile.ZIP_DEFLATED) as zip_write:
                 drawing_files_removed = 0
+                rels_cleaned = 0
 
                 for item in zip_read.infolist():
-                    # Skip drawing XML files and their relationships in xl/drawings/
-                    if (item.filename.startswith('xl/drawings/drawing') and
+                    # Skip ALL drawing XML files (not just xl/drawings/drawing*)
+                    # This catches any drawing files openpyxl might have created
+                    if (item.filename.startswith('xl/drawings/') and
                         item.filename.endswith('.xml') and
-                        not 'commentsDrawing' in item.filename):
+                        'commentsDrawing' not in item.filename):
                         drawing_files_removed += 1
                         continue
-                    elif (item.filename.startswith('xl/drawings/_rels/drawing') and
+                    # Skip ALL drawing relationship files
+                    elif (item.filename.startswith('xl/drawings/_rels/') and
                           item.filename.endswith('.xml.rels') and
-                          not 'commentsDrawing' in item.filename):
+                          'commentsDrawing' not in item.filename):
+                        drawing_files_removed += 1
                         continue
 
                     # Clean worksheet relationship files to remove drawing references
@@ -124,17 +129,23 @@ def remove_drawings_from_excel_file(file_path: str) -> None:
                             ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
 
                             # Find and remove drawing relationships
+                            rels_removed = 0
                             for rel in root.findall('.//r:Relationship[@Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing"]', ns):
                                 # Only remove if it points to a drawing file (not commentsDrawing)
                                 target = rel.get('Target', '')
                                 if 'drawing' in target and 'commentsDrawing' not in target:
                                     root.remove(rel)
+                                    rels_removed += 1
+
+                            if rels_removed > 0:
+                                rels_cleaned += 1
 
                             # Write cleaned XML
                             cleaned_data = ET.tostring(root, encoding='utf-8', xml_declaration=True)
                             zip_write.writestr(item, cleaned_data)
-                        except:
+                        except Exception as e:
                             # If parsing fails, copy original
+                            print(f"   ⚠️ Could not clean rels file {item.filename}: {e}")
                             zip_write.writestr(item, data)
                         continue
 
@@ -142,14 +153,17 @@ def remove_drawings_from_excel_file(file_path: str) -> None:
                     data = zip_read.read(item.filename)
                     zip_write.writestr(item, data)
 
-                if drawing_files_removed > 0:
-                    print(f"🖼️  Removed {drawing_files_removed} drawing files and cleaned worksheet relationships")
+                if drawing_files_removed > 0 or rels_cleaned > 0:
+                    print(f"🖼️  Post-save cleanup: Removed {drawing_files_removed} drawing files, cleaned {rels_cleaned} relationship files")
 
         # Replace original file with cleaned version
         shutil.move(tmp_path, file_path)
+        print(f"   ✅ Excel file cleaned successfully")
 
     except Exception as e:
         print(f"⚠️  Warning: Could not remove drawings from file: {str(e)}")
+        import traceback
+        traceback.print_exc()
         # Clean up temp file if it exists
         try:
             import os
@@ -233,7 +247,9 @@ def load_template_workbook(template_path: str = None, version: str = None) -> Wo
         wb = None
         for path in template_paths:
             try:
-                wb = load_workbook(path)
+                # Load workbook without data_only and with keep_vba=False to reduce issues
+                # Most importantly: openpyxl will skip corrupted drawings automatically
+                wb = load_workbook(path, data_only=False, keep_vba=False)
                 print(f"✅ Successfully loaded template: {path}")
 
                 # Ensure POLLUSTOP, AEROLYS, and REACTAWAY template sheets are unhidden if they exist
@@ -258,8 +274,20 @@ def load_template_workbook(template_path: str = None, version: str = None) -> Wo
         # Remove external links to prevent "unsafe external sources" warning
         remove_external_links(wb)
 
-        # Note: Drawing removal happens before save in save_to_excel()
-        # because copy_worksheet() copies drawings from template sheets
+        # Remove all drawings from template sheets to prevent corruption
+        # This prevents openpyxl from copying corrupted drawing data
+        print("🖼️  Removing drawings from template sheets to prevent corruption...")
+        drawings_removed = 0
+        for sheet in wb.worksheets:
+            if hasattr(sheet, '_charts'):
+                sheet._charts = []
+            if hasattr(sheet, '_images'):
+                sheet._images = []
+            if hasattr(sheet, '_drawing'):
+                sheet._drawing = None
+                drawings_removed += 1
+        if drawings_removed > 0:
+            print(f"   ✅ Cleared drawing references from {drawings_removed} sheets")
 
         return wb
     except Exception as e:
